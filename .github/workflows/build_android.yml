@@ -1,4 +1,4 @@
-name: Build Healthy Me Beta v0.1
+name: Build Healthy Me Beta
 
 on:
   workflow_dispatch:
@@ -7,6 +7,7 @@ on:
     paths:
       - 'lib/**'
       - 'test/**'
+      - 'scripts/**'
       - 'pubspec.yaml'
       - 'analysis_options.yaml'
       - 'android/**'
@@ -34,18 +35,24 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Create temporary Android shell when needed
+      - name: Create Android platform shell
         shell: bash
         run: |
           set -euo pipefail
-
           if [ ! -f android/gradlew ]; then
-            rm -rf /tmp/healthy_me_bootstrap
+            rm -rf /tmp/healthy_me_android
+            flutter create \
+              --platforms=android \
+              --org com.rustnrum \
+              --project-name healthy_me \
+              --no-pub \
+              /tmp/healthy_me_android
+            cp -R /tmp/healthy_me_android/android ./android
+          fi
 
-            flutter create               --platforms=android               --org com.rustnrum               --project-name healthy_me               --no-pub               /tmp/healthy_me_bootstrap
-
-            cp -R /tmp/healthy_me_bootstrap/android ./android
-
+          if [ -f scripts/prepare_android.sh ]; then
+            bash scripts/prepare_android.sh
+          else
             if [ -f android/app/build.gradle.kts ]; then
               sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 26/' android/app/build.gradle.kts || true
             fi
@@ -66,7 +73,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: HealthyMe-Beta-v0.1-debug
+          name: HealthyMe-Beta-debug
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 30
