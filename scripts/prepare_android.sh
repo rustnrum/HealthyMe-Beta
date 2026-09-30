@@ -79,13 +79,41 @@ if [ -n "$MAIN_ACTIVITY" ]; then
   sed -i \
     's/: FlutterActivity()/: FlutterFragmentActivity()/' \
     "$MAIN_ACTIVITY"
+  # Give this redesigned beta an unmistakable package identity so it cannot
+  # be confused with or silently launch the old v0.2 beta.
+  sed -i -E \
+    's/^package[[:space:]]+com\.rustnrum\.[A-Za-z0-9_.]+/package com.rustnrum.healthyme.beta03/' \
+    "$MAIN_ACTIVITY"
 fi
 
-if [ -f android/app/build.gradle.kts ]; then
-  sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 26/' android/app/build.gradle.kts || true
-elif [ -f android/app/build.gradle ]; then
-  sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 26/' android/app/build.gradle || true
-fi
+python3 - <<'PYGRADLE'
+from pathlib import Path
+import re
+
+for name in ('android/app/build.gradle.kts', 'android/app/build.gradle'):
+    path = Path(name)
+    if not path.exists():
+        continue
+    text = path.read_text()
+    text = text.replace('minSdk = flutter.minSdkVersion', 'minSdk = 26')
+    text = text.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 26')
+    text = re.sub(
+        r'namespace\s*=\s*["\'][^"\']+["\']',
+        'namespace = "com.rustnrum.healthyme.beta03"',
+        text,
+    )
+    text = re.sub(
+        r'applicationId\s*=\s*["\'][^"\']+["\']',
+        'applicationId = "com.rustnrum.healthyme.beta03"',
+        text,
+    )
+    text = re.sub(
+        r'applicationId\s+["\'][^"\']+["\']',
+        'applicationId "com.rustnrum.healthyme.beta03"',
+        text,
+    )
+    path.write_text(text)
+PYGRADLE
 
 if ! grep -q '^android.useAndroidX=true' android/gradle.properties 2>/dev/null; then
   echo 'android.useAndroidX=true' >> android/gradle.properties
@@ -100,10 +128,11 @@ python3 - <<'PYLABEL'
 from pathlib import Path
 p = Path('android/app/src/main/AndroidManifest.xml')
 s = p.read_text()
-s = s.replace('android:label="healthy_me"', 'android:label="Healthy Me"')
+import re
+s = re.sub(r'android:label="[^"]+"', 'android:label="Healthy Me Beta 0.3"', s, count=1)
 p.write_text(s)
 PYLABEL
 
-echo "Healthy Me Android Health Connect configuration applied."
+echo "Healthy Me Beta 0.3 Android identity + Health Connect configuration applied."
 
 bash scripts/ui_contract_check.sh
