@@ -1,0 +1,51 @@
+name: Bootstrap Healthy Me Beta v0.1 Repository
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'HealthyMe-Beta-v0.1-GITHUB-SOURCE.zip'
+      - '.github/workflows/BOOTSTRAP-v0.1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Expand clean Healthy Me source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ARCHIVE="HealthyMe-Beta-v0.1-GITHUB-SOURCE.zip"
+          if [ ! -f "$ARCHIVE" ]; then
+            echo "Missing $ARCHIVE"
+            exit 1
+          fi
+
+          rm -rf /tmp/healthy-me-source
+          mkdir -p /tmp/healthy-me-source
+          unzip -q "$ARCHIVE" -d /tmp/healthy-me-source
+
+          cp -a /tmp/healthy-me-source/HealthyMe-Beta-v0.1/. .
+
+          rm -f "$ARCHIVE"
+          rm -f .github/workflows/BOOTSTRAP-v0.1.yml
+
+      - name: Commit real project structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git commit -m "Initialize Healthy Me Beta v0.1 clean Flutter project"
+          git push origin HEAD:main
