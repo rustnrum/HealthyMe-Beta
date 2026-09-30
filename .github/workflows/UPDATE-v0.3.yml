@@ -1,0 +1,112 @@
+name: Update and Build Healthy Me Beta v0.3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'HealthyMe-Beta-v0.3-SOURCE.zip'
+      - '.github/workflows/UPDATE-v0.3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Expand Beta v0.3 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE="HealthyMe-Beta-v0.3-SOURCE.zip"
+          test -f "$ARCHIVE"
+
+          rm -rf /tmp/healthy-me-v03
+          mkdir -p /tmp/healthy-me-v03
+          unzip -q "$ARCHIVE" -d /tmp/healthy-me-v03
+          SOURCE="/tmp/healthy-me-v03/HealthyMe-Beta-v0.3"
+
+          rm -rf lib test docs scripts
+          rm -f pubspec.yaml analysis_options.yaml README.md .gitignore
+
+          cp -a "$SOURCE/lib" .
+          cp -a "$SOURCE/test" .
+          cp -a "$SOURCE/docs" .
+          cp -a "$SOURCE/scripts" .
+          cp -a "$SOURCE/pubspec.yaml" .
+          cp -a "$SOURCE/analysis_options.yaml" .
+          cp -a "$SOURCE/README.md" .
+          cp -a "$SOURCE/.gitignore" .
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create Android platform shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f android/gradlew ]; then
+            rm -rf /tmp/healthy_me_android
+            flutter create \
+              --platforms=android \
+              --org com.rustnrum \
+              --project-name healthy_me \
+              --no-pub \
+              /tmp/healthy_me_android
+            cp -R /tmp/healthy_me_android/android ./android
+          fi
+          bash scripts/prepare_android.sh
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build Beta v0.3 APK
+        run: flutter build apk --debug
+
+      - name: Commit validated v0.3 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f HealthyMe-Beta-v0.3-SOURCE.zip
+
+          rm -rf android
+          git checkout -- android 2>/dev/null || true
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+          else
+            git commit -m "Healthy Me Beta v0.3 command center"
+            git push origin HEAD:main
+          fi
+
+      - name: Upload Beta v0.3 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HealthyMe-Beta-v0.3-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
