@@ -7,10 +7,7 @@ coverage/
 .vscode/
 *.iml
 
-# Android signing - never commit real keys
 android/key.properties
 android/app/*.jks
 android/app/*.keystore
-
-# Generated platform/local files
 android/local.properties

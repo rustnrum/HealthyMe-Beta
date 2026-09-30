@@ -1,17 +1,60 @@
+class SleepGuidance {
+  final String target;
+  final String sourceNote;
+
+  const SleepGuidance({
+    required this.target,
+    required this.sourceNote,
+  });
+}
+
 class SleepGuidanceService {
-  static String targetForBirthday(DateTime? birthday) {
-    if (birthday == null) return 'Add birthday for guidance';
+  static SleepGuidance forAge(int? age) {
+    if (age == null) {
+      return const SleepGuidance(
+        target: 'Add birthday',
+        sourceNote: 'Age is needed to suggest a sleep target.',
+      );
+    }
 
-    final now = DateTime.now();
-    var age = now.year - birthday.year;
-    final birthdayPassed = now.month > birthday.month ||
-        (now.month == birthday.month && now.day >= birthday.day);
-    if (!birthdayPassed) age--;
+    if (age >= 65) {
+      return const SleepGuidance(
+        target: '7–8 hr',
+        sourceNote: 'CDC guidance for adults 65+.',
+      );
+    }
 
-    if (age >= 65) return '7–8 hours';
-    if (age >= 18) return '7–9 hours';
-    if (age >= 13) return '8–10 hours';
-    if (age >= 6) return '9–12 hours';
-    return 'Ask a pediatric clinician';
+    if (age >= 61) {
+      return const SleepGuidance(
+        target: '7–9 hr',
+        sourceNote: 'CDC guidance for adults 61–64.',
+      );
+    }
+
+    if (age >= 18) {
+      return const SleepGuidance(
+        target: '7+ hr',
+        sourceNote: 'CDC/AASM guidance for adults 18–60.',
+      );
+    }
+
+    if (age >= 13) {
+      return const SleepGuidance(
+        target: '8–10 hr',
+        sourceNote: 'CDC guidance for teens 13–17.',
+      );
+    }
+
+    if (age >= 6) {
+      return const SleepGuidance(
+        target: '9–12 hr',
+        sourceNote: 'CDC guidance for children 6–12.',
+      );
+    }
+
+    return const SleepGuidance(
+      target: 'Age-specific',
+      sourceNote: 'Pediatric sleep needs vary substantially by age.',
+    );
   }
 }

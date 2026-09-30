@@ -1,26 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/user_profile.dart';
+import '../services/storage_service.dart';
 
 class ProfileNotifier extends Notifier<UserProfile> {
+  final _storage = StorageService();
+
   @override
-  UserProfile build() => const UserProfile();
+  UserProfile build() => ref.read(bootstrapDataProvider).profile;
 
-  void setBirthday(DateTime value) {
-    state = state.copyWith(birthday: value);
+  void complete(UserProfile profile) {
+    state = profile.copyWith(completed: true);
+    unawaited(_storage.saveProfile(state));
   }
 
-  void setSex(String value) {
-    state = state.copyWith(sex: value);
-  }
-
-  void setWeights({double? current, double? goal}) {
-    state = UserProfile(
-      birthday: state.birthday,
-      sex: state.sex,
-      currentWeightLb: current ?? state.currentWeightLb,
-      goalWeightLb: goal ?? state.goalWeightLb,
-    );
+  void update(UserProfile profile) {
+    state = profile;
+    unawaited(_storage.saveProfile(state));
   }
 }
 

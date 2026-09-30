@@ -1,37 +1,23 @@
 # Healthy Me Beta
 
-Clean rebuild starting at **Beta v0.1.0**.
+Current beta: **v0.2.0**
 
-## Structure
+This repo is the clean Flutter rebuild of Healthy Me.
 
-- `lib/models` — health data models
-- `lib/providers` — Riverpod app state
-- `lib/services` — import/guidance/integration logic
-- `lib/screens` — user-facing screens
-- `lib/widgets` — reusable UI pieces
-- `.github/workflows` — build pipeline only, no application source embedded in YAML
+## v0.2 focus
 
-## First local setup
+- Full onboarding and editable profile
+- Persistent profile, body measurements, labs, provider preferences, and weight history
+- Today dashboard
+- Progress dashboard with real chart components
+- Clean body measurements without a body illustration
+- No manual body-fat field
+- Metric-driven Connections screen
+- CSV/XLSX bloodwork import and editable lab results
+- Age-based sleep guidance
+- Plan screen using the data the user has actually supplied
 
-Install Flutter, then run:
+Native health-provider authorization is intentionally not faked in v0.2. Provider cards and source
+preferences are real UI/state, but authorization is clearly marked as not yet enabled.
 
-```bash
-chmod +x scripts/bootstrap_android.sh
-./scripts/bootstrap_android.sh
-flutter pub get
-flutter analyze
-flutter test
-flutter run
-```
-
-The bootstrap script creates the Android platform shell once. Commit the generated `android/`
-directory to Git afterward. The app source remains in normal Dart files.
-
-## Build
-
-```bash
-flutter build apk --debug
-```
-
-Release signing is intentionally not hard-coded into the repository. Before distributing
-Beta v0.1 updates, configure a permanent beta signing key through GitHub Actions secrets.
+Healthy Me provides wellness guidance and is not a diagnosis or treatment product.

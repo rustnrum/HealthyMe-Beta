@@ -1,15 +1,27 @@
-# Healthy Me Product Direction
+# Healthy Me Product Spec
 
-Healthy Me should feel simple rather than medical or bloated.
+## Product principle
 
-## Core principles
+Healthy Me should turn a small set of useful health inputs into understandable progress and practical
+wellness suggestions without feeling like a medical chart or a bloated fitness app.
 
-1. Show useful health information, not every possible metric.
-2. Connections are metric-driven and provider-aware.
-3. Body-fat data should come from compatible devices when available, not be a required manual field.
-4. Sleep guidance is suggested from profile context rather than an arbitrary goal field.
-5. Bloodwork stores observed values and units. It does not diagnose or create treatment plans.
-6. Male/female relevant lab options may differ where useful.
-7. Diet and workout suggestions may use profile, labs, and connected metrics, but remain wellness guidance.
-8. Every connection should clearly state the metrics it can provide.
-9. The app should avoid clutter and unnecessary navigation depth.
+## Locked design rules
+
+- Body fat is not a required manual input. It comes from a compatible data source when available.
+- Steps and other metrics are not tied to Samsung. Sources are selected per metric.
+- The source picker supports Auto/Recommended plus compatible providers.
+- Sleep targets are suggested from age/profile context using published guidance.
+- Bloodwork stores the user's observed numerical result, unit, date, and lab source.
+- Bloodwork does not show diagnostic high/low labels.
+- Lab entry supports predefined markers, sex-aware markers, custom values, CSV, and XLSX.
+- User-entered data is editable.
+- Diet and workout output is wellness guidance, not a treatment plan.
+- The UI should favor useful summaries, charts, and progressive disclosure over dense settings screens.
+
+## v0.2 scope
+
+v0.2 establishes the real UI, data model, persistence, charts, onboarding, lab import, body measurements,
+connections model, and suggestion engine.
+
+Native OAuth / Health Connect / vendor authorization is a later implementation layer and must never be
+represented as connected before it actually is.
