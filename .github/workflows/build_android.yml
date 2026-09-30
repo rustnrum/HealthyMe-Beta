@@ -1,0 +1,72 @@
+name: Build Healthy Me Beta v0.1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'pubspec.yaml'
+      - 'analysis_options.yaml'
+      - 'android/**'
+      - '.github/workflows/build_android.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create temporary Android shell when needed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ ! -f android/gradlew ]; then
+            rm -rf /tmp/healthy_me_bootstrap
+
+            flutter create               --platforms=android               --org com.rustnrum               --project-name healthy_me               --no-pub               /tmp/healthy_me_bootstrap
+
+            cp -R /tmp/healthy_me_bootstrap/android ./android
+
+            if [ -f android/app/build.gradle.kts ]; then
+              sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 26/' android/app/build.gradle.kts || true
+            fi
+          fi
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HealthyMe-Beta-v0.1-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
