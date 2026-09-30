@@ -1,10 +1,14 @@
 class SleepGuidance {
-  final String target;
-  final String sourceNote;
+  final int minimumMinutes;
+  final int? upperMinutes;
+  final String label;
+  final String note;
 
   const SleepGuidance({
-    required this.target,
-    required this.sourceNote,
+    required this.minimumMinutes,
+    this.upperMinutes,
+    required this.label,
+    required this.note,
   });
 }
 
@@ -12,49 +16,47 @@ class SleepGuidanceService {
   static SleepGuidance forAge(int? age) {
     if (age == null) {
       return const SleepGuidance(
-        target: 'Add birthday',
-        sourceNote: 'Age is needed to suggest a sleep target.',
+        minimumMinutes: 0,
+        label: 'Add birthday',
+        note: 'Birthday is needed for an age-based target.',
       );
     }
-
     if (age >= 65) {
       return const SleepGuidance(
-        target: '7–8 hr',
-        sourceNote: 'CDC guidance for adults 65+.',
+        minimumMinutes: 420,
+        upperMinutes: 480,
+        label: '7–8 hr',
+        note: 'Age-based adult sleep guidance.',
       );
     }
-
     if (age >= 61) {
       return const SleepGuidance(
-        target: '7–9 hr',
-        sourceNote: 'CDC guidance for adults 61–64.',
+        minimumMinutes: 420,
+        upperMinutes: 540,
+        label: '7–9 hr',
+        note: 'Age-based adult sleep guidance.',
       );
     }
-
     if (age >= 18) {
       return const SleepGuidance(
-        target: '7+ hr',
-        sourceNote: 'CDC/AASM guidance for adults 18–60.',
+        minimumMinutes: 420,
+        label: '7+ hr',
+        note: 'Age-based adult sleep guidance.',
       );
     }
-
     if (age >= 13) {
       return const SleepGuidance(
-        target: '8–10 hr',
-        sourceNote: 'CDC guidance for teens 13–17.',
+        minimumMinutes: 480,
+        upperMinutes: 600,
+        label: '8–10 hr',
+        note: 'Age-based teen sleep guidance.',
       );
     }
-
-    if (age >= 6) {
-      return const SleepGuidance(
-        target: '9–12 hr',
-        sourceNote: 'CDC guidance for children 6–12.',
-      );
-    }
-
     return const SleepGuidance(
-      target: 'Age-specific',
-      sourceNote: 'Pediatric sleep needs vary substantially by age.',
+      minimumMinutes: 540,
+      upperMinutes: 720,
+      label: '9–12 hr',
+      note: 'Age-specific pediatric sleep guidance.',
     );
   }
 }

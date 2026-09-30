@@ -4,7 +4,7 @@ class NavigationNotifier extends Notifier<int> {
   @override
   int build() => 0;
 
-  void setIndex(int value) => state = value;
+  void go(int index) => state = index;
 }
 
 final navigationProvider =

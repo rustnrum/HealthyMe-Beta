@@ -1,64 +1,72 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const seed = Color(0xFF0E7A72);
+  static const Color cyan = Color(0xFF17C8F4);
+  static const Color mint = Color(0xFF35E39A);
+  static const Color purple = Color(0xFF9B65F7);
+  static const Color amber = Color(0xFFFFB84D);
+  static const Color rose = Color(0xFFFF5C74);
 
-  static ThemeData get light {
+  static ThemeData get dark {
+    const background = Color(0xFF03131D);
+    const surface = Color(0xFF082331);
+    const surface2 = Color(0xFF0B2C3B);
+
     final scheme = ColorScheme.fromSeed(
-      seedColor: seed,
-      brightness: Brightness.light,
+      seedColor: cyan,
+      brightness: Brightness.dark,
+      surface: surface,
+    ).copyWith(
+      primary: cyan,
+      secondary: mint,
+      tertiary: purple,
+      surface: surface,
+      surfaceContainer: surface,
+      surfaceContainerHighest: surface2,
+      outlineVariant: const Color(0xFF1D4657),
     );
 
     return ThemeData(
       useMaterial3: true,
+      brightness: Brightness.dark,
       colorScheme: scheme,
-      scaffoldBackgroundColor: const Color(0xFFF5F7F7),
-      cardTheme: const CardThemeData(
+      scaffoldBackgroundColor: background,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: background,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
-        margin: EdgeInsets.zero,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        height: 72,
+        height: 70,
+        backgroundColor: const Color(0xFF061A24),
+        indicatorColor: cyan.withValues(alpha: 0.15),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        indicatorColor: scheme.primaryContainer,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        fillColor: surface2,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: scheme.outlineVariant.withValues(alpha: 0.7),
+          ),
+        ),
       ),
-    );
-  }
-
-  static ThemeData get dark {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: seed,
-      brightness: Brightness.dark,
-    );
-
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      colorScheme: scheme,
-      scaffoldBackgroundColor: const Color(0xFF09110F),
-      cardTheme: const CardThemeData(
+      chipTheme: ChipThemeData(
+        backgroundColor: surface2,
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.7)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      cardTheme: CardThemeData(
+        color: surface,
         elevation: 0,
         margin: EdgeInsets.zero,
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        height: 72,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        indicatorColor: scheme.primaryContainer,
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.38),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
         ),
       ),
     );

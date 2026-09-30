@@ -1,23 +1,36 @@
-# Healthy Me Beta
+# Healthy Me Beta v0.3
 
-Current beta: **v0.2.0**
+Healthy Me is being built as a **personal body command center** rather than another generic fitness
+tracker.
 
-This repo is the clean Flutter rebuild of Healthy Me.
+## v0.3
 
-## v0.2 focus
+This build implements the approved dark command-center design and connects the major screens to one
+shared data model.
 
-- Full onboarding and editable profile
-- Persistent profile, body measurements, labs, provider preferences, and weight history
-- Today dashboard
-- Progress dashboard with real chart components
-- Clean body measurements without a body illustration
-- No manual body-fat field
-- Metric-driven Connections screen
-- CSV/XLSX bloodwork import and editable lab results
-- Age-based sleep guidance
-- Plan screen using the data the user has actually supplied
+Bottom navigation:
+- Home
+- Activity
+- Sleep
+- Body
+- More
 
-Native health-provider authorization is intentionally not faked in v0.2. Provider cards and source
-preferences are real UI/state, but authorization is clearly marked as not yet enabled.
+Deeper screens:
+- Heart Health
+- Devices & Sources
+- Labs
+- Goals
+- Progress Photos
+- Profile
+- Plan
 
-Healthy Me provides wellness guidance and is not a diagnosis or treatment product.
+## Real Android health data
+
+v0.3 uses Google Health Connect through the Flutter `health` package. Health Connect authorization is
+real: the app requests read access and syncs available health data. Vendor cards are not marked
+connected unless data from those sources is actually detected.
+
+Direct Garmin/Fitbit/Withings cloud OAuth integrations are not represented as connected until those
+vendor APIs are implemented.
+
+Healthy Me gives wellness status and guidance. It does not diagnose medical conditions.

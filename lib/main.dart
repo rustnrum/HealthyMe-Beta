@@ -3,15 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
 import 'services/storage_service.dart';
+import 'state/app_state.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final bootstrap = await StorageService().loadBootstrapData();
+  final initial = await StorageService().load();
 
   runApp(
     ProviderScope(
       overrides: [
-        bootstrapDataProvider.overrideWithValue(bootstrap),
+        initialAppStateProvider.overrideWithValue(initial),
       ],
       child: const HealthyMeApp(),
     ),

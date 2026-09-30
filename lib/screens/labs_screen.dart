@@ -2,12 +2,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/bloodwork_result.dart';
-import '../providers/labs_provider.dart';
-import '../providers/profile_provider.dart';
-import '../services/lab_import_service.dart';
-import '../services/lab_markers.dart';
-import '../widgets/section_card.dart';
+import '../models/models.dart';
+import '../services/lab_service.dart';
+import '../state/app_state.dart';
+import '../widgets/command_card.dart';
 
 class LabsScreen extends ConsumerWidget {
   const LabsScreen({super.key});
@@ -22,21 +20,21 @@ class LabsScreen extends ConsumerWidget {
 
       final bytes = await file.readAsBytes();
       final lower = file.name.toLowerCase();
-      final results = lower.endsWith('.xlsx')
-          ? LabImportService.parseXlsx(bytes)
-          : LabImportService.parseCsv(bytes);
+      final labs = lower.endsWith('.xlsx')
+          ? LabService.parseXlsx(bytes)
+          : LabService.parseCsv(bytes);
 
-      if (results.isNotEmpty) {
-        ref.read(labsProvider.notifier).addAll(results);
+      if (labs.isNotEmpty) {
+        ref.read(appStateProvider.notifier).addLabs(labs);
       }
 
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            results.isEmpty
+            labs.isEmpty
                 ? 'No usable lab rows were found.'
-                : 'Imported ${results.length} result${results.length == 1 ? '' : 's'}.',
+                : 'Imported ${labs.length} lab result${labs.length == 1 ? '' : 's'}.',
           ),
         ),
       );
@@ -48,289 +46,294 @@ class LabsScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _editResult(
+  Future<void> _edit(
     BuildContext context,
     WidgetRef ref, {
-    BloodworkResult? existing,
-    required String sex,
+    LabResult? existing,
   }) async {
-    final markers = LabMarkers.forSex(sex);
-    final markerController = TextEditingController(
-      text: existing?.testName ?? markers.first,
-    );
-    final valueController =
-        TextEditingController(text: existing?.resultValue ?? '');
-    final unitController = TextEditingController(text: existing?.unit ?? '');
-    final sourceController =
-        TextEditingController(text: existing?.labSource ?? '');
-    var collectionDate = existing?.collectionDate;
+    final app = ref.read(appStateProvider);
+    final markers = LabService.markersForSex(app.profile.sex);
+    final knownExisting =
+        existing != null && markers.contains(existing.name);
+    var selected = existing == null
+        ? markers.first
+        : knownExisting
+            ? existing.name
+            : 'Custom';
 
-    final saved = await showDialog<bool>(
+    final custom = TextEditingController(
+      text: existing != null && !knownExisting ? existing.name : '',
+    );
+    final value = TextEditingController(text: existing?.value ?? '');
+    final unit = TextEditingController(text: existing?.unit ?? '');
+    final source = TextEditingController(text: existing?.source ?? '');
+    var date = existing?.date;
+
+    final save = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text(existing == null ? 'Add lab result' : 'Edit lab result'),
-              content: SizedBox(
-                width: 430,
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      Autocomplete<String>(
-                        initialValue: TextEditingValue(text: markerController.text),
-                        optionsBuilder: (value) {
-                          final query = value.text.toLowerCase();
-                          return markers.where(
-                            (item) => item.toLowerCase().contains(query),
-                          );
-                        },
-                        onSelected: (value) => markerController.text = value,
-                        fieldViewBuilder:
-                            (context, controller, focusNode, onSubmitted) {
-                          controller.addListener(
-                            () => markerController.text = controller.text,
-                          );
-                          return TextField(
-                            controller: controller,
-                            focusNode: focusNode,
-                            decoration: const InputDecoration(
-                              labelText: 'Test / marker',
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: valueController,
-                        decoration: const InputDecoration(
-                          labelText: 'Result value',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: unitController,
-                        decoration: const InputDecoration(
-                          labelText: 'Unit',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: sourceController,
-                        decoration: const InputDecoration(
-                          labelText: 'Lab source',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.event_outlined),
-                        title: const Text('Collection date'),
-                        subtitle: Text(
-                          collectionDate == null
-                              ? 'Optional'
-                              : '${collectionDate!.month}/${collectionDate!.day}/${collectionDate!.year}',
-                        ),
-                        onTap: () async {
-                          final now = DateTime.now();
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: collectionDate ?? now,
-                            firstDate: DateTime(now.year - 20),
-                            lastDate: now,
-                          );
-                          if (picked != null) {
-                            setDialogState(() => collectionDate = picked);
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (saved == true &&
-        markerController.text.trim().isNotEmpty &&
-        valueController.text.trim().isNotEmpty) {
-      final result = BloodworkResult(
-        id: existing?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
-        testName: markerController.text.trim(),
-        resultValue: valueController.text.trim(),
-        unit: unitController.text.trim(),
-        collectionDate: collectionDate,
-        labSource: sourceController.text.trim(),
-      );
-
-      if (existing == null) {
-        ref.read(labsProvider.notifier).add(result);
-      } else {
-        ref.read(labsProvider.notifier).update(result);
-      }
-    }
-
-    markerController.dispose();
-    valueController.dispose();
-    unitController.dispose();
-    sourceController.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final labs = ref.watch(labsProvider);
-    final profile = ref.watch(profileProvider);
-
-    final sorted = [...labs]
-      ..sort((a, b) {
-        final aDate = a.collectionDate ?? DateTime(1900);
-        final bDate = b.collectionDate ?? DateTime(1900);
-        return bDate.compareTo(aDate);
-      });
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 10, 18, 28),
-      children: [
-        Text(
-          'Bloodwork',
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
-        ),
-        const SizedBox(height: 5),
-        const Text(
-          'Your observed numbers, without diagnostic high/low labels.',
-        ),
-        const SizedBox(height: 18),
-        SectionCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${labs.length} result${labs.length == 1 ? '' : 's'} stored',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${LabMarkers.forSex(profile.sex).length} suggested markers for this profile, plus custom markers.',
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  FilledButton.icon(
-                    onPressed: () =>
-                        _editResult(context, ref, sex: profile.sex),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add result'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _import(context, ref),
-                    icon: const Icon(Icons.upload_file),
-                    label: const Text('Import CSV / XLSX'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        if (sorted.isEmpty)
-          const SectionCard(
-            child: Column(
-              children: [
-                Icon(Icons.science_outlined, size: 42),
-                SizedBox(height: 12),
-                Text(
-                  'No bloodwork entered',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                SizedBox(height: 6),
-                Text(
-                  'Add only the results you want Healthy Me to use as wellness context.',
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          )
-        else
-          ...sorted.map(
-            (result) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: SectionCard(
-                child: Row(
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text(existing == null ? 'Add lab result' : 'Edit lab result'),
+            content: SizedBox(
+              width: 430,
+              child: SingleChildScrollView(
+                child: Column(
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            result.testName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 16,
-                            ),
+                    DropdownButtonFormField<String>(
+                      initialValue: selected,
+                      decoration: const InputDecoration(labelText: 'Marker'),
+                      items: [
+                        ...markers.map(
+                          (item) => DropdownMenuItem(
+                            value: item,
+                            child: Text(item),
                           ),
-                          const SizedBox(height: 5),
-                          Text(
-                            '${result.resultValue} ${result.unit}'.trim(),
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            [
-                              if (result.collectionDate != null)
-                                '${result.collectionDate!.month}/${result.collectionDate!.day}/${result.collectionDate!.year}',
-                              if (result.labSource.isNotEmpty) result.labSource,
-                            ].join(' • '),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuButton<String>(
-                      onSelected: (value) {
-                        if (value == 'edit') {
-                          _editResult(
-                            context,
-                            ref,
-                            existing: result,
-                            sex: profile.sex,
-                          );
-                        } else if (value == 'delete') {
-                          ref.read(labsProvider.notifier).remove(result.id);
+                        ),
+                        const DropdownMenuItem(
+                          value: 'Custom',
+                          child: Text('Custom marker'),
+                        ),
+                      ],
+                      onChanged: (next) {
+                        if (next != null) {
+                          setDialogState(() => selected = next);
                         }
                       },
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(value: 'edit', child: Text('Edit')),
-                        PopupMenuItem(value: 'delete', child: Text('Delete')),
-                      ],
+                    ),
+                    if (selected == 'Custom') ...[
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: custom,
+                        decoration:
+                            const InputDecoration(labelText: 'Custom marker'),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: value,
+                      decoration:
+                          const InputDecoration(labelText: 'Result value'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: unit,
+                      decoration: const InputDecoration(labelText: 'Unit'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: source,
+                      decoration:
+                          const InputDecoration(labelText: 'Lab / source'),
+                    ),
+                    const SizedBox(height: 10),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.event_outlined),
+                      title: const Text('Collection date'),
+                      subtitle: Text(
+                        date == null
+                            ? 'Optional'
+                            : '${date!.month}/${date!.day}/${date!.year}',
+                      ),
+                      onTap: () async {
+                        final now = DateTime.now();
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: date ?? now,
+                          firstDate: DateTime(now.year - 20),
+                          lastDate: now,
+                        );
+                        if (picked != null) {
+                          setDialogState(() => date = picked);
+                        }
+                      },
                     ),
                   ],
                 ),
               ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    final markerName =
+        selected == 'Custom' ? custom.text.trim() : selected;
+
+    if (save == true &&
+        markerName.isNotEmpty &&
+        value.text.trim().isNotEmpty) {
+      final lab = LabResult(
+        id: existing?.id ??
+            DateTime.now().microsecondsSinceEpoch.toString(),
+        name: markerName,
+        value: value.text.trim(),
+        unit: unit.text.trim(),
+        date: date,
+        source: source.text.trim(),
+      );
+
+      if (existing == null) {
+        ref.read(appStateProvider.notifier).addLab(lab);
+      } else {
+        ref.read(appStateProvider.notifier).updateLab(lab);
+      }
+    }
+
+    custom.dispose();
+    value.dispose();
+    unit.dispose();
+    source.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final app = ref.watch(appStateProvider);
+    final labs = [...app.labs]
+      ..sort((a, b) {
+        final aa = a.date ?? DateTime(1900);
+        final bb = b.date ?? DateTime(1900);
+        return bb.compareTo(aa);
+      });
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Bloodwork',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+        children: [
+          CommandCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${labs.length} result${labs.length == 1 ? '' : 's'} stored',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                const Text(
+                  'Healthy Me stores the observed value and its age. It does not diagnose a result as high or low.',
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () => _edit(context, ref),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add result'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => _import(context, ref),
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text('Import CSV / XLSX'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-      ],
+          const SizedBox(height: 14),
+          if (labs.isEmpty)
+            const CommandCard(
+              child: Column(
+                children: [
+                  Icon(Icons.science_outlined, size: 40),
+                  SizedBox(height: 8),
+                  Text(
+                    'No bloodwork entered',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  SizedBox(height: 5),
+                  Text(
+                    'Bloodwork is slow-moving context. Add it when you have it; the daily command center works without it.',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            )
+          else
+            ...labs.map(
+              (lab) => Padding(
+                padding: const EdgeInsets.only(bottom: 9),
+                child: CommandCard(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              lab.name,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${lab.value} ${lab.unit}'.trim(),
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              [
+                                if (lab.date != null)
+                                  '${lab.date!.month}/${lab.date!.day}/${lab.date!.year}',
+                                if (lab.source.isNotEmpty) lab.source,
+                              ].join(' • '),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuButton<String>(
+                        onSelected: (choice) {
+                          if (choice == 'edit') {
+                            _edit(context, ref, existing: lab);
+                          } else if (choice == 'delete') {
+                            ref
+                                .read(appStateProvider.notifier)
+                                .removeLab(lab.id);
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: 'edit',
+                            child: Text('Edit'),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

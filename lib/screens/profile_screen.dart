@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/user_profile.dart';
-import '../providers/health_data_provider.dart';
-import '../providers/profile_provider.dart';
+import '../models/models.dart';
+import '../state/app_state.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -16,26 +15,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late final TextEditingController _name;
   late final TextEditingController _weight;
   late final TextEditingController _goalWeight;
+  late String _sex;
   late String _goal;
   late String _activity;
-  late String _sex;
   DateTime? _birthday;
 
   @override
   void initState() {
     super.initState();
-    final profile = ref.read(profileProvider);
-    _name = TextEditingController(text: profile.firstName);
+    final p = ref.read(appStateProvider).profile;
+    _name = TextEditingController(text: p.firstName);
     _weight = TextEditingController(
-      text: profile.currentWeightLb?.toStringAsFixed(1) ?? '',
+      text: ref.read(appStateProvider).currentWeightLb?.toStringAsFixed(1) ?? '',
     );
-    _goalWeight = TextEditingController(
-      text: profile.goalWeightLb?.toStringAsFixed(1) ?? '',
-    );
-    _goal = profile.primaryGoal;
-    _activity = profile.activityLevel;
-    _sex = profile.sex;
-    _birthday = profile.birthday;
+    _goalWeight =
+        TextEditingController(text: p.goalWeightLb?.toStringAsFixed(1) ?? '');
+    _sex = p.sex;
+    _goal = p.primaryGoal;
+    _activity = p.activityLevel;
+    _birthday = p.birthday;
   }
 
   @override
@@ -58,26 +56,33 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   void _save() {
-    final current = ref.read(profileProvider);
+    final app = ref.read(appStateProvider);
+    final old = app.profile;
     final newWeight = double.tryParse(_weight.text.trim());
-    final goalWeight = double.tryParse(_goalWeight.text.trim());
 
     final next = UserProfile(
       completed: true,
       firstName: _name.text.trim(),
       sex: _sex,
       birthday: _birthday,
-      heightIn: current.heightIn,
-      startingWeightLb: current.startingWeightLb,
-      currentWeightLb: newWeight ?? current.currentWeightLb,
-      goalWeightLb: goalWeight ?? current.goalWeightLb,
+      heightIn: old.heightIn,
+      startingWeightLb: old.startingWeightLb,
+      manualCurrentWeightLb:
+          newWeight ?? old.manualCurrentWeightLb,
+      goalWeightLb:
+          double.tryParse(_goalWeight.text.trim()) ?? old.goalWeightLb,
       primaryGoal: _goal,
       activityLevel: _activity,
+      stepGoal: old.stepGoal,
+      workoutGoalPerWeek: old.workoutGoalPerWeek,
     );
 
-    ref.read(profileProvider.notifier).update(next);
-    if (newWeight != null && newWeight != current.currentWeightLb) {
-      ref.read(healthDataProvider.notifier).addWeight(newWeight);
+    ref.read(appStateProvider.notifier).saveProfile(next);
+
+    if (newWeight != null &&
+        newWeight != old.manualCurrentWeightLb &&
+        app.health.weightLb == null) {
+      ref.read(appStateProvider.notifier).logManualWeight(newWeight);
     }
 
     Navigator.pop(context);
@@ -85,40 +90,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const goals = [
-      'Fat loss',
-      'Build strength',
-      'Improve fitness',
-      'Maintain health',
-    ];
-    const activityLevels = [
-      'Mostly seated',
-      'Lightly active',
-      'Active',
-      'Very active',
-    ];
-
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Profile',
+          'My Profile',
           style: TextStyle(fontWeight: FontWeight.w900),
         ),
         actions: [
-          TextButton(
-            onPressed: _save,
-            child: const Text('Save'),
-          ),
+          TextButton(onPressed: _save, child: const Text('Save')),
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(16),
         children: [
           TextField(
             controller: _name,
-            decoration: const InputDecoration(labelText: 'First name'),
+            decoration: const InputDecoration(labelText: 'Name'),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 11),
           SegmentedButton<String>(
             segments: const [
               ButtonSegment(value: 'Male', label: Text('Male')),
@@ -128,7 +117,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             onSelectionChanged: (values) =>
                 setState(() => _sex = values.first),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 11),
           ListTile(
             leading: const Icon(Icons.cake_outlined),
             title: const Text('Birthday'),
@@ -137,49 +126,70 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ? 'Not set'
                   : '${_birthday!.month}/${_birthday!.day}/${_birthday!.year}',
             ),
+            trailing: const Icon(Icons.chevron_right),
             onTap: _pickBirthday,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 11),
           TextField(
             controller: _weight,
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Current weight (lb)',
-            ),
+            decoration: const InputDecoration(labelText: 'Manual weight (lb)'),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 11),
           TextField(
             controller: _goalWeight,
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Goal weight (lb)',
-            ),
+            decoration: const InputDecoration(labelText: 'Goal weight (lb)'),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 11),
           DropdownButtonFormField<String>(
             initialValue: _goal,
             decoration: const InputDecoration(labelText: 'Primary goal'),
-            items: goals
-                .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-                .toList(),
+            items: const [
+              DropdownMenuItem(value: 'Fat loss', child: Text('Fat loss')),
+              DropdownMenuItem(
+                value: 'Build strength',
+                child: Text('Build strength'),
+              ),
+              DropdownMenuItem(
+                value: 'Improve fitness',
+                child: Text('Improve fitness'),
+              ),
+              DropdownMenuItem(
+                value: 'Maintain health',
+                child: Text('Maintain health'),
+              ),
+            ],
             onChanged: (value) {
               if (value != null) setState(() => _goal = value);
             },
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 11),
           DropdownButtonFormField<String>(
             initialValue: _activity,
-            decoration: const InputDecoration(labelText: 'Typical activity'),
-            items: activityLevels
-                .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-                .toList(),
+            decoration: const InputDecoration(labelText: 'Activity level'),
+            items: const [
+              DropdownMenuItem(
+                value: 'Mostly seated',
+                child: Text('Mostly seated'),
+              ),
+              DropdownMenuItem(
+                value: 'Lightly active',
+                child: Text('Lightly active'),
+              ),
+              DropdownMenuItem(value: 'Active', child: Text('Active')),
+              DropdownMenuItem(
+                value: 'Very active',
+                child: Text('Very active'),
+              ),
+            ],
             onChanged: (value) {
               if (value != null) setState(() => _activity = value);
             },
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 20),
           FilledButton.icon(
             onPressed: _save,
             icon: const Icon(Icons.save_outlined),
