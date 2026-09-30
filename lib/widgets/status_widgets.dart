@@ -66,12 +66,12 @@ class SubsystemTile extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(11, 10, 10, 10),
+          padding: const EdgeInsets.fromLTRB(13, 12, 11, 12),
           decoration: BoxDecoration(
             color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppTheme.border),
           ),
           child: Column(
@@ -79,11 +79,11 @@ class SubsystemTile extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(statusIcon(system.name), size: 17, color: color),
+                  Icon(statusIcon(system.name), size: 21, color: color),
                   const Spacer(),
-                  Icon(
+                  const Icon(
                     Icons.chevron_right_rounded,
-                    size: 15,
+                    size: 18,
                     color: AppTheme.textMuted,
                   ),
                 ],
@@ -95,30 +95,30 @@ class SubsystemTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: AppTheme.textSecondary,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               Text(
                 system.value,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: color,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               Text(
                 system.detail,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: AppTheme.textMuted,
-                  fontSize: 8.5,
-                  height: 1.1,
+                  fontSize: 12,
+                  height: 1.2,
                 ),
               ),
             ],
@@ -142,7 +142,7 @@ class TinyStatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
@@ -151,8 +151,8 @@ class TinyStatusPill extends StatelessWidget {
         text,
         style: TextStyle(
           color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
         ),
       ),
     );

@@ -13,7 +13,7 @@ class CommandCard extends StatelessWidget {
   const CommandCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(14),
+    this.padding = const EdgeInsets.all(16),
     this.onTap,
     this.color,
     this.border,
@@ -22,7 +22,7 @@ class CommandCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = borderRadius ?? BorderRadius.circular(16);
+    final radius = borderRadius ?? BorderRadius.circular(18);
     final content = AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       padding: padding,

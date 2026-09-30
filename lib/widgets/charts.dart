@@ -10,6 +10,7 @@ class SimpleBarChart extends StatelessWidget {
   final double height;
   final bool showTarget;
   final double? target;
+  final List<String>? labels;
 
   const SimpleBarChart({
     super.key,
@@ -17,6 +18,7 @@ class SimpleBarChart extends StatelessWidget {
     this.height = 180,
     this.showTarget = false,
     this.target,
+    this.labels,
   });
 
   @override
@@ -53,18 +55,43 @@ class SimpleBarChart extends StatelessWidget {
               strokeWidth: 1,
             ),
           ),
-          titlesData: const FlTitlesData(
-            leftTitles: AxisTitles(
+          titlesData: FlTitlesData(
+            leftTitles: const AxisTitles(
               sideTitles: SideTitles(showTitles: false),
             ),
-            rightTitles: AxisTitles(
+            rightTitles: const AxisTitles(
               sideTitles: SideTitles(showTitles: false),
             ),
-            topTitles: AxisTitles(
+            topTitles: const AxisTitles(
               sideTitles: SideTitles(showTitles: false),
             ),
             bottomTitles: AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
+              sideTitles: SideTitles(
+                showTitles: labels != null && labels!.isNotEmpty,
+                reservedSize: 26,
+                getTitlesWidget: (value, meta) {
+                  if (labels == null || labels!.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  final index = value.round();
+                  if (index < 0 || index >= labels!.length) {
+                    return const SizedBox.shrink();
+                  }
+                  final label = labels![index];
+                  if (label.isEmpty) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 7),
+                    child: Text(
+                      label,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
           extraLinesData: showTarget && target != null
@@ -86,7 +113,7 @@ class SimpleBarChart extends StatelessWidget {
                 barRods: [
                   BarChartRodData(
                     toY: values[i].toDouble(),
-                    width: values.length > 20 ? 6 : 14,
+                    width: values.length > 20 ? 7 : 16,
                     color: i == values.length - 1
                         ? AppTheme.mint
                         : AppTheme.cyan,

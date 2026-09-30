@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/formatters.dart';
 import '../core/theme/app_theme.dart';
+import '../services/source_name_service.dart';
 import '../state/app_state.dart';
 import '../state/health_sync_provider.dart';
 import '../widgets/command_card.dart';
@@ -25,12 +26,16 @@ class SourcesScreen extends ConsumerWidget {
     final app = ref.watch(appStateProvider);
     final sync = ref.watch(healthSyncProvider);
     final h = app.health;
-    final detected = h.detectedSources.toSet().toList()..sort();
+    final detected = SourceNameService.uniqueRawByFriendly(h.detectedSources)
+        .where((source) => SourceNameService.friendly(source) != 'Health Connect')
+        .toList()
+      ..sort((a, b) => SourceNameService.friendly(a)
+          .compareTo(SourceNameService.friendly(b)));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Devices & Sources')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
+        padding: const EdgeInsets.fromLTRB(18, 8, 18, 30),
         children: [
           CommandCard(
             child: Column(
@@ -41,9 +46,9 @@ class SourcesScreen extends ConsumerWidget {
                     const HmIconBadge(
                       icon: Icons.health_and_safety_rounded,
                       color: AppTheme.cyan,
-                      size: 44,
+                      size: 48,
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -55,7 +60,7 @@ class SourcesScreen extends ConsumerWidget {
                                   'Health Connect',
                                   style: TextStyle(
                                     color: AppTheme.textPrimary,
-                                    fontSize: 14,
+                                    fontSize: 17,
                                     fontWeight: FontWeight.w900,
                                   ),
                                 ),
@@ -66,14 +71,14 @@ class SourcesScreen extends ConsumerWidget {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 3),
+                          const SizedBox(height: 5),
                           Text(
                             h.lastSync == null
                                 ? 'Android health-data hub'
                                 : 'Last sync ${relativeAge(h.lastSync)}',
                             style: const TextStyle(
                               color: AppTheme.textSecondary,
-                              fontSize: 10,
+                              fontSize: 13,
                             ),
                           ),
                         ],
@@ -81,7 +86,7 @@ class SourcesScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 Row(
                   children: [
                     Expanded(
@@ -97,12 +102,14 @@ class SourcesScreen extends ConsumerWidget {
                                       .connectAndSync();
                                 }
                               },
-                        icon: Icon(h.authorized ? Icons.sync_rounded : Icons.add_link_rounded),
+                        icon: Icon(h.authorized
+                            ? Icons.sync_rounded
+                            : Icons.add_link_rounded),
                         label: Text(h.authorized ? 'Sync now' : 'Connect'),
                       ),
                     ),
                     if (h.authorized) ...[
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: OutlinedButton(
                           onPressed: sync.isLoading
@@ -110,14 +117,6 @@ class SourcesScreen extends ConsumerWidget {
                               : () => ref
                                   .read(healthSyncProvider.notifier)
                                   .disconnect(),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppTheme.textSecondary,
-                            side: const BorderSide(color: AppTheme.border),
-                            minimumSize: const Size(0, 46),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
                           child: const Text('Disconnect'),
                         ),
                       ),
@@ -127,9 +126,9 @@ class SourcesScreen extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 24),
           const HmSectionHeader(title: 'Detected data origins'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           if (detected.isEmpty)
             const CommandCard(
               child: HmEmptyState(
@@ -140,7 +139,7 @@ class SourcesScreen extends ConsumerWidget {
             )
           else
             CommandCard(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 3),
               child: Column(
                 children: [
                   for (var i = 0; i < detected.length; i++) ...[
@@ -150,18 +149,18 @@ class SourcesScreen extends ConsumerWidget {
                 ],
               ),
             ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 24),
           const HmSectionHeader(title: 'Preferred source by metric'),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           const Text(
             'Auto combines Health Connect data. Override only when you want a specific detected source for one metric.',
             style: TextStyle(
               color: AppTheme.textSecondary,
-              fontSize: 10,
-              height: 1.35,
+              fontSize: 13,
+              height: 1.4,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           CommandCard(
             child: Column(
               children: [
@@ -171,43 +170,31 @@ class SourcesScreen extends ConsumerWidget {
                     selected: app.metricSources[metrics[i]] ?? 'Auto',
                     sources: detected,
                     onChanged: (value) async {
-                      ref.read(appStateProvider.notifier).setMetricSource(metrics[i], value);
+                      ref
+                          .read(appStateProvider.notifier)
+                          .setMetricSource(metrics[i], value);
                       if (h.authorized) {
                         await ref.read(healthSyncProvider.notifier).sync();
                       }
                     },
                   ),
-                  if (i != metrics.length - 1) const SizedBox(height: 9),
+                  if (i != metrics.length - 1) const SizedBox(height: 12),
                 ],
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           const Text(
-            'Healthy Me never marks a vendor connected just because it is supported. A vendor appears as detected only when real records identify that origin.',
+            'A vendor appears as detected only when real Health Connect records identify that origin. Package IDs are kept internal and are never shown as provider names.',
             style: TextStyle(
-              color: AppTheme.textMuted,
-              fontSize: 9.5,
-              height: 1.35,
+              color: AppTheme.textSecondary,
+              fontSize: 12.5,
+              height: 1.4,
             ),
           ),
         ],
       ),
     );
-  }
-
-  static String friendlySource(String source) {
-    final lower = source.toLowerCase();
-    if (lower.contains('samsung')) return 'Samsung Health';
-    if (lower.contains('garmin')) return 'Garmin Connect';
-    if (lower.contains('fitbit')) return 'Fitbit';
-    if (lower.contains('withings')) return 'Withings';
-    if (lower.contains('google fit')) return 'Google Fit';
-    if (lower.contains('health connect') ||
-        lower.contains('com.google.android.apps.healthdata')) {
-      return 'Health Connect';
-    }
-    return source;
   }
 
   static IconData sourceIcon(String source) {
@@ -216,6 +203,7 @@ class SourcesScreen extends ConsumerWidget {
     if (value.contains('garmin')) return Icons.navigation_rounded;
     if (value.contains('fitbit')) return Icons.watch_rounded;
     if (value.contains('withings')) return Icons.monitor_weight_outlined;
+    if (value.contains('google fit')) return Icons.fitness_center_rounded;
     return Icons.sensors_rounded;
   }
 
@@ -225,6 +213,7 @@ class SourcesScreen extends ConsumerWidget {
     if (value.contains('garmin')) return AppTheme.textPrimary;
     if (value.contains('fitbit')) return AppTheme.cyan;
     if (value.contains('withings')) return AppTheme.blue;
+    if (value.contains('google fit')) return AppTheme.mint;
     return AppTheme.purple;
   }
 }
@@ -236,30 +225,31 @@ class _DetectedSourceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = SourcesScreen.friendlySource(source);
+    final name = SourceNameService.friendly(source);
     final color = SourcesScreen.sourceColor(name);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 13),
       child: Row(
         children: [
           HmIconBadge(
             icon: SourcesScreen.sourceIcon(name),
             color: color,
-            size: 34,
+            size: 42,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               name,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppTheme.textPrimary,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w800,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
               ),
             ),
           ),
+          const SizedBox(width: 8),
           const HmStatusPill(text: 'Detected', color: AppTheme.mint),
         ],
       ),
@@ -284,18 +274,39 @@ class _MetricSourcePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final options = ['Auto', ...sources];
     final value = options.contains(selected) ? selected : 'Auto';
+
+    Widget labelFor(String option) => Text(
+          option == 'Auto'
+              ? 'Auto / Recommended'
+              : SourceNameService.friendly(option),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AppTheme.textPrimary,
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+          ),
+        );
+
     return DropdownButtonFormField<String>(
       initialValue: value,
+      isExpanded: true,
       decoration: InputDecoration(
         labelText: metric,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
+      selectedItemBuilder: (context) => [
+        for (final option in options)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: labelFor(option),
+          ),
+      ],
       items: [
-        const DropdownMenuItem(value: 'Auto', child: Text('Auto / Recommended')),
-        for (final source in sources)
+        for (final option in options)
           DropdownMenuItem(
-            value: source,
-            child: Text(SourcesScreen.friendlySource(source)),
+            value: option,
+            child: labelFor(option),
           ),
       ],
       onChanged: (next) {

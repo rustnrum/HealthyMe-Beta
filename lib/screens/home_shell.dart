@@ -78,6 +78,13 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: index == 0
+            ? null
+            : IconButton(
+                tooltip: 'Back to Home',
+                onPressed: () => ref.read(navigationProvider.notifier).go(0),
+                icon: const Icon(Icons.chevron_left_rounded, size: 30),
+              ),
         title: Text(titles[index]),
         centerTitle: index != 0,
         actions: [
@@ -87,7 +94,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               child: Icon(
                 Icons.wb_sunny_rounded,
                 color: AppTheme.amber,
-                size: 20,
+                size: 23,
               ),
             ),
           if (sync.isLoading)
@@ -109,7 +116,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 app.health.authorized
                     ? Icons.sync_rounded
                     : Icons.add_link_rounded,
-                size: 21,
+                size: 23,
               ),
             ),
           if (index == 0)
@@ -167,7 +174,7 @@ class _HealthyMeBottomNav extends StatelessWidget {
         border: Border(top: BorderSide(color: AppTheme.border, width: 0.7)),
       ),
       padding: EdgeInsets.only(
-        top: 7,
+        top: 9,
         bottom: 6 + MediaQuery.paddingOf(context).bottom * 0.45,
       ),
       child: Row(
@@ -187,22 +194,22 @@ class _HealthyMeBottomNav extends StatelessWidget {
                         color: i == index
                             ? AppTheme.cyan
                             : AppTheme.textSecondary,
-                        size: 21,
+                        size: 23,
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 5),
                       Text(
                         _items[i].$2,
                         style: TextStyle(
                           color: i == index
                               ? AppTheme.textPrimary
                               : AppTheme.textSecondary,
-                          fontSize: 9.5,
+                          fontSize: 12.5,
                           fontWeight: i == index
                               ? FontWeight.w800
                               : FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 5),
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 160),
                         width: i == index ? 18 : 4,

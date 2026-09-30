@@ -8,8 +8,11 @@ fail() {
 
 SHELL_FILE="lib/screens/home_shell.dart"
 HOME_FILE="lib/screens/home_screen.dart"
+ACTIVITY_FILE="lib/screens/activity_screen.dart"
+SLEEP_FILE="lib/screens/sleep_screen.dart"
 BODY_FILE="lib/screens/body_screen.dart"
 MORE_FILE="lib/screens/more_screen.dart"
+SOURCES_FILE="lib/screens/sources_screen.dart"
 
 for required in "'Home'" "'Activity'" "'Sleep'" "'Body'" "'More'"; do
   grep -q "$required" "$SHELL_FILE" || fail "missing bottom-nav destination $required"
@@ -25,12 +28,47 @@ for required in "Body Status" "What changed today" "Data freshness"; do
   grep -q "$required" "$HOME_FILE" || fail "home screen missing approved section: $required"
 done
 
-for required in "Weight" "Measurements" "Composition" "Progress Photos"; do
+for required in "Day" "Week" "Month" "Year" "Workouts" "Weekly activity"; do
+  grep -q "$required" "$ACTIVITY_FILE" || fail "activity screen missing approved section: $required"
+done
+
+for required in "Total Sleep" "Sleep Stages" "Sleep Insight" "Sleep Consistency"; do
+  grep -q "$required" "$SLEEP_FILE" || fail "sleep screen missing approved section: $required"
+done
+
+for required in "Weight" "Measurements" "Composition" "Body Measurements" "Body Fat" "Progress Photos"; do
   grep -q "$required" "$BODY_FILE" || fail "body screen missing approved section: $required"
 done
 
-for required in "Connected Sources" "Your Plan"; do
-  grep -q "$required" "$MORE_FILE" || fail "More screen missing approved section: $required"
+for required in "Connected Sources" "Your Plan" "Samsung Health" "Garmin Connect" "Fitbit" "Withings Scale"; do
+  grep -q "$required" "$MORE_FILE" || fail "More screen missing approved element: $required"
 done
 
-echo "Healthy Me approved UI contract markers present."
+grep -q "isExpanded: true" "$SOURCES_FILE" || fail "source dropdowns must be overflow-safe"
+grep -q "SourceNameService" "$SOURCES_FILE" || fail "source screen must normalize raw provider IDs"
+
+python3 - <<'PY'
+from pathlib import Path
+import re, sys
+files = [
+    'lib/screens/home_screen.dart',
+    'lib/screens/activity_screen.dart',
+    'lib/screens/sleep_screen.dart',
+    'lib/screens/body_screen.dart',
+    'lib/screens/more_screen.dart',
+    'lib/screens/sources_screen.dart',
+    'lib/screens/home_shell.dart',
+]
+violations=[]
+for name in files:
+    text=Path(name).read_text()
+    for m in re.finditer(r'fontSize:\s*([0-9]+(?:\.[0-9]+)?)', text):
+        size=float(m.group(1))
+        if size < 12:
+            violations.append(f'{name}:{size}')
+if violations:
+    print('UI CONTRACT FAILURE: primary UI contains text below 12sp:', ', '.join(violations), file=sys.stderr)
+    raise SystemExit(1)
+PY
+
+echo "Healthy Me approved UI contract markers + readability checks present."

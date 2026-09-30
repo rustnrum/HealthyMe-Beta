@@ -248,7 +248,7 @@ class LabsScreen extends ConsumerWidget {
                                 : 'Newest dated result: ${_date(newest)}',
                             style: const TextStyle(
                               color: AppTheme.textSecondary,
-                              fontSize: 10,
+                              fontSize: 13,
                             ),
                           ),
                         ],
@@ -261,7 +261,7 @@ class LabsScreen extends ConsumerWidget {
                   'Raw values only. Healthy Me uses collection date and source for context and does not automatically label a result high or low.',
                   style: TextStyle(
                     color: AppTheme.textSecondary,
-                    fontSize: 10.5,
+                    fontSize: 13,
                     height: 1.35,
                   ),
                 ),
@@ -388,7 +388,7 @@ class _LabRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: AppTheme.textMuted,
-                    fontSize: 9,
+                    fontSize: 12.5,
                   ),
                 ),
               ],

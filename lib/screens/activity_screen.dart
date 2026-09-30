@@ -42,34 +42,18 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     };
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 30),
       children: [
         HmTabs(
           labels: const ['Day', 'Week', 'Month', 'Year'],
           selected: _range,
           onChanged: (value) => setState(() => _range = value),
         ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            const Icon(Icons.chevron_left_rounded, color: AppTheme.textMuted),
-            Expanded(
-              child: Text(
-                _dateLabel(now),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
-          ],
-        ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
+        _DateNavigator(label: _dateLabel(now)),
+        const SizedBox(height: 12),
         CommandCard(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(16),
           child: Column(
             children: [
               Row(
@@ -77,9 +61,9 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                   const HmIconBadge(
                     icon: Icons.directions_walk_rounded,
                     color: AppTheme.cyan,
-                    size: 46,
+                    size: 52,
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -90,16 +74,16 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                               : '—',
                           style: const TextStyle(
                             color: AppTheme.textPrimary,
-                            fontSize: 28,
+                            fontSize: 31,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5,
+                            letterSpacing: -0.65,
                           ),
                         ),
                         Text(
                           'of ${compactNumber(goal)} steps',
                           style: const TextStyle(
                             color: AppTheme.textSecondary,
-                            fontSize: 11,
+                            fontSize: 14,
                           ),
                         ),
                       ],
@@ -109,18 +93,18 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                     health.authorized ? '${(progress * 100).round()}%' : '—',
                     style: const TextStyle(
                       color: AppTheme.textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               ClipRRect(
                 borderRadius: BorderRadius.circular(99),
                 child: LinearProgressIndicator(
                   value: health.authorized ? progress : 0,
-                  minHeight: 8,
+                  minHeight: 11,
                   color: AppTheme.cyan,
                   backgroundColor: AppTheme.surfaceHigh,
                 ),
@@ -128,7 +112,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         CommandCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -139,34 +123,36 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                     _range == 'Day' ? 'Steps through the day' : 'Step trend',
                     style: const TextStyle(
                       color: AppTheme.textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                   const Spacer(),
                   if (_range == 'Year' && !health.historicalAccess)
                     const Text(
-                      'History access needed',
+                      'History needed',
                       style: TextStyle(
                         color: AppTheme.amber,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               SimpleBarChart(
                 values: chartValues,
                 target: _range == 'Day' ? null : goal.toDouble(),
                 showTarget: _range == 'Week' || _range == 'Month',
-                height: 150,
+                labels: _labelsFor(_range, chartValues.length),
+                height: 180,
               ),
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: HmMetricCard(
@@ -177,7 +163,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                 accent: AppTheme.cyan,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: HmMetricCard(
                 label: 'Active calories',
@@ -187,7 +173,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                 accent: AppTheme.mint,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: HmMetricCard(
                 label: 'Active time',
@@ -197,15 +183,15 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 24),
         HmSectionHeader(
           title: 'Workouts',
-          action: health.authorized ? null : 'Connect',
+          action: health.authorized ? 'See all' : 'Connect',
           onAction: health.authorized
               ? null
               : () => ref.read(healthSyncProvider.notifier).connectAndSync(),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         if (health.workouts.isEmpty)
           const CommandCard(
             child: HmEmptyState(
@@ -216,7 +202,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
           )
         else
           CommandCard(
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 3),
             child: Column(
               children: [
                 for (var i = 0; i < health.workouts.take(4).length; i++) ...[
@@ -227,15 +213,16 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
               ],
             ),
           ),
-        const SizedBox(height: 18),
-        const HmSectionHeader(title: 'Weekly activity'),
-        const SizedBox(height: 8),
+        const SizedBox(height: 24),
+        const HmSectionHeader(title: 'Weekly activity', action: 'This week'),
+        const SizedBox(height: 10),
         CommandCard(
           child: SimpleBarChart(
             values: _tail(health.dailySteps30, 7),
             target: goal.toDouble(),
             showTarget: true,
-            height: 125,
+            labels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+            height: 150,
           ),
         ),
       ],
@@ -247,13 +234,58 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     return values.sublist(values.length - count);
   }
 
+  List<String>? _labelsFor(String range, int count) {
+    if (count <= 0) return null;
+    if (range == 'Day') {
+      return List.generate(count, (i) {
+        if (i == 0) return '12A';
+        if (i == 6) return '6A';
+        if (i == 12) return '12P';
+        if (i == 18) return '6P';
+        if (i == count - 1) return '12A';
+        return '';
+      });
+    }
+    if (range == 'Week') {
+      const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+      return List.generate(count, (i) => days[i % 7]);
+    }
+    return null;
+  }
+
   String _dateLabel(DateTime date) {
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${weekdays[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+}
+
+class _DateNavigator extends StatelessWidget {
+  final String label;
+  const _DateNavigator({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(Icons.chevron_left_rounded, color: AppTheme.textSecondary, size: 25),
+        Expanded(
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary, size: 25),
+      ],
+    );
   }
 }
 
@@ -265,15 +297,15 @@ class _WorkoutRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 13),
       child: Row(
         children: [
           const HmIconBadge(
             icon: Icons.directions_run_rounded,
             color: AppTheme.mint,
-            size: 34,
+            size: 42,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -282,24 +314,25 @@ class _WorkoutRow extends StatelessWidget {
                   workout.type,
                   style: const TextStyle(
                     color: AppTheme.textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
                   '${shortDate(workout.start)} • ${workout.minutes} min • ${workout.source}',
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
-                    fontSize: 9.5,
+                    fontSize: 12.5,
+                    height: 1.3,
                   ),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
+          const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted, size: 20),
         ],
       ),
     );

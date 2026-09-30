@@ -63,7 +63,7 @@ class PlanScreen extends ConsumerWidget {
             'Healthy Me provides wellness suggestions, not diagnosis or treatment. Medical symptoms and abnormal results belong with a qualified clinician.',
             style: TextStyle(
               color: AppTheme.textMuted,
-              fontSize: 9.5,
+              fontSize: 13,
               height: 1.35,
             ),
           ),
@@ -91,7 +91,7 @@ class _ContextPill extends StatelessWidget {
         text,
         style: const TextStyle(
           color: AppTheme.textSecondary,
-          fontSize: 9,
+          fontSize: 12.5,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -125,7 +125,7 @@ class _PlanCard extends StatelessWidget {
                   item.category.toUpperCase(),
                   style: TextStyle(
                     color: color,
-                    fontSize: 9,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0.5,
                   ),
@@ -144,7 +144,7 @@ class _PlanCard extends StatelessWidget {
                   item.detail,
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
-                    fontSize: 10.5,
+                    fontSize: 13,
                     height: 1.35,
                   ),
                 ),

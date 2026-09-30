@@ -35,41 +35,25 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
         : min(100, ((h.sleepMinutes / guidance.minimumMinutes) * 100).round());
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 30),
       children: [
         HmTabs(
           labels: const ['Day', 'Week', 'Month', 'Year'],
           selected: _range,
           onChanged: (value) => setState(() => _range = value),
         ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            const Icon(Icons.chevron_left_rounded, color: AppTheme.textMuted),
-            Expanded(
-              child: Text(
-                _dateLabel(DateTime.now()),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
-          ],
-        ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
+        _DateNavigator(label: _dateLabel(DateTime.now())),
+        const SizedBox(height: 12),
         CommandCard(
           child: Row(
             children: [
               const HmIconBadge(
                 icon: Icons.bedtime_rounded,
                 color: AppTheme.purple,
-                size: 52,
+                size: 58,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,24 +62,26 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                       minutesLabel(h.sleepMinutes),
                       style: const TextStyle(
                         color: AppTheme.textPrimary,
-                        fontSize: 28,
+                        fontSize: 31,
                         fontWeight: FontWeight.w900,
-                        letterSpacing: -0.5,
+                        letterSpacing: -0.65,
                       ),
                     ),
                     const Text(
-                      'Total sleep',
+                      'Total Sleep',
                       style: TextStyle(
                         color: AppTheme.textSecondary,
-                        fontSize: 11,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 7),
                     Text(
-                      'Target: ${guidance.label} based on age',
+                      'Target: ${guidance.label} based on your age',
                       style: const TextStyle(
-                        color: AppTheme.textMuted,
-                        fontSize: 9.5,
+                        color: AppTheme.textSecondary,
+                        fontSize: 12.5,
+                        height: 1.3,
                       ),
                     ),
                   ],
@@ -105,7 +91,7 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         if (_range == 'Day') ...[
           CommandCard(
             child: Column(
@@ -114,11 +100,11 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                 Row(
                   children: [
                     const Text(
-                      'Sleep stages',
+                      'Sleep Stages',
                       style: TextStyle(
                         color: AppTheme.textPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
                     const Spacer(),
@@ -127,12 +113,13 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                         minutesLabel(h.sleepMinutes),
                         style: const TextStyle(
                           color: AppTheme.textSecondary,
-                          fontSize: 10,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 SleepStageBar(
                   awake: h.sleepAwakeMinutes,
                   rem: h.sleepRemMinutes,
@@ -142,7 +129,7 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           CommandCard(
             color: const Color(0xFF0B3144),
             child: Row(
@@ -151,33 +138,34 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                 const HmIconBadge(
                   icon: Icons.lightbulb_rounded,
                   color: AppTheme.amber,
-                  size: 38,
+                  size: 42,
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Sleep insight',
+                        'Sleep Insight',
                         style: TextStyle(
                           color: AppTheme.textPrimary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 5),
                       Text(
                         _insight(h.sleepMinutes, avg, guidance.minimumMinutes),
                         style: const TextStyle(
                           color: AppTheme.textSecondary,
-                          fontSize: 10.5,
-                          height: 1.35,
+                          fontSize: 13,
+                          height: 1.4,
                         ),
                       ),
                     ],
                   ),
                 ),
+                const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
               ],
             ),
           ),
@@ -190,18 +178,19 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                   'Sleep duration • 7 days',
                   style: TextStyle(
                     color: AppTheme.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 SimpleBarChart(
                   values: h.sleepMinutes7,
                   target: guidance.minimumMinutes > 0
                       ? guidance.minimumMinutes.toDouble()
                       : null,
                   showTarget: guidance.minimumMinutes > 0,
-                  height: 180,
+                  labels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+                  height: 190,
                 ),
               ],
             ),
@@ -211,13 +200,13 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
             child: HmEmptyState(
               icon: Icons.history_rounded,
               title: 'Longer sleep history is not available yet',
-              detail: 'Healthy Me will show month and year views once enough connected sleep history has been synced.',
+              detail: 'Month and year views appear after enough connected sleep history has synced.',
             ),
           ),
         ],
-        const SizedBox(height: 18),
-        const HmSectionHeader(title: 'Sleep consistency'),
-        const SizedBox(height: 8),
+        const SizedBox(height: 24),
+        const HmSectionHeader(title: 'Sleep Consistency (7 days)'),
+        const SizedBox(height: 10),
         CommandCard(
           child: SimpleBarChart(
             values: h.sleepMinutes7,
@@ -225,7 +214,8 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                 ? guidance.minimumMinutes.toDouble()
                 : null,
             showTarget: guidance.minimumMinutes > 0,
-            height: 126,
+            labels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+            height: 155,
           ),
         ),
       ],
@@ -239,31 +229,56 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
     if (average > 0) {
       final delta = tonight - average;
       if (delta <= -45) {
-        return 'You slept ${(-delta)} minutes less than your recent average. A lighter day and a consistent sleep window may help recovery.';
+        return 'You slept less than your recent average. A lighter day and a consistent sleep window may support recovery.';
       }
       if (delta >= 45) {
-        return 'You slept $delta minutes more than your recent average.';
+        return 'You slept more than your recent average. Healthy Me will keep watching whether that becomes a trend.';
       }
     }
     if (target > 0 && tonight < target) {
-      return 'Sleep duration was below your age-based target. Prioritize a consistent sleep window tonight.';
+      return 'Sleep was below your age-based target. Prioritize a consistent bedtime rather than chasing one perfect night.';
     }
-    return 'Sleep duration is close to your recent pattern and age-based target.';
+    return 'Sleep duration is near your recent pattern and age-based target.';
   }
 
   String _dateLabel(DateTime date) {
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${weekdays[date.weekday - 1]}, ${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 }
 
+class _DateNavigator extends StatelessWidget {
+  final String label;
+  const _DateNavigator({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(Icons.chevron_left_rounded, color: AppTheme.textSecondary, size: 25),
+        Expanded(
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary, size: 25),
+      ],
+    );
+  }
+}
+
 class _ScoreRing extends StatelessWidget {
   final int? score;
-
   const _ScoreRing({required this.score});
 
   @override
@@ -271,50 +286,60 @@ class _ScoreRing extends StatelessWidget {
     final value = score == null ? 0.0 : (score! / 100).clamp(0.0, 1.0);
     final color = score == null
         ? AppTheme.textMuted
-        : score! >= 90
+        : score! >= 85
             ? AppTheme.mint
-            : score! >= 75
-                ? AppTheme.cyan
-                : AppTheme.purple;
+            : score! >= 70
+                ? AppTheme.purple
+                : AppTheme.rose;
+    final status = score == null
+        ? 'No data'
+        : score! >= 85
+            ? 'Good'
+            : score! >= 70
+                ? 'Fair'
+                : 'Watch';
 
-    return Column(
-      children: [
-        SizedBox(
-          width: 62,
-          height: 62,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              CircularProgressIndicator(
-                value: value,
-                strokeWidth: 6,
-                strokeCap: StrokeCap.round,
-                color: color,
-                backgroundColor: AppTheme.surfaceHigh,
-              ),
-              Center(
-                child: Text(
-                  score?.toString() ?? '—',
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w900,
+    return SizedBox(
+      width: 88,
+      child: Column(
+        children: [
+          SizedBox(
+            width: 76,
+            height: 76,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CircularProgressIndicator(
+                  value: value,
+                  strokeWidth: 7,
+                  color: color,
+                  backgroundColor: Colors.white.withValues(alpha: 0.1),
+                  strokeCap: StrokeCap.round,
+                ),
+                Center(
+                  child: Text(
+                    score?.toString() ?? '—',
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Duration score',
-          style: TextStyle(
-            color: color,
-            fontSize: 8.5,
-            fontWeight: FontWeight.w700,
+          const SizedBox(height: 7),
+          Text(
+            'Sleep Score',
+            style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800),
           ),
-        ),
-      ],
+          Text(
+            status,
+            style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
     );
   }
 }

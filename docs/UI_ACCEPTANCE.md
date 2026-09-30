@@ -1,6 +1,6 @@
-# Healthy Me v0.3 UI Acceptance Contract
+# Healthy Me v0.3.1 UI Acceptance Contract
 
-The approved wide five-phone mockup is the visual/product contract for this build.
+The approved five-phone command-center mockup is the visual/product contract for this build. The implementation should match its structure, density, hierarchy and accent language while remaining truthful to available data.
 
 ## Required primary navigation
 
@@ -8,10 +8,18 @@ Home / Activity / Sleep / Body / More
 
 The previous v0.2 navigation (Today / Progress / Connect / Labs / Plan) is not allowed in the primary shell.
 
+## Readability
+
+- Primary-screen text must not be explicitly sized below 12sp.
+- Secondary explanatory text should normally be 13sp or larger.
+- Section headings should be ~21sp and primary card titles 15–18sp.
+- Layouts must reflow instead of clipping or using tiny text.
+- Source dropdowns must never overflow horizontally.
+
 ## Home / Daily Body Report
 
 - Greeting and date
-- One calm Body Status hero, not a wall of gauges
+- Illustrated/atmospheric Body Status hero with one calm status ring
 - Six subsystem cards: Recovery, Sleep, Activity, Cardio, Body, Labs
 - What changed today
 - Data freshness
@@ -20,7 +28,7 @@ The previous v0.2 navigation (Today / Progress / Connect / Labs / Plan) is not a
 
 - Day / Week / Month / Year selector
 - Steps vs goal
-- Activity trend chart
+- Time/trend chart with readable axis labels
 - Distance, active calories, active time
 - Workouts
 - Weekly activity
@@ -29,7 +37,7 @@ The previous v0.2 navigation (Today / Progress / Connect / Labs / Plan) is not a
 
 - Total sleep
 - Age-based target calculated from birthday/profile
-- Duration score explicitly named as such; no fake proprietary readiness score
+- Duration score clearly labeled Sleep Score
 - Sleep-stage distribution from connected data only
 - Plain-language insight
 - Seven-day consistency
@@ -37,25 +45,27 @@ The previous v0.2 navigation (Today / Progress / Connect / Labs / Plan) is not a
 ## Body
 
 - Weight / Measurements / Composition tabs
-- Weight and goal with real trend data
+- Weight and goal with real trend data and range selector
 - Clean measurement grid; no human silhouette
 - Body fat from connected source only
 - Progress photos
 
 ## More / Sources & Plan
 
-- Health Connect plus actual detected data origins
-- Never claim a vendor is connected unless it is actually detected/authorized
+- Health Connect plus Samsung Health, Garmin Connect, Fitbit and Withings rows
+- Never claim a vendor is connected unless real records detect it
+- Never display raw package IDs as provider names
 - Metric routing remains available in detailed Sources screen
-- Personalized wellness suggestions from the existing PlanService
-- Bloodwork, Heart, Goals, Photos, Profile remain accessible as secondary tools
+- Personalized wellness suggestions from PlanService
+- Bloodwork, Heart, Goals, Photos and Profile remain accessible as secondary tools
 
 ## Visual language
 
 - Deep navy background
-- Blue/cyan, mint, purple, rose and amber accents used sparingly
-- Compact cards, subtle borders, restrained shadows
-- No bright green terminal-style theme
-- No giant Material navigation selection pill
+- Bright cyan, mint, purple, rose and amber accents used selectively
+- Rounded dark-blue cards with subtle borders and restrained shadows
+- White primary text with clearly readable secondary text
+- No terminal-green / retro-computer look
+- No giant Material selection pill
 - No visible Beta 0.2 badge
 - Responsive layouts must avoid overflow on common Android phone widths

@@ -22,25 +22,35 @@ class HmSectionHeader extends StatelessWidget {
           child: Text(
             title,
             style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
+              fontSize: AppTheme.section,
+              fontWeight: FontWeight.w900,
               color: AppTheme.textPrimary,
+              letterSpacing: -0.35,
             ),
           ),
         ),
         if (action != null)
-          TextButton(
-            onPressed: onAction,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Text(
-              action!,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-            ),
-          ),
+          onAction == null
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  child: Text(
+                    action!,
+                    style: const TextStyle(
+                      color: AppTheme.cyan,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                )
+              : TextButton(
+                  onPressed: onAction,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    minimumSize: const Size(44, 38),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(action!),
+                ),
       ],
     );
   }
@@ -61,10 +71,10 @@ class HmTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(3),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppTheme.border),
       ),
       child: Row(
@@ -72,24 +82,22 @@ class HmTabs extends StatelessWidget {
           for (final label in labels)
             Expanded(
               child: InkWell(
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: BorderRadius.circular(10),
                 onTap: () => onChanged(label),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 160),
-                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
                   decoration: BoxDecoration(
                     color: selected == label ? AppTheme.cyan : Colors.transparent,
-                    borderRadius: BorderRadius.circular(9),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     label,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: selected == label
-                          ? Colors.white
-                          : AppTheme.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                      color: selected == label ? Colors.white : AppTheme.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
@@ -120,10 +128,11 @@ class HmMetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      constraints: const BoxConstraints(minHeight: 96),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.border),
       ),
       child: Column(
@@ -131,41 +140,39 @@ class HmMetricCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 18, color: accent),
-            const SizedBox(height: 7),
+            Icon(icon, size: 21, color: accent),
+            const SizedBox(height: 8),
           ],
           Text(
             label,
-            maxLines: 1,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: AppTheme.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 3),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-              ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
             ),
           ),
           if (detail != null) ...[
-            const SizedBox(height: 2),
+            const SizedBox(height: 3),
             Text(
               detail!,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: accent,
-                fontSize: 10,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -185,7 +192,7 @@ class HmIconBadge extends StatelessWidget {
     super.key,
     required this.icon,
     required this.color,
-    this.size = 36,
+    this.size = 40,
   });
 
   @override
@@ -194,7 +201,7 @@ class HmIconBadge extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.13),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(size * 0.3),
       ),
       child: Icon(icon, color: color, size: size * 0.52),
@@ -215,18 +222,18 @@ class HmStatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Text(
         text,
         style: TextStyle(
           color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
+          fontSize: 12.5,
+          fontWeight: FontWeight.w900,
         ),
       ),
     );
@@ -251,22 +258,26 @@ class HmEmptyState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
       decoration: BoxDecoration(
         color: AppTheme.surfaceHigh.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         children: [
-          Icon(icon, color: AppTheme.textSecondary, size: 34),
-          const SizedBox(height: 10),
+          Icon(icon, color: AppTheme.textSecondary, size: 38),
+          const SizedBox(height: 12),
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.w800),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 7),
           Text(
             detail,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppTheme.textSecondary),
+            style: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 13,
+              height: 1.4,
+            ),
           ),
         ],
       ),

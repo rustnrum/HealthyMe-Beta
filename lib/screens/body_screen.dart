@@ -21,20 +21,20 @@ class BodyScreen extends ConsumerStatefulWidget {
 
 class _BodyScreenState extends ConsumerState<BodyScreen> {
   String _tab = 'Weight';
+  String _weightRange = '1M';
 
   @override
   Widget build(BuildContext context) {
     final app = ref.watch(appStateProvider);
-
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 30),
       children: [
         HmTabs(
           labels: const ['Weight', 'Measurements', 'Composition'],
           selected: _tab,
           onChanged: (value) => setState(() => _tab = value),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         if (_tab == 'Weight') _weightTab(context, app),
         if (_tab == 'Measurements') _measurementTab(context, app),
         if (_tab == 'Composition') _compositionTab(context, app),
@@ -45,8 +45,11 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
   Widget _weightTab(BuildContext context, HealthyMeState app) {
     final current = app.currentWeightLb;
     final goal = app.profile.goalWeightLb;
-    final history = app.mergedWeightHistory;
-    final first = history.isEmpty ? app.profile.startingWeightLb : history.first.pounds;
+    final history = _filterWeightHistory(app.mergedWeightHistory, _weightRange);
+    final allHistory = app.mergedWeightHistory;
+    final first = allHistory.isEmpty
+        ? app.profile.startingWeightLb
+        : allHistory.first.pounds;
     final change = current != null && first != null ? current - first : null;
 
     return Column(
@@ -61,19 +64,14 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
                     'Weight & Goal',
                     style: TextStyle(
                       color: AppTheme.textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                   const Spacer(),
                   TextButton(
-                    onPressed: () => _logWeight(context),
-                    style: TextButton.styleFrom(
-                      minimumSize: Size.zero,
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text('Log weight', style: TextStyle(fontSize: 10)),
+                    onPressed: () => _editGoal(context, app),
+                    child: const Text('Edit goal'),
                   ),
                 ],
               ),
@@ -85,42 +83,47 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          current == null ? '—' : current.toStringAsFixed(1),
-                          style: const TextStyle(
-                            color: AppTheme.textPrimary,
-                            fontSize: 31,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.7,
-                          ),
-                        ),
-                        const Text(
-                          'lb',
-                          style: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 10,
-                          ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              current == null ? '—' : current.toStringAsFixed(1),
+                              style: const TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontSize: 34,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.8,
+                              ),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.only(left: 5, bottom: 5),
+                              child: Text(
+                                'lb',
+                                style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         if (change != null) ...[
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 5),
                           Text(
                             '${change >= 0 ? '+' : ''}${change.toStringAsFixed(1)} lb since first entry',
                             style: TextStyle(
                               color: change <= 0 ? AppTheme.mint : AppTheme.amber,
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                         ],
                       ],
                     ),
                   ),
-                  Container(
-                    width: 1,
-                    height: 64,
-                    color: AppTheme.border,
-                  ),
-                  const SizedBox(width: 14),
+                  Container(width: 1, height: 68, color: AppTheme.border),
+                  const SizedBox(width: 16),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -128,15 +131,16 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
                         'Goal',
                         style: TextStyle(
                           color: AppTheme.textSecondary,
-                          fontSize: 10,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       Text(
                         goal == null ? '—' : '${goal.toStringAsFixed(0)} lb',
                         style: const TextStyle(
                           color: AppTheme.textPrimary,
-                          fontSize: 20,
+                          fontSize: 23,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
@@ -144,22 +148,36 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               WeightTrendChart(values: history),
+              const SizedBox(height: 10),
+              _RangeSelector(
+                selected: _weightRange,
+                onChanged: (value) => setState(() => _weightRange = value),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => _logWeight(context),
+                  icon: const Icon(Icons.add_rounded, size: 19),
+                  label: const Text('Log weight'),
+                ),
+              ),
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 22),
         HmSectionHeader(
           title: 'Body Measurements',
           action: 'See all',
           onAction: () => setState(() => _tab = 'Measurements'),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         _measurementGrid(app.measurements, preview: true),
         const SizedBox(height: 12),
         _bodyFatCard(app),
-        const SizedBox(height: 16),
+        const SizedBox(height: 22),
         HmSectionHeader(
           title: 'Progress Photos',
           action: 'See all',
@@ -167,7 +185,7 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
             MaterialPageRoute(builder: (_) => const PhotosScreen()),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         _photoRow(context, app),
       ],
     );
@@ -185,20 +203,21 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
                 action: 'Edit',
                 onAction: () => _editMeasurements(context, app.measurements),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               _measurementGrid(app.measurements),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               const Text(
-                'Measurements are manual entries. Body fat remains connected-source only.',
+                'Tape measurements are manual. Body-fat percentage comes only from a connected compatible source.',
                 style: TextStyle(
-                  color: AppTheme.textMuted,
-                  fontSize: 9.5,
+                  color: AppTheme.textSecondary,
+                  fontSize: 13,
+                  height: 1.4,
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         _photoCard(context, app),
       ],
     );
@@ -208,7 +227,7 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
     return Column(
       children: [
         _bodyFatCard(app),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         CommandCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,11 +236,11 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
                 'Composition telemetry',
                 style: TextStyle(
                   color: AppTheme.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               _dataLine(
                 'Weight',
                 app.currentWeightLb == null
@@ -251,9 +270,9 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
           const HmIconBadge(
             icon: Icons.monitor_weight_outlined,
             color: AppTheme.cyan,
-            size: 40,
+            size: 44,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,32 +281,36 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
                   'Body Fat',
                   style: TextStyle(
                     color: AppTheme.textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  bodyFat == null ? 'No connected reading' : '${bodyFat.toStringAsFixed(1)}%',
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 19,
+                    fontSize: 15,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
+                const SizedBox(height: 3),
+                Text(
+                  bodyFat == null
+                      ? 'No connected reading'
+                      : '${bodyFat.toStringAsFixed(1)}%',
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
                 Text(
                   bodyFat == null
                       ? 'Body fat is never manually entered.'
                       : 'From the selected connected scale/source.',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
-                    fontSize: 9.5,
+                    fontSize: 13,
+                    height: 1.35,
                   ),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
+          const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted, size: 22),
         ],
       ),
     );
@@ -300,56 +323,62 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
       ('Hips', m.hips, Icons.straighten_rounded, AppTheme.amber),
       ('Arms', m.leftArm, Icons.fitness_center_rounded, AppTheme.cyan),
       ('Thighs', m.leftThigh, Icons.directions_walk_rounded, AppTheme.purple),
-      if (!preview) ('Neck', m.neck, Icons.radio_button_unchecked_rounded, AppTheme.rose),
-      if (!preview) ('Calves', m.leftCalf, Icons.directions_walk_rounded, AppTheme.mint),
+      if (!preview)
+        ('Neck', m.neck, Icons.radio_button_unchecked_rounded, AppTheme.rose),
+      if (!preview)
+        ('Calves', m.leftCalf, Icons.directions_walk_rounded, AppTheme.mint),
     ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = (constraints.maxWidth - 8) / 2;
+        final width = (constraints.maxWidth - 10) / 2;
         return Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: 10,
+          runSpacing: 10,
           children: [
             for (final entry in entries)
               SizedBox(
                 width: width,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                  constraints: const BoxConstraints(minHeight: 74),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
                   decoration: BoxDecoration(
                     color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(13),
+                    borderRadius: BorderRadius.circular(15),
                     border: Border.all(color: AppTheme.border),
                   ),
                   child: Row(
                     children: [
-                      Icon(entry.$3, size: 15, color: entry.$4),
-                      const SizedBox(width: 7),
+                      Icon(entry.$3, size: 20, color: entry.$4),
+                      const SizedBox(width: 9),
                       Expanded(
                         child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               entry.$1,
                               style: const TextStyle(
                                 color: AppTheme.textSecondary,
-                                fontSize: 9.5,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
+                            const SizedBox(height: 3),
                             Text(
                               entry.$2 == null
                                   ? '—'
                                   : '${entry.$2!.toStringAsFixed(1)} in',
                               style: const TextStyle(
                                 color: AppTheme.textPrimary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
                               ),
                             ),
                           ],
                         ),
                       ),
+                      const Icon(Icons.chevron_right_rounded, size: 17, color: AppTheme.textMuted),
                     ],
                   ),
                 ),
@@ -372,7 +401,7 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
               MaterialPageRoute(builder: (_) => const PhotosScreen()),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           _photoRow(context, app),
         ],
       ),
@@ -389,7 +418,7 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
         return Container(
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(13),
             color: AppTheme.surface,
             border: Border.all(color: AppTheme.border),
           ),
@@ -400,48 +429,49 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
       }
       return Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(13),
           color: AppTheme.surface,
           border: Border.all(color: AppTheme.border),
         ),
         child: const Icon(
           Icons.photo_outlined,
           color: AppTheme.textMuted,
-          size: 22,
+          size: 28,
         ),
       );
     }
 
     return SizedBox(
-      height: 104,
+      height: 116,
       child: Row(
         children: [
           for (var i = 0; i < 3; i++) ...[
             Expanded(child: photoSlot(i)),
-            const SizedBox(width: 7),
+            const SizedBox(width: 8),
           ],
           Expanded(
             child: InkWell(
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const PhotosScreen()),
               ),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(13),
               child: Container(
                 decoration: BoxDecoration(
                   color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(13),
                   border: Border.all(color: AppTheme.textMuted),
                 ),
                 child: const Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.add_rounded, color: AppTheme.textSecondary),
-                    SizedBox(height: 3),
+                    Icon(Icons.add_rounded, color: AppTheme.textSecondary, size: 28),
+                    SizedBox(height: 4),
                     Text(
                       'Add',
                       style: TextStyle(
                         color: AppTheme.textSecondary,
-                        fontSize: 9.5,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
@@ -456,7 +486,7 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
 
   Widget _dataLine(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
+      padding: const EdgeInsets.symmetric(vertical: 9),
       child: Row(
         children: [
           Expanded(
@@ -464,7 +494,7 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
               label,
               style: const TextStyle(
                 color: AppTheme.textSecondary,
-                fontSize: 11,
+                fontSize: 14,
               ),
             ),
           ),
@@ -472,13 +502,57 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
             value,
             style: const TextStyle(
               color: AppTheme.textPrimary,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
             ),
           ),
         ],
       ),
     );
+  }
+
+  List<WeightPoint> _filterWeightHistory(List<WeightPoint> source, String range) {
+    if (source.isEmpty || range == 'ALL') return source;
+    final now = DateTime.now();
+    final days = switch (range) {
+      '1W' => 7,
+      '1M' => 31,
+      '3M' => 93,
+      '6M' => 186,
+      '1Y' => 366,
+      _ => 31,
+    };
+    final cutoff = now.subtract(Duration(days: days));
+    final result = source.where((item) => item.date.isAfter(cutoff)).toList();
+    return result.isEmpty ? source : result;
+  }
+
+  Future<void> _editGoal(BuildContext context, HealthyMeState app) async {
+    final controller = TextEditingController(
+      text: app.profile.goalWeightLb?.toStringAsFixed(0) ?? '',
+    );
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit weight goal'),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'Goal weight (lb)'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
+        ],
+      ),
+    );
+    final value = double.tryParse(controller.text.trim());
+    controller.dispose();
+    if (save == true && value != null) {
+      ref.read(appStateProvider.notifier).saveProfile(
+            app.profile.copyWith(goalWeightLb: value),
+          );
+    }
   }
 
   Future<void> _logWeight(BuildContext context) async {
@@ -493,18 +567,11 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
           decoration: const InputDecoration(labelText: 'Weight (lb)'),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Save'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
         ],
       ),
     );
-
     final value = double.tryParse(controller.text.trim());
     controller.dispose();
     if (save == true && value != null) {
@@ -541,54 +608,85 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
           child: SingleChildScrollView(
             child: Column(
               children: [
-                for (final entry in controllers.entries)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 9),
-                    child: TextField(
-                      controller: entry.value,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: InputDecoration(labelText: '${entry.key} (in)'),
-                    ),
+                for (final entry in controllers.entries) ...[
+                  TextField(
+                    controller: entry.value,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(labelText: '${entry.key} (in)'),
                   ),
+                  const SizedBox(height: 10),
+                ],
               ],
             ),
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Save'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
         ],
       ),
     );
 
-    double? read(String key) => double.tryParse(controllers[key]!.text.trim());
-
     if (save == true) {
+      double? v(String key) => double.tryParse(controllers[key]!.text.trim());
       ref.read(appStateProvider.notifier).saveMeasurements(
             BodyMeasurements(
-              neck: read('Neck'),
-              chest: read('Chest'),
-              waist: read('Waist'),
-              hips: read('Hips'),
-              leftArm: read('Left arm'),
-              rightArm: read('Right arm'),
-              leftThigh: read('Left thigh'),
-              rightThigh: read('Right thigh'),
-              leftCalf: read('Left calf'),
-              rightCalf: read('Right calf'),
+              neck: v('Neck'),
+              chest: v('Chest'),
+              waist: v('Waist'),
+              hips: v('Hips'),
+              leftArm: v('Left arm'),
+              rightArm: v('Right arm'),
+              leftThigh: v('Left thigh'),
+              rightThigh: v('Right thigh'),
+              leftCalf: v('Left calf'),
+              rightCalf: v('Right calf'),
             ),
           );
     }
-
     for (final controller in controllers.values) {
       controller.dispose();
     }
+  }
+}
+
+class _RangeSelector extends StatelessWidget {
+  final String selected;
+  final ValueChanged<String> onChanged;
+  const _RangeSelector({required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    const ranges = ['1W', '1M', '3M', '6M', '1Y', 'ALL'];
+    return Row(
+      children: [
+        for (final range in ranges)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => onChanged(range),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  decoration: BoxDecoration(
+                    color: selected == range ? AppTheme.cyan : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    range,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: selected == range ? Colors.white : AppTheme.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }
