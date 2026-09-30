@@ -9,6 +9,7 @@ import '../models/models.dart';
 import '../state/app_state.dart';
 import '../widgets/charts.dart';
 import '../widgets/command_card.dart';
+import '../widgets/design_widgets.dart';
 import 'photos_screen.dart';
 
 class BodyScreen extends ConsumerStatefulWidget {
@@ -26,33 +27,14 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
     final app = ref.watch(appStateProvider);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
       children: [
-        Text(
-          'Body',
-          style: Theme.of(context)
-              .textTheme
-              .headlineSmall
-              ?.copyWith(fontWeight: FontWeight.w900),
+        HmTabs(
+          labels: const ['Weight', 'Measurements', 'Composition'],
+          selected: _tab,
+          onChanged: (value) => setState(() => _tab = value),
         ),
         const SizedBox(height: 10),
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: 'Weight', label: Text('Weight')),
-            ButtonSegment(
-              value: 'Measurements',
-              label: Text('Measurements'),
-            ),
-            ButtonSegment(
-              value: 'Composition',
-              label: Text('Composition'),
-            ),
-          ],
-          selected: {_tab},
-          onSelectionChanged: (value) =>
-              setState(() => _tab = value.first),
-        ),
-        const SizedBox(height: 14),
         if (_tab == 'Weight') _weightTab(context, app),
         if (_tab == 'Measurements') _measurementTab(context, app),
         if (_tab == 'Composition') _compositionTab(context, app),
@@ -63,8 +45,9 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
   Widget _weightTab(BuildContext context, HealthyMeState app) {
     final current = app.currentWeightLb;
     final goal = app.profile.goalWeightLb;
-    final start = app.profile.startingWeightLb;
-    final change = current != null && start != null ? current - start : null;
+    final history = app.mergedWeightHistory;
+    final first = history.isEmpty ? app.profile.startingWeightLb : history.first.pounds;
+    final change = current != null && first != null ? current - first : null;
 
     return Column(
       children: [
@@ -72,172 +55,184 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Weight & Goal',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 10),
               Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Expanded(
-                    child: Text(
-                      current == null
-                          ? 'No weight'
-                          : '${current.toStringAsFixed(1)} lb',
-                      style: const TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w900,
-                      ),
+                  const Text(
+                    'Weight & Goal',
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  if (goal != null)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        const Text('Goal'),
-                        Text(
-                          '${goal.toStringAsFixed(0)} lb',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ],
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => _logWeight(context),
+                    style: TextButton.styleFrom(
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
+                    child: const Text('Log weight', style: TextStyle(fontSize: 10)),
+                  ),
                 ],
               ),
-              if (change != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  '${change >= 0 ? '+' : ''}${change.toStringAsFixed(1)} lb from start',
-                  style: TextStyle(
-                    color: change <= 0 ? AppTheme.mint : AppTheme.amber,
-                    fontWeight: FontWeight.w700,
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          current == null ? '—' : current.toStringAsFixed(1),
+                          style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 31,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.7,
+                          ),
+                        ),
+                        const Text(
+                          'lb',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 10,
+                          ),
+                        ),
+                        if (change != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '${change >= 0 ? '+' : ''}${change.toStringAsFixed(1)} lb since first entry',
+                            style: TextStyle(
+                              color: change <= 0 ? AppTheme.mint : AppTheme.amber,
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              WeightTrendChart(values: app.mergedWeightHistory),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () => _logWeight(context),
-                icon: const Icon(Icons.add),
-                label: const Text('Log weight'),
+                  Container(
+                    width: 1,
+                    height: 64,
+                    color: AppTheme.border,
+                  ),
+                  const SizedBox(width: 14),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text(
+                        'Goal',
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 10,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        goal == null ? '—' : '${goal.toStringAsFixed(0)} lb',
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
+              const SizedBox(height: 10),
+              WeightTrendChart(values: history),
             ],
           ),
         ),
+        const SizedBox(height: 16),
+        HmSectionHeader(
+          title: 'Body Measurements',
+          action: 'See all',
+          onAction: () => setState(() => _tab = 'Measurements'),
+        ),
+        const SizedBox(height: 8),
+        _measurementGrid(app.measurements, preview: true),
         const SizedBox(height: 12),
-        _measurementPreview(context, app),
-        const SizedBox(height: 12),
-        _photoPreview(context, app),
+        _bodyFatCard(app),
+        const SizedBox(height: 16),
+        HmSectionHeader(
+          title: 'Progress Photos',
+          action: 'See all',
+          onAction: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const PhotosScreen()),
+          ),
+        ),
+        const SizedBox(height: 8),
+        _photoRow(context, app),
       ],
     );
   }
 
   Widget _measurementTab(BuildContext context, HealthyMeState app) {
-    return CommandCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Body Measurements',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-                ),
-              ),
-              TextButton.icon(
-                onPressed: () => _editMeasurements(context, app.measurements),
-                icon: const Icon(Icons.edit_outlined),
-                label: const Text('Edit'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _measurementGrid(context, app.measurements),
-          const SizedBox(height: 12),
-          Text(
-            'Measurements are manual. Body fat is deliberately not entered here.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _compositionTab(BuildContext context, HealthyMeState app) {
-    final bodyFat = app.health.bodyFatPercent;
-
     return Column(
       children: [
         CommandCard(
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const CircleAvatar(
-                backgroundColor: Color(0x2217C8F4),
-                child: Icon(
-                  Icons.monitor_weight_outlined,
-                  color: AppTheme.cyan,
-                ),
+              HmSectionHeader(
+                title: 'Body Measurements',
+                action: 'Edit',
+                onAction: () => _editMeasurements(context, app.measurements),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Body Fat',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      bodyFat == null
-                          ? 'Waiting for connected data'
-                          : '${bodyFat.toStringAsFixed(1)}%',
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      bodyFat == null
-                          ? 'Healthy Me does not ask you to manually type body fat.'
-                          : 'From your selected connected body-fat source.',
-                    ),
-                  ],
+              const SizedBox(height: 10),
+              _measurementGrid(app.measurements),
+              const SizedBox(height: 10),
+              const Text(
+                'Measurements are manual entries. Body fat remains connected-source only.',
+                style: TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 9.5,
                 ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 12),
+        _photoCard(context, app),
+      ],
+    );
+  }
+
+  Widget _compositionTab(BuildContext context, HealthyMeState app) {
+    return Column(
+      children: [
+        _bodyFatCard(app),
+        const SizedBox(height: 10),
         CommandCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Additional body telemetry',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                'Composition telemetry',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               _dataLine(
-                context,
-                'Current weight',
+                'Weight',
                 app.currentWeightLb == null
                     ? '—'
                     : '${app.currentWeightLb!.toStringAsFixed(1)} lb',
               ),
               _dataLine(
-                context,
                 'Weight source',
-                app.health.weightLb != null ? 'Health Connect' : 'Manual',
+                app.health.weightLb != null ? 'Connected source' : 'Manual',
               ),
               _dataLine(
-                context,
                 'Body-fat freshness',
                 relativeAge(app.health.freshness['Body fat']),
               ),
@@ -248,125 +243,66 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
     );
   }
 
-  Widget _measurementPreview(BuildContext context, HealthyMeState app) {
+  Widget _bodyFatCard(HealthyMeState app) {
+    final bodyFat = app.health.bodyFatPercent;
     return CommandCard(
-      onTap: () => setState(() => _tab = 'Measurements'),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          const Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Body Measurements',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-                ),
-              ),
-              Text('See all'),
-              SizedBox(width: 3),
-              Icon(Icons.chevron_right, size: 18),
-            ],
+          const HmIconBadge(
+            icon: Icons.monitor_weight_outlined,
+            color: AppTheme.cyan,
+            size: 40,
           ),
-          const SizedBox(height: 10),
-          _measurementGrid(context, app.measurements, preview: true),
-        ],
-      ),
-    );
-  }
-
-  Widget _photoPreview(BuildContext context, HealthyMeState app) {
-    final photos = [...app.photos]..sort((a, b) => b.date.compareTo(a.date));
-
-    return CommandCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Progress Photos',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-                ),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const PhotosScreen()),
-                ),
-                child: const Text('See all'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 110,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ...photos.take(3).map(
-                      (photo) => Container(
-                        width: 82,
-                        margin: const EdgeInsets.only(right: 8),
-                        clipBehavior: Clip.antiAlias,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(13),
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest,
-                        ),
-                        child: File(photo.path).existsSync()
-                            ? Image.file(
-                                File(photo.path),
-                                fit: BoxFit.cover,
-                              )
-                            : const Icon(Icons.image_not_supported_outlined),
-                      ),
-                    ),
-                InkWell(
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const PhotosScreen()),
+                const Text(
+                  'Body Fat',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
                   ),
-                  borderRadius: BorderRadius.circular(13),
-                  child: Container(
-                    width: 82,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(13),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.outlineVariant,
-                      ),
-                    ),
-                    child: const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.add),
-                        SizedBox(height: 4),
-                        Text('Add'),
-                      ],
-                    ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  bodyFat == null ? 'No connected reading' : '${bodyFat.toStringAsFixed(1)}%',
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  bodyFat == null
+                      ? 'Body fat is never manually entered.'
+                      : 'From the selected connected scale/source.',
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 9.5,
                   ),
                 ),
               ],
             ),
           ),
+          const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
         ],
       ),
     );
   }
 
-  Widget _measurementGrid(
-    BuildContext context,
-    BodyMeasurements m, {
-    bool preview = false,
-  }) {
-    final entries = <String, double?>{
-      'Waist': m.waist,
-      'Chest': m.chest,
-      'Hips': m.hips,
-      'Arms': m.leftArm,
-      'Thighs': m.leftThigh,
-      if (!preview) 'Neck': m.neck,
-      if (!preview) 'Calves': m.leftCalf,
-    };
+  Widget _measurementGrid(BodyMeasurements m, {bool preview = false}) {
+    final entries = <(String, double?, IconData, Color)>[
+      ('Waist', m.waist, Icons.straighten_rounded, AppTheme.cyan),
+      ('Chest', m.chest, Icons.accessibility_new_rounded, AppTheme.mint),
+      ('Hips', m.hips, Icons.straighten_rounded, AppTheme.amber),
+      ('Arms', m.leftArm, Icons.fitness_center_rounded, AppTheme.cyan),
+      ('Thighs', m.leftThigh, Icons.directions_walk_rounded, AppTheme.purple),
+      if (!preview) ('Neck', m.neck, Icons.radio_button_unchecked_rounded, AppTheme.rose),
+      if (!preview) ('Calves', m.leftCalf, Icons.directions_walk_rounded, AppTheme.mint),
+    ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -374,44 +310,171 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
         return Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: entries.entries.map((entry) {
-            return Container(
-              width: width,
-              padding: const EdgeInsets.all(11),
-              decoration: BoxDecoration(
-                color: Theme.of(context)
-                    .colorScheme
-                    .surfaceContainerHighest
-                    .withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Expanded(child: Text(entry.key)),
-                  Text(
-                    entry.value == null
-                        ? '—'
-                        : '${entry.value!.toStringAsFixed(1)}"',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
+          children: [
+            for (final entry in entries)
+              SizedBox(
+                width: width,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: AppTheme.border),
                   ),
-                ],
+                  child: Row(
+                    children: [
+                      Icon(entry.$3, size: 15, color: entry.$4),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              entry.$1,
+                              style: const TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              entry.$2 == null
+                                  ? '—'
+                                  : '${entry.$2!.toStringAsFixed(1)} in',
+                              style: const TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            );
-          }).toList(),
+          ],
         );
       },
     );
   }
 
-  Widget _dataLine(BuildContext context, String label, String value) {
+  Widget _photoCard(BuildContext context, HealthyMeState app) {
+    return CommandCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          HmSectionHeader(
+            title: 'Progress Photos',
+            action: 'Open',
+            onAction: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PhotosScreen()),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _photoRow(context, app),
+        ],
+      ),
+    );
+  }
+
+  Widget _photoRow(BuildContext context, HealthyMeState app) {
+    final photos = [...app.photos]..sort((a, b) => b.date.compareTo(a.date));
+    final shown = photos.take(3).toList();
+
+    Widget photoSlot(int index) {
+      if (index < shown.length) {
+        final photo = shown[index];
+        return Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: AppTheme.surface,
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: File(photo.path).existsSync()
+              ? Image.file(File(photo.path), fit: BoxFit.cover)
+              : const Icon(Icons.image_not_supported_outlined),
+        );
+      }
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: AppTheme.surface,
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: const Icon(
+          Icons.photo_outlined,
+          color: AppTheme.textMuted,
+          size: 22,
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 104,
+      child: Row(
+        children: [
+          for (var i = 0; i < 3; i++) ...[
+            Expanded(child: photoSlot(i)),
+            const SizedBox(width: 7),
+          ],
+          Expanded(
+            child: InkWell(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const PhotosScreen()),
+              ),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.textMuted),
+                ),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add_rounded, color: AppTheme.textSecondary),
+                    SizedBox(height: 3),
+                    Text(
+                      'Add',
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 9.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dataLine(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         children: [
-          Expanded(child: Text(label)),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+          ),
           Text(
             value,
-            style: const TextStyle(fontWeight: FontWeight.w800),
+            style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -426,8 +489,7 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
         title: const Text('Log weight'),
         content: TextField(
           controller: controller,
-          keyboardType:
-              const TextInputType.numberWithOptions(decimal: true),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(labelText: 'Weight (lb)'),
         ),
         actions: [
@@ -478,20 +540,18 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
           width: 430,
           child: SingleChildScrollView(
             child: Column(
-              children: controllers.entries
-                  .map(
-                    (entry) => Padding(
-                      padding: const EdgeInsets.only(bottom: 9),
-                      child: TextField(
-                        controller: entry.value,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
-                        decoration:
-                            InputDecoration(labelText: '${entry.key} (in)'),
-                      ),
+              children: [
+                for (final entry in controllers.entries)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 9),
+                    child: TextField(
+                      controller: entry.value,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(labelText: '${entry.key} (in)'),
                     ),
-                  )
-                  .toList(),
+                  ),
+              ],
             ),
           ),
         ),
@@ -508,8 +568,7 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
       ),
     );
 
-    double? read(String key) =>
-        double.tryParse(controllers[key]!.text.trim());
+    double? read(String key) => double.tryParse(controllers[key]!.text.trim());
 
     if (save == true) {
       ref.read(appStateProvider.notifier).saveMeasurements(

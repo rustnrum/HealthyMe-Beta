@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/theme/app_theme.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 
@@ -106,7 +107,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     height: 46,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF17C8F4), Color(0xFF35E39A)],
+                        colors: [AppTheme.cyan, AppTheme.purple],
                       ),
                       borderRadius: BorderRadius.circular(15),
                     ),

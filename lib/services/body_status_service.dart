@@ -179,7 +179,7 @@ class BodyStatusService {
             : ratio >= 0.65
                 ? StatusLevel.fair
                 : StatusLevel.watch,
-        value: '$steps steps',
+        value: '${_steps(steps)} steps',
         detail: '${(ratio * 100).round()}% of goal',
       );
     }
@@ -188,7 +188,7 @@ class BodyStatusService {
     return SubsystemStatus(
       name: 'Activity',
       level: onTrack ? StatusLevel.good : StatusLevel.fair,
-      value: '$steps steps',
+      value: '${_steps(steps)} steps',
       detail: onTrack ? 'On pace today' : 'Below today’s pace',
     );
   }
@@ -424,6 +424,12 @@ class BodyStatusService {
     }
 
     return changes.take(4).toList();
+  }
+
+  static String _steps(int value) {
+    if (value >= 10000) return '${(value / 1000).round()}K';
+    if (value >= 1000) return '${(value / 1000).toStringAsFixed(1)}K';
+    return '$value';
   }
 
   static String _minutes(int total) {

@@ -8,11 +8,11 @@ Color statusColor(StatusLevel level) {
     case StatusLevel.good:
       return AppTheme.mint;
     case StatusLevel.fair:
-      return AppTheme.amber;
+      return AppTheme.purple;
     case StatusLevel.watch:
       return AppTheme.rose;
     case StatusLevel.noData:
-      return const Color(0xFF7895A2);
+      return AppTheme.textMuted;
   }
 }
 
@@ -32,17 +32,17 @@ String statusText(StatusLevel level) {
 IconData statusIcon(String name) {
   switch (name) {
     case 'Recovery':
-      return Icons.eco_outlined;
+      return Icons.favorite_rounded;
     case 'Sleep':
-      return Icons.bedtime_outlined;
+      return Icons.bedtime_rounded;
     case 'Activity':
-      return Icons.directions_run;
+      return Icons.directions_run_rounded;
     case 'Cardio':
-      return Icons.favorite_outline;
+      return Icons.favorite_rounded;
     case 'Body':
-      return Icons.accessibility_new;
+      return Icons.monitor_weight_outlined;
     case 'Labs':
-      return Icons.science_outlined;
+      return Icons.science_rounded;
     default:
       return Icons.monitor_heart_outlined;
   }
@@ -61,62 +61,68 @@ class SubsystemTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = statusColor(system.level);
-    final scheme = Theme.of(context).colorScheme;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.all(13),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: scheme.outlineVariant.withValues(alpha: 0.55),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(11, 10, 10, 10),
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppTheme.border),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(statusIcon(system.name), size: 19, color: color),
-                const Spacer(),
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(statusIcon(system.name), size: 17, color: color),
+                  const Spacer(),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 15,
+                    color: AppTheme.textMuted,
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 9),
-            Text(
-              system.name,
-              style: Theme.of(context).textTheme.labelMedium,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              system.value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
+                ],
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              system.detail,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-            ),
-          ],
+              const Spacer(),
+              Text(
+                system.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                system.value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                system.detail,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 8.5,
+                  height: 1.1,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -136,17 +142,16 @@ class TinyStatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.13),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Text(
         text,
         style: TextStyle(
           color: color,
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: FontWeight.w800,
         ),
       ),

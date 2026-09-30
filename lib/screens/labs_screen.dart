@@ -2,10 +2,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/theme/app_theme.dart';
 import '../models/models.dart';
 import '../services/lab_service.dart';
 import '../state/app_state.dart';
 import '../widgets/command_card.dart';
+import '../widgets/design_widgets.dart';
 
 class LabsScreen extends ConsumerWidget {
   const LabsScreen({super.key});
@@ -206,134 +208,207 @@ class LabsScreen extends ConsumerWidget {
         final bb = b.date ?? DateTime(1900);
         return bb.compareTo(aa);
       });
+    final newest = labs.where((lab) => lab.date != null).isEmpty
+        ? null
+        : labs.where((lab) => lab.date != null).first.date;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Bloodwork',
-          style: TextStyle(fontWeight: FontWeight.w900),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Bloodwork')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
         children: [
           CommandCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${labs.length} result${labs.length == 1 ? '' : 's'} stored',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
+                Row(
+                  children: [
+                    const HmIconBadge(
+                      icon: Icons.science_rounded,
+                      color: AppTheme.amber,
+                      size: 42,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${labs.length} result${labs.length == 1 ? '' : 's'} stored',
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            newest == null
+                                ? 'No dated bloodwork yet'
+                                : 'Newest dated result: ${_date(newest)}',
+                            style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 11),
+                const Text(
+                  'Raw values only. Healthy Me uses collection date and source for context and does not automatically label a result high or low.',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 10.5,
+                    height: 1.35,
                   ),
                 ),
-                const SizedBox(height: 5),
-                const Text(
-                  'Healthy Me stores the observed value and its age. It does not diagnose a result as high or low.',
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                const SizedBox(height: 12),
+                Row(
                   children: [
-                    FilledButton.icon(
-                      onPressed: () => _edit(context, ref),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add result'),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => _edit(context, ref),
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Add result'),
+                      ),
                     ),
-                    OutlinedButton.icon(
-                      onPressed: () => _import(context, ref),
-                      icon: const Icon(Icons.upload_file),
-                      label: const Text('Import CSV / XLSX'),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _import(context, ref),
+                        icon: const Icon(Icons.upload_file_rounded, size: 18),
+                        label: const Text('CSV / XLSX'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.cyan,
+                          side: const BorderSide(color: AppTheme.border),
+                          minimumSize: const Size(0, 46),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
+          const HmSectionHeader(title: 'Results'),
+          const SizedBox(height: 8),
           if (labs.isEmpty)
             const CommandCard(
-              child: Column(
-                children: [
-                  Icon(Icons.science_outlined, size: 40),
-                  SizedBox(height: 8),
-                  Text(
-                    'No bloodwork entered',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  SizedBox(height: 5),
-                  Text(
-                    'Bloodwork is slow-moving context. Add it when you have it; the daily command center works without it.',
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+              child: HmEmptyState(
+                icon: Icons.science_outlined,
+                title: 'No bloodwork entered',
+                detail: 'Add only the results you want Healthy Me to use as slow-moving wellness context.',
               ),
             )
           else
-            ...labs.map(
-              (lab) => Padding(
-                padding: const EdgeInsets.only(bottom: 9),
-                child: CommandCard(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              lab.name,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${lab.value} ${lab.unit}'.trim(),
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              [
-                                if (lab.date != null)
-                                  '${lab.date!.month}/${lab.date!.day}/${lab.date!.year}',
-                                if (lab.source.isNotEmpty) lab.source,
-                              ].join(' • '),
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                      PopupMenuButton<String>(
-                        onSelected: (choice) {
-                          if (choice == 'edit') {
-                            _edit(context, ref, existing: lab);
-                          } else if (choice == 'delete') {
-                            ref
-                                .read(appStateProvider.notifier)
-                                .removeLab(lab.id);
-                          }
-                        },
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(
-                            value: 'edit',
-                            child: Text('Edit'),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Text('Delete'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+            CommandCard(
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 2),
+              child: Column(
+                children: [
+                  for (var i = 0; i < labs.length; i++) ...[
+                    _LabRow(
+                      lab: labs[i],
+                      onEdit: () => _edit(context, ref, existing: labs[i]),
+                      onDelete: () => ref
+                          .read(appStateProvider.notifier)
+                          .removeLab(labs[i].id),
+                    ),
+                    if (i != labs.length - 1) const Divider(height: 1),
+                  ],
+                ],
               ),
             ),
         ],
       ),
     );
   }
+
+  String _date(DateTime date) => '${date.month}/${date.day}/${date.year}';
+
 }
+
+class _LabRow extends StatelessWidget {
+  final LabResult lab;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _LabRow({
+    required this.lab,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          const HmIconBadge(
+            icon: Icons.biotech_rounded,
+            color: AppTheme.amber,
+            size: 34,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  lab.name,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${lab.value} ${lab.unit}'.trim(),
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  [
+                    if (lab.date != null)
+                      '${lab.date!.month}/${lab.date!.day}/${lab.date!.year}',
+                    if (lab.source.isNotEmpty) lab.source,
+                  ].join(' • '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 9,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          PopupMenuButton<String>(
+            color: AppTheme.surfaceHigh,
+            iconColor: AppTheme.textSecondary,
+            onSelected: (value) {
+              if (value == 'edit') onEdit();
+              if (value == 'delete') onDelete();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'edit', child: Text('Edit')),
+              PopupMenuItem(value: 'delete', child: Text('Delete')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+

@@ -298,10 +298,10 @@ class SleepStageBar extends StatelessWidget {
             height: 18,
             child: Row(
               children: [
-                segment(awake, const Color(0xFFFF607C)),
-                segment(rem, const Color(0xFF9B65F7)),
-                segment(light, const Color(0xFF2C9CF4)),
-                segment(deep, const Color(0xFF2754D7)),
+                segment(awake, AppTheme.rose),
+                segment(rem, AppTheme.purple),
+                segment(light, AppTheme.cyan),
+                segment(deep, AppTheme.blue),
               ],
             ),
           ),
@@ -311,10 +311,10 @@ class SleepStageBar extends StatelessWidget {
           spacing: 14,
           runSpacing: 8,
           children: [
-            _Legend('Awake', awake, const Color(0xFFFF607C)),
-            _Legend('REM', rem, const Color(0xFF9B65F7)),
-            _Legend('Light', light, const Color(0xFF2C9CF4)),
-            _Legend('Deep', deep, const Color(0xFF2754D7)),
+            _Legend('Awake', awake, AppTheme.rose),
+            _Legend('REM', rem, AppTheme.purple),
+            _Legend('Light', light, AppTheme.cyan),
+            _Legend('Deep', deep, AppTheme.blue),
           ],
         ),
       ],
@@ -365,10 +365,7 @@ class EmptyChart extends StatelessWidget {
       height: 150,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest
-            .withValues(alpha: 0.45),
+        color: AppTheme.surfaceHigh.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(

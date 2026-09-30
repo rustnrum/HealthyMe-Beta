@@ -18,7 +18,7 @@ class SleepGuidanceService {
       return const SleepGuidance(
         minimumMinutes: 0,
         label: 'Add birthday',
-        note: 'Birthday is needed for an age-based target.',
+        note: 'Birthday is needed for age-based sleep guidance.',
       );
     }
     if (age >= 65) {
@@ -29,18 +29,11 @@ class SleepGuidanceService {
         note: 'Age-based adult sleep guidance.',
       );
     }
-    if (age >= 61) {
+    if (age >= 18) {
       return const SleepGuidance(
         minimumMinutes: 420,
         upperMinutes: 540,
         label: '7–9 hr',
-        note: 'Age-based adult sleep guidance.',
-      );
-    }
-    if (age >= 18) {
-      return const SleepGuidance(
-        minimumMinutes: 420,
-        label: '7+ hr',
         note: 'Age-based adult sleep guidance.',
       );
     }
@@ -52,11 +45,18 @@ class SleepGuidanceService {
         note: 'Age-based teen sleep guidance.',
       );
     }
+    if (age >= 6) {
+      return const SleepGuidance(
+        minimumMinutes: 540,
+        upperMinutes: 720,
+        label: '9–12 hr',
+        note: 'Age-based child sleep guidance.',
+      );
+    }
     return const SleepGuidance(
-      minimumMinutes: 540,
-      upperMinutes: 720,
-      label: '9–12 hr',
-      note: 'Age-specific pediatric sleep guidance.',
+      minimumMinutes: 0,
+      label: 'Guidance unavailable',
+      note: 'Healthy Me does not provide a sleep target for children under age 6.',
     );
   }
 }

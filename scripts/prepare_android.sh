@@ -94,4 +94,16 @@ if ! grep -q '^android.enableJetifier=true' android/gradle.properties 2>/dev/nul
   echo 'android.enableJetifier=true' >> android/gradle.properties
 fi
 
+
+# Keep the installed app name human-readable.
+python3 - <<'PYLABEL'
+from pathlib import Path
+p = Path('android/app/src/main/AndroidManifest.xml')
+s = p.read_text()
+s = s.replace('android:label="healthy_me"', 'android:label="Healthy Me"')
+p.write_text(s)
+PYLABEL
+
 echo "Healthy Me Android Health Connect configuration applied."
+
+bash scripts/ui_contract_check.sh

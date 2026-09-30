@@ -1,32 +1,38 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/app_theme.dart';
+
 class CommandCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
   final VoidCallback? onTap;
+  final Color? color;
+  final Border? border;
+  final BorderRadius? borderRadius;
 
   const CommandCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(16),
+    this.padding = const EdgeInsets.all(14),
     this.onTap,
+    this.color,
+    this.border,
+    this.borderRadius,
   });
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    final content = Container(
+    final radius = borderRadius ?? BorderRadius.circular(16);
+    final content = AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
       padding: padding,
       decoration: BoxDecoration(
-        color: scheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.65),
-        ),
+        color: color ?? AppTheme.surface,
+        borderRadius: radius,
+        border: border ?? Border.all(color: AppTheme.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
+            color: Colors.black.withValues(alpha: 0.16),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -36,10 +42,9 @@ class CommandCard extends StatelessWidget {
     );
 
     if (onTap == null) return content;
-
     return InkWell(
-      borderRadius: BorderRadius.circular(20),
       onTap: onTap,
+      borderRadius: radius,
       child: content,
     );
   }

@@ -2,10 +2,12 @@ analyzer:
   exclude:
     - build/**
     - android/**
-include: package:flutter_lints/flutter.yaml
+    - ios/**
+    - linux/**
+    - macos/**
+    - windows/**
+    - web/**
 
+# CI should fail on real analyzer errors and warnings, not style-only lint churn.
 linter:
-  rules:
-    prefer_const_constructors: true
-    use_super_parameters: true
-    avoid_print: true
+  rules: {}

@@ -6,7 +6,7 @@ import '../core/theme/app_theme.dart';
 import '../state/app_state.dart';
 import '../state/health_sync_provider.dart';
 import '../widgets/command_card.dart';
-import '../widgets/status_widgets.dart';
+import '../widgets/design_widgets.dart';
 
 class SourcesScreen extends ConsumerWidget {
   const SourcesScreen({super.key});
@@ -25,221 +25,282 @@ class SourcesScreen extends ConsumerWidget {
     final app = ref.watch(appStateProvider);
     final sync = ref.watch(healthSyncProvider);
     final h = app.health;
+    final detected = h.detectedSources.toSet().toList()..sort();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Devices & Sources',
-          style: TextStyle(fontWeight: FontWeight.w900),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Devices & Sources')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
         children: [
           CommandCard(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Column(
               children: [
-                const CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Color(0x2217C8F4),
-                  child: Icon(
-                    Icons.health_and_safety_outlined,
-                    color: AppTheme.cyan,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const HmIconBadge(
+                      icon: Icons.health_and_safety_rounded,
+                      color: AppTheme.cyan,
+                      size: 44,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Expanded(
-                            child: Text(
-                              'Health Connect',
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w900,
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Health Connect',
+                                  style: TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
                               ),
-                            ),
+                              HmStatusPill(
+                                text: h.authorized ? 'Connected' : 'Not connected',
+                                color: h.authorized ? AppTheme.mint : AppTheme.rose,
+                              ),
+                            ],
                           ),
-                          TinyStatusPill(
-                            text: h.authorized ? 'Connected' : 'Not connected',
-                            color: h.authorized
-                                ? AppTheme.mint
-                                : AppTheme.amber,
+                          const SizedBox(height: 3),
+                          Text(
+                            h.lastSync == null
+                                ? 'Android health-data hub'
+                                : 'Last sync ${relativeAge(h.lastSync)}',
+                            style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 10,
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 5),
-                      Text(
-                        h.lastSync == null
-                            ? 'Central Android health-data connection'
-                            : 'Last sync: ${relativeAge(h.lastSync)}',
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          FilledButton.icon(
-                            onPressed: sync.isLoading
-                                ? null
-                                : () async {
-                                    if (h.authorized) {
-                                      await ref
-                                          .read(healthSyncProvider.notifier)
-                                          .sync();
-                                    } else {
-                                      await ref
-                                          .read(healthSyncProvider.notifier)
-                                          .connectAndSync();
-                                    }
-                                  },
-                            icon: Icon(
-                              h.authorized ? Icons.sync : Icons.add_link,
-                            ),
-                            label: Text(
-                              h.authorized ? 'Sync now' : 'Connect',
-                            ),
-                          ),
-                          if (h.authorized) ...[
-                            const SizedBox(width: 8),
-                            TextButton(
-                              onPressed: sync.isLoading
-                                  ? null
-                                  : () => ref
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: sync.isLoading
+                            ? null
+                            : () async {
+                                if (h.authorized) {
+                                  await ref.read(healthSyncProvider.notifier).sync();
+                                } else {
+                                  await ref
                                       .read(healthSyncProvider.notifier)
-                                      .disconnect(),
-                              child: const Text('Disconnect'),
+                                      .connectAndSync();
+                                }
+                              },
+                        icon: Icon(h.authorized ? Icons.sync_rounded : Icons.add_link_rounded),
+                        label: Text(h.authorized ? 'Sync now' : 'Connect'),
+                      ),
+                    ),
+                    if (h.authorized) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: sync.isLoading
+                              ? null
+                              : () => ref
+                                  .read(healthSyncProvider.notifier)
+                                  .disconnect(),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.textSecondary,
+                            side: const BorderSide(color: AppTheme.border),
+                            minimumSize: const Size(0, 46),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                          ],
-                        ],
+                          ),
+                          child: const Text('Disconnect'),
+                        ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
               ],
             ),
           ),
           const SizedBox(height: 18),
-          Text(
-            'Detected data origins',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.w900),
-          ),
+          const HmSectionHeader(title: 'Detected data origins'),
           const SizedBox(height: 8),
-          if (h.detectedSources.isEmpty)
+          if (detected.isEmpty)
             const CommandCard(
-              child: Text(
-                'No vendor data origins have been detected yet. Once Health Connect has records, Healthy Me will show the real source names here.',
+              child: HmEmptyState(
+                icon: Icons.sensors_off_rounded,
+                title: 'No vendor source detected yet',
+                detail: 'Healthy Me will show the real source names here once Health Connect records identify them.',
               ),
             )
           else
-            ...h.detectedSources.map(
-              (source) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: CommandCard(
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: _sourceColor(source).withValues(alpha: 0.14),
-                        child: Icon(
-                          _sourceIcon(source),
-                          color: _sourceColor(source),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          source,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                      const TinyStatusPill(
-                        text: 'Detected',
-                        color: AppTheme.mint,
-                      ),
-                    ],
-                  ),
-                ),
+            CommandCard(
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 2),
+              child: Column(
+                children: [
+                  for (var i = 0; i < detected.length; i++) ...[
+                    _DetectedSourceRow(source: detected[i]),
+                    if (i != detected.length - 1) const Divider(height: 1),
+                  ],
+                ],
               ),
             ),
           const SizedBox(height: 18),
-          Text(
-            'Preferred source by metric',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.w900),
+          const HmSectionHeader(title: 'Preferred source by metric'),
+          const SizedBox(height: 4),
+          const Text(
+            'Auto combines Health Connect data. Override only when you want a specific detected source for one metric.',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 10,
+              height: 1.35,
+            ),
           ),
-          const SizedBox(height: 5),
-          Text(
-            'Auto uses Health Connect’s combined data. You can override a metric with a detected source.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           CommandCard(
             child: Column(
-              children: metrics.map((metric) {
-                final selected = app.metricSources[metric] ?? 'Auto';
-                final options = ['Auto', ...h.detectedSources];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: DropdownButtonFormField<String>(
-                    initialValue:
-                        options.contains(selected) ? selected : 'Auto',
-                    decoration: InputDecoration(labelText: metric),
-                    items: options
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(value),
-                          ),
-                        )
-                        .toList(),
+              children: [
+                for (var i = 0; i < metrics.length; i++) ...[
+                  _MetricSourcePicker(
+                    metric: metrics[i],
+                    selected: app.metricSources[metrics[i]] ?? 'Auto',
+                    sources: detected,
                     onChanged: (value) async {
-                      if (value == null) return;
-                      ref
-                          .read(appStateProvider.notifier)
-                          .setMetricSource(metric, value);
+                      ref.read(appStateProvider.notifier).setMetricSource(metrics[i], value);
                       if (h.authorized) {
-                        await ref
-                            .read(healthSyncProvider.notifier)
-                            .sync();
+                        await ref.read(healthSyncProvider.notifier).sync();
                       }
                     },
                   ),
-                );
-              }).toList(),
+                  if (i != metrics.length - 1) const SizedBox(height: 9),
+                ],
+              ],
             ),
           ),
-          const SizedBox(height: 14),
-          Text(
-            'A vendor is never labeled connected just because its logo exists. Healthy Me shows it as detected only when actual records identify that source.',
-            style: Theme.of(context).textTheme.bodySmall,
+          const SizedBox(height: 12),
+          const Text(
+            'Healthy Me never marks a vendor connected just because it is supported. A vendor appears as detected only when real records identify that origin.',
+            style: TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 9.5,
+              height: 1.35,
+            ),
           ),
         ],
       ),
     );
   }
 
-  static IconData _sourceIcon(String source) {
-    final value = source.toLowerCase();
-    if (value.contains('samsung')) return Icons.watch_outlined;
-    if (value.contains('garmin')) return Icons.directions_run;
-    if (value.contains('fitbit')) return Icons.watch;
-    if (value.contains('withings')) return Icons.monitor_weight_outlined;
-    return Icons.sensors_outlined;
+  static String friendlySource(String source) {
+    final lower = source.toLowerCase();
+    if (lower.contains('samsung')) return 'Samsung Health';
+    if (lower.contains('garmin')) return 'Garmin Connect';
+    if (lower.contains('fitbit')) return 'Fitbit';
+    if (lower.contains('withings')) return 'Withings';
+    if (lower.contains('google fit')) return 'Google Fit';
+    if (lower.contains('health connect') ||
+        lower.contains('com.google.android.apps.healthdata')) {
+      return 'Health Connect';
+    }
+    return source;
   }
 
-  static Color _sourceColor(String source) {
+  static IconData sourceIcon(String source) {
+    final value = source.toLowerCase();
+    if (value.contains('samsung')) return Icons.directions_run_rounded;
+    if (value.contains('garmin')) return Icons.navigation_rounded;
+    if (value.contains('fitbit')) return Icons.watch_rounded;
+    if (value.contains('withings')) return Icons.monitor_weight_outlined;
+    return Icons.sensors_rounded;
+  }
+
+  static Color sourceColor(String source) {
     final value = source.toLowerCase();
     if (value.contains('samsung')) return AppTheme.mint;
-    if (value.contains('garmin')) return AppTheme.cyan;
-    if (value.contains('fitbit')) return AppTheme.purple;
-    if (value.contains('withings')) return AppTheme.amber;
-    return AppTheme.cyan;
+    if (value.contains('garmin')) return AppTheme.textPrimary;
+    if (value.contains('fitbit')) return AppTheme.cyan;
+    if (value.contains('withings')) return AppTheme.blue;
+    return AppTheme.purple;
+  }
+}
+
+class _DetectedSourceRow extends StatelessWidget {
+  final String source;
+
+  const _DetectedSourceRow({required this.source});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = SourcesScreen.friendlySource(source);
+    final color = SourcesScreen.sourceColor(name);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          HmIconBadge(
+            icon: SourcesScreen.sourceIcon(name),
+            color: color,
+            size: 34,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const HmStatusPill(text: 'Detected', color: AppTheme.mint),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricSourcePicker extends StatelessWidget {
+  final String metric;
+  final String selected;
+  final List<String> sources;
+  final ValueChanged<String> onChanged;
+
+  const _MetricSourcePicker({
+    required this.metric,
+    required this.selected,
+    required this.sources,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final options = ['Auto', ...sources];
+    final value = options.contains(selected) ? selected : 'Auto';
+    return DropdownButtonFormField<String>(
+      initialValue: value,
+      decoration: InputDecoration(
+        labelText: metric,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      ),
+      items: [
+        const DropdownMenuItem(value: 'Auto', child: Text('Auto / Recommended')),
+        for (final source in sources)
+          DropdownMenuItem(
+            value: source,
+            child: Text(SourcesScreen.friendlySource(source)),
+          ),
+      ],
+      onChanged: (next) {
+        if (next != null) onChanged(next);
+      },
+    );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/theme/app_theme.dart';
 import '../state/app_state.dart';
 import '../state/health_sync_provider.dart';
 import '../state/navigation_provider.dart';
@@ -26,7 +27,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     super.didChangeDependencies();
     if (_autoSyncStarted) return;
     _autoSyncStarted = true;
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final app = ref.read(appStateProvider);
       if (app.health.authorized) {
@@ -46,7 +46,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Health Connect was not connected. Open More → Devices & Sources for details.',
+              'Health Connect was not connected. Open More for source details.',
             ),
           ),
         );
@@ -68,23 +68,38 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       MoreScreen(),
     ];
 
+    const titles = [
+      'Healthy Me',
+      'Activity',
+      'Sleep',
+      'Body',
+      'Sources & Plan',
+    ];
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Healthy Me',
-          style: TextStyle(fontWeight: FontWeight.w900),
-        ),
+        title: Text(titles[index]),
+        centerTitle: index != 0,
         actions: [
+          if (index == 0)
+            const Padding(
+              padding: EdgeInsets.only(right: 2),
+              child: Icon(
+                Icons.wb_sunny_rounded,
+                color: AppTheme.amber,
+                size: 20,
+              ),
+            ),
           if (sync.isLoading)
             const Padding(
-              padding: EdgeInsets.only(right: 12),
+              padding: EdgeInsets.symmetric(horizontal: 14),
               child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2.5),
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.2),
               ),
             )
-          else
+          else if (index == 0)
             IconButton(
               tooltip: app.health.authorized
                   ? 'Sync Health Connect'
@@ -94,53 +109,116 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 app.health.authorized
                     ? Icons.sync_rounded
                     : Icons.add_link_rounded,
+                size: 21,
               ),
             ),
-          IconButton(
-            tooltip: 'Profile',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+          if (index == 0)
+            IconButton(
+              tooltip: 'Profile',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              ),
+              icon: const Icon(Icons.settings_rounded, size: 21),
+            )
+          else
+            const Padding(
+              padding: EdgeInsets.only(right: 8),
+              child: Icon(Icons.more_vert_rounded, color: AppTheme.textMuted),
             ),
-            icon: const Icon(Icons.account_circle_outlined),
-          ),
-          const SizedBox(width: 4),
         ],
       ),
       body: SafeArea(
+        top: false,
         child: IndexedStack(
           index: index,
           children: screens,
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: ref.read(navigationProvider.notifier).go,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.directions_run_outlined),
-            selectedIcon: Icon(Icons.directions_run),
-            label: 'Activity',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.bedtime_outlined),
-            selectedIcon: Icon(Icons.bedtime_rounded),
-            label: 'Sleep',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.accessibility_new_outlined),
-            selectedIcon: Icon(Icons.accessibility_new),
-            label: 'Body',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.more_horiz),
-            selectedIcon: Icon(Icons.more_horiz_rounded),
-            label: 'More',
-          ),
+      bottomNavigationBar: _HealthyMeBottomNav(
+        index: index,
+        onChanged: ref.read(navigationProvider.notifier).go,
+      ),
+    );
+  }
+}
+
+class _HealthyMeBottomNav extends StatelessWidget {
+  final int index;
+  final ValueChanged<int> onChanged;
+
+  const _HealthyMeBottomNav({
+    required this.index,
+    required this.onChanged,
+  });
+
+  static const _items = [
+    (Icons.home_rounded, 'Home'),
+    (Icons.directions_run_rounded, 'Activity'),
+    (Icons.bedtime_rounded, 'Sleep'),
+    (Icons.monitor_weight_outlined, 'Body'),
+    (Icons.more_horiz_rounded, 'More'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF061C28),
+        border: Border(top: BorderSide(color: AppTheme.border, width: 0.7)),
+      ),
+      padding: EdgeInsets.only(
+        top: 7,
+        bottom: 6 + MediaQuery.paddingOf(context).bottom * 0.45,
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < _items.length; i++)
+            Expanded(
+              child: InkWell(
+                onTap: () => onChanged(i),
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _items[i].$1,
+                        color: i == index
+                            ? AppTheme.cyan
+                            : AppTheme.textSecondary,
+                        size: 21,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _items[i].$2,
+                        style: TextStyle(
+                          color: i == index
+                              ? AppTheme.textPrimary
+                              : AppTheme.textSecondary,
+                          fontSize: 9.5,
+                          fontWeight: i == index
+                              ? FontWeight.w800
+                              : FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 160),
+                        width: i == index ? 18 : 4,
+                        height: 2,
+                        decoration: BoxDecoration(
+                          color: i == index
+                              ? AppTheme.cyan
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
