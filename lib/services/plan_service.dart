@@ -54,6 +54,15 @@ class PlanService {
           category: 'Training',
         ),
       );
+    } else if (recovery.level == StatusLevel.fair) {
+      items.add(
+        const PlanItem(
+          title: 'Keep today’s workout moderate',
+          detail:
+              'Recovery is mixed today. Use a session you can recover from instead of adding another hard training load.',
+          category: 'Training',
+        ),
+      );
     } else {
       items.add(
         PlanItem(

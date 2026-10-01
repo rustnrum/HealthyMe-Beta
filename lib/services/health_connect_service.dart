@@ -383,6 +383,16 @@ class HealthConnectService {
       HealthDataType.RESPIRATORY_RATE,
       'Heart rate',
     );
+    final hrvValues = hrv
+        .map(number)
+        .whereType<double>()
+        .where((v) => v > 0)
+        .toList();
+    final respiratoryValues = respiratory
+        .map(number)
+        .whereType<double>()
+        .where((v) => v > 0)
+        .toList();
     final oxygen = filtered(
       HealthDataType.BLOOD_OXYGEN,
       'Heart rate',
@@ -471,6 +481,8 @@ class HealthConnectService {
           heartValues.isEmpty ? null : heartValues.reduce((a, b) => a > b ? a : b),
       heartSeries: heartSeries,
       restingHeartRate30: restingValues,
+      respiratoryRate30: respiratoryValues,
+      hrv30: hrvValues,
       weightLb: lastNumber(weight),
       bodyFatPercent: lastNumber(bodyFat),
       bloodOxygenPercent: lastNumber(oxygen),

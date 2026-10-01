@@ -1,4 +1,4 @@
-# Healthy Me v0.3.2 UI Acceptance Contract
+# Healthy Me v0.3.3 UI Acceptance Contract
 
 The approved five-phone command-center mockup is the visual/product contract for this build. The implementation should match its structure, density, hierarchy and accent language while remaining truthful to available data.
 
@@ -77,3 +77,13 @@ The previous v0.2 navigation (Today / Progress / Connect / Labs / Plan) is not a
 - Fitness is the active section.
 - Diet is visible as future/coming soon only; it does not replace the current bottom navigation yet.
 - Future Diet navigation is reserved as Diet / Menu / Planning / Grocery List.
+
+
+## v0.3.3 Home acceptance
+
+- Body Status hero uses a scenic image and opens Body Status details.
+- Recovery is calculated from sleep, cardio recovery and recent training load; it does not duplicate Sleep.
+- Recovery detail exposes score, confidence and contributors; Nutrition is N/A until real Diet data exists.
+- Body weight color follows weekly movement toward/away from the goal and is not automatically green.
+- Cardio displays respiratory rate when available.
+- Home includes What changed today, Today's focus and Data freshness.

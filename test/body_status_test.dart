@@ -28,4 +28,39 @@ void main() {
     final labs = report.systems.firstWhere((item) => item.name == 'Labs');
     expect(labs.level, StatusLevel.good);
   });
+
+  test('body trend is green only when weight moves toward a lower goal', () {
+    final now = DateTime.now();
+    final state = HealthyMeState(
+      profile: const UserProfile(goalWeightLb: 150),
+      manualWeights: [
+        WeightPoint(
+          date: now.subtract(const Duration(days: 7)),
+          pounds: 200,
+          source: 'Manual',
+        ),
+        WeightPoint(date: now, pounds: 198.8, source: 'Manual'),
+      ],
+    );
+    final trend = BodyStatusService.weightTrend(state);
+    expect(trend.level, StatusLevel.good);
+    expect(trend.weeklyDeltaLb, closeTo(-1.2, 0.01));
+  });
+
+  test('body trend turns watch when weight moves away from lower goal', () {
+    final now = DateTime.now();
+    final state = HealthyMeState(
+      profile: const UserProfile(goalWeightLb: 150),
+      manualWeights: [
+        WeightPoint(
+          date: now.subtract(const Duration(days: 7)),
+          pounds: 200,
+          source: 'Manual',
+        ),
+        WeightPoint(date: now, pounds: 201, source: 'Manual'),
+      ],
+    );
+    final trend = BodyStatusService.weightTrend(state);
+    expect(trend.level, StatusLevel.watch);
+  });
 }

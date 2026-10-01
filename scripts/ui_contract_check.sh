@@ -15,6 +15,10 @@ MORE_FILE="lib/screens/more_screen.dart"
 SOURCES_FILE="lib/screens/sources_screen.dart"
 PLAN_FILE="lib/screens/plan_screen.dart"
 HEALTH_FILE="lib/services/health_connect_service.dart"
+RECOVERY_FILE="lib/services/recovery_service.dart"
+BODY_STATUS_FILE="lib/services/body_status_service.dart"
+BODY_DETAIL_FILE="lib/screens/body_status_detail_screen.dart"
+RECOVERY_DETAIL_FILE="lib/screens/recovery_detail_screen.dart"
 
 for required in "'Home'" "'Activity'" "'Sleep'" "'Body'" "'More'"; do
   grep -q "$required" "$SHELL_FILE" || fail "missing bottom-nav destination $required"
@@ -26,7 +30,7 @@ for forbidden in "Beta 0.2" "label: 'Today'" "label: 'Progress'" "label: 'Connec
   fi
 done
 
-for required in "Body Status" "What changed today" "Data freshness"; do
+for required in "Body Status" "What changed today" "Today's focus" "Data freshness" "hero_mountains.jpg"; do
   grep -q "$required" "$HOME_FILE" || fail "home screen missing approved section: $required"
 done
 
@@ -55,6 +59,16 @@ grep -q "Step data" "$ACTIVITY_FILE" || fail "activity must show step data fresh
 grep -q "SleepWindowDial" "$PLAN_FILE" || fail "plan must include the circular sleep-window control"
 grep -q "distanceValueToMiles" "$HEALTH_FILE" || fail "distance must be normalized before display"
 grep -q "resolvedMotionSource" "$HEALTH_FILE" || fail "motion metrics must avoid multi-provider double counting"
+grep -q "respiratoryRate30" "$HEALTH_FILE" || fail "respiratory history must be retained for personal baseline logic"
+grep -q "hrv30" "$HEALTH_FILE" || fail "HRV history must be retained for recovery baseline logic"
+grep -q "class RecoveryService" "$RECOVERY_FILE" || fail "recovery must be a calculated service"
+grep -q "Training load" "$RECOVERY_FILE" || fail "recovery must include recent training load"
+grep -q "Not included until Diet has real food data" "$RECOVERY_FILE" || fail "recovery must not guess nutrition"
+grep -q "weightTrend" "$BODY_STATUS_FILE" || fail "body status must use weekly goal-directed weight trend"
+grep -q "respiratoryRate" "$BODY_STATUS_FILE" || fail "cardio tile must support respiratory rate"
+grep -q "What.s affecting your status" "$BODY_DETAIL_FILE" || fail "Body Status detail must explain the rating"
+grep -q "Recovery contributors" "$RECOVERY_DETAIL_FILE" || fail "Recovery detail must show contributors"
+test -f lib/assets/images/hero_mountains.jpg || fail "scenic Body Status hero asset missing"
 
 grep -q "isExpanded: true" "$SOURCES_FILE" || fail "source dropdowns must be overflow-safe"
 grep -q "SourceNameService" "$SOURCES_FILE" || fail "source screen must normalize raw provider IDs"
@@ -71,6 +85,8 @@ files = [
     'lib/screens/sources_screen.dart',
     'lib/screens/home_shell.dart',
     'lib/screens/plan_screen.dart',
+    'lib/screens/body_status_detail_screen.dart',
+    'lib/screens/recovery_detail_screen.dart',
     'lib/widgets/sleep_window_dial.dart',
 ]
 violations=[]

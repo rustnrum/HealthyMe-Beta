@@ -2,14 +2,10 @@ import 'dart:math';
 
 import '../models/models.dart';
 import '../state/app_state.dart';
+import 'recovery_service.dart';
 import 'sleep_guidance_service.dart';
 
-enum StatusLevel {
-  good,
-  fair,
-  watch,
-  noData,
-}
+enum StatusLevel { good, fair, watch, noData }
 
 class SubsystemStatus {
   final String name;
@@ -37,6 +33,20 @@ class DailyChange {
   });
 }
 
+class WeightTrendSummary {
+  final bool hasTrend;
+  final double? weeklyDeltaLb;
+  final StatusLevel level;
+  final String detail;
+
+  const WeightTrendSummary({
+    required this.hasTrend,
+    required this.weeklyDeltaLb,
+    required this.level,
+    required this.detail,
+  });
+}
+
 class BodyReport {
   final String overall;
   final String summary;
@@ -54,42 +64,30 @@ class BodyReport {
 class BodyStatusService {
   static BodyReport build(HealthyMeState app) {
     final health = app.health;
-    final sleepGuidance =
-        SleepGuidanceService.forAge(app.profile.age);
+    final sleepGuidance = SleepGuidanceService.forAge(app.profile.age);
+    final recoveryReport = RecoveryService.build(app);
 
     final sleep = _sleepStatus(health, sleepGuidance);
     final activity = _activityStatus(app);
     final cardio = _cardioStatus(health);
     final body = _bodyStatus(app);
     final labs = _labsStatus(app);
-    final recovery = _recoveryStatus(sleep, cardio, health);
+    final recovery = _recoveryStatus(recoveryReport);
 
-    final systems = [
-      recovery,
-      sleep,
-      activity,
-      cardio,
-      body,
-      labs,
-    ];
-
-    final known = systems
-        .where((item) => item.level != StatusLevel.noData)
-        .toList();
-    final watches =
-        known.where((item) => item.level == StatusLevel.watch).length;
-    final fairs =
-        known.where((item) => item.level == StatusLevel.fair).length;
+    final systems = [recovery, sleep, activity, cardio, body, labs];
+    final known = systems.where((item) => item.level != StatusLevel.noData).toList();
+    final watches = known.where((item) => item.level == StatusLevel.watch).length;
+    final fairs = known.where((item) => item.level == StatusLevel.fair).length;
 
     String overall;
     String summary;
     if (known.length < 3) {
       overall = 'Limited data';
       summary = 'Connect more telemetry to build a useful daily baseline.';
-    } else if (watches >= 2) {
+    } else if (watches >= 2 || recovery.level == StatusLevel.watch) {
       overall = 'Watch';
-      summary = 'A few systems are off your current pattern today.';
-    } else if (watches == 1 || fairs >= 2) {
+      summary = 'A few signals are off your recent pattern today.';
+    } else if (watches == 1 || fairs >= 2 || recovery.level == StatusLevel.fair) {
       overall = 'Fair';
       summary = 'Mostly steady, with a couple of areas worth watching.';
     } else {
@@ -101,14 +99,91 @@ class BodyStatusService {
       overall: overall,
       summary: summary,
       systems: systems,
-      changes: _changes(app, sleepGuidance),
+      changes: _changes(app),
     );
   }
 
-  static SubsystemStatus _sleepStatus(
-    HealthSnapshot health,
-    SleepGuidance guidance,
-  ) {
+  static WeightTrendSummary weightTrend(HealthyMeState app) {
+    final points = app.mergedWeightHistory.where((p) => p.pounds > 0).toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    final current = app.currentWeightLb ?? (points.isEmpty ? null : points.last.pounds);
+    if (current == null) {
+      return const WeightTrendSummary(
+        hasTrend: false,
+        weeklyDeltaLb: null,
+        level: StatusLevel.noData,
+        detail: 'Log or connect weight',
+      );
+    }
+
+    if (points.length < 2) {
+      return const WeightTrendSummary(
+        hasTrend: false,
+        weeklyDeltaLb: null,
+        level: StatusLevel.fair,
+        detail: 'Weekly trend pending',
+      );
+    }
+
+    final latest = points.last;
+    final cutoff = latest.date.subtract(const Duration(days: 5));
+    WeightPoint? baseline;
+    for (final point in points.reversed.skip(1)) {
+      if (!point.date.isAfter(cutoff)) {
+        baseline = point;
+        break;
+      }
+    }
+    if (baseline == null) {
+      return const WeightTrendSummary(
+        hasTrend: false,
+        weeklyDeltaLb: null,
+        level: StatusLevel.fair,
+        detail: 'Need about a week of weight data',
+      );
+    }
+
+    final delta = latest.pounds - baseline.pounds;
+    final goal = app.profile.goalWeightLb;
+    if (goal == null) {
+      return WeightTrendSummary(
+        hasTrend: true,
+        weeklyDeltaLb: delta,
+        level: StatusLevel.fair,
+        detail: '${_signed(delta)} lb this week',
+      );
+    }
+
+    final wantsLower = baseline.pounds > goal;
+    final wantsHigher = baseline.pounds < goal;
+    if (!wantsLower && !wantsHigher) {
+      return WeightTrendSummary(
+        hasTrend: true,
+        weeklyDeltaLb: delta,
+        level: StatusLevel.good,
+        detail: 'At weight goal',
+      );
+    }
+
+    final towardGoal = wantsLower ? -delta : delta;
+    final level = towardGoal >= 0.2
+        ? StatusLevel.good
+        : towardGoal <= -0.2
+            ? StatusLevel.watch
+            : StatusLevel.fair;
+    final detail = delta.abs() < 0.2
+        ? 'No meaningful change this week'
+        : '${_signed(delta)} lb this week';
+
+    return WeightTrendSummary(
+      hasTrend: true,
+      weeklyDeltaLb: delta,
+      level: level,
+      detail: detail,
+    );
+  }
+
+  static SubsystemStatus _sleepStatus(HealthSnapshot health, SleepGuidance guidance) {
     if (health.sleepMinutes <= 0 || guidance.minimumMinutes <= 0) {
       return const SubsystemStatus(
         name: 'Sleep',
@@ -120,7 +195,6 @@ class BodyStatusService {
 
     final delta = health.sleepMinutes - guidance.minimumMinutes;
     final hours = _minutes(health.sleepMinutes);
-
     if (delta >= 0) {
       return SubsystemStatus(
         name: 'Sleep',
@@ -146,8 +220,7 @@ class BodyStatusService {
   }
 
   static SubsystemStatus _activityStatus(HealthyMeState app) {
-    if (!app.health.authorized &&
-        app.health.stepsToday == 0) {
+    if (!app.health.authorized && app.health.stepsToday == 0) {
       return const SubsystemStatus(
         name: 'Activity',
         level: StatusLevel.noData,
@@ -163,10 +236,7 @@ class BodyStatusService {
     final totalMinutes = wakingEnd.difference(wakingStart).inMinutes;
     final elapsed = now.isBefore(wakingStart)
         ? 0
-        : min(
-            totalMinutes,
-            now.difference(wakingStart).inMinutes,
-          );
+        : min(totalMinutes, now.difference(wakingStart).inMinutes);
     final expected = goal * (elapsed / totalMinutes);
     final steps = app.health.stepsToday;
 
@@ -195,47 +265,60 @@ class BodyStatusService {
 
   static SubsystemStatus _cardioStatus(HealthSnapshot health) {
     final rhr = health.restingHeartRate;
-    if (rhr == null) {
+    final resp = health.respiratoryRate;
+    if (rhr == null && resp == null) {
       return const SubsystemStatus(
         name: 'Cardio',
         level: StatusLevel.noData,
         value: 'No data',
-        detail: 'Resting HR unavailable',
+        detail: 'Heart and breathing unavailable',
       );
     }
 
-    final history = health.restingHeartRate30;
-    if (history.length < 4) {
-      return SubsystemStatus(
-        name: 'Cardio',
-        level: StatusLevel.good,
-        value: '${rhr.round()} bpm',
-        detail: 'Building your baseline',
-      );
-    }
-
-    final baselineValues = history.sublist(0, max(1, history.length - 1));
-    final baseline =
-        baselineValues.reduce((a, b) => a + b) / baselineValues.length;
-    final delta = rhr - baseline;
-
-    return SubsystemStatus(
-      name: 'Cardio',
-      level: delta <= 5
+    var level = StatusLevel.good;
+    var baselineDetail = 'Building your baseline';
+    if (rhr != null && health.restingHeartRate30.length >= 4) {
+      final history = health.restingHeartRate30;
+      final baselineValues = history.sublist(0, max(1, history.length - 1));
+      final baseline = baselineValues.reduce((a, b) => a + b) / baselineValues.length;
+      final delta = rhr - baseline;
+      level = delta <= 5
           ? StatusLevel.good
           : delta <= 10
               ? StatusLevel.fair
-              : StatusLevel.watch,
-      value: '${rhr.round()} bpm',
-      detail: delta.abs() < 1
-          ? 'Near baseline'
-          : '${delta >= 0 ? '+' : ''}${delta.round()} vs baseline',
+              : StatusLevel.watch;
+      baselineDetail = delta.abs() < 1
+          ? 'HR stable'
+          : 'HR ${delta >= 0 ? '+' : ''}${delta.round()} vs baseline';
+    }
+
+    if (resp != null && health.respiratoryRate30.length >= 4) {
+      final values = health.respiratoryRate30;
+      final baselineValues = values.sublist(0, max(1, values.length - 1));
+      final baseline = baselineValues.reduce((a, b) => a + b) / baselineValues.length;
+      final delta = resp - baseline;
+      if (delta > 3) {
+        level = StatusLevel.watch;
+      } else if (delta > 1.5 && level == StatusLevel.good) {
+        level = StatusLevel.fair;
+      }
+    }
+
+    final value = rhr != null ? '${rhr.round()} bpm' : '${resp!.round()} br/min';
+    final detail = resp != null
+        ? '${resp.toStringAsFixed(0)} br/min • $baselineDetail'
+        : baselineDetail;
+
+    return SubsystemStatus(
+      name: 'Cardio',
+      level: level,
+      value: value,
+      detail: detail,
     );
   }
 
   static SubsystemStatus _bodyStatus(HealthyMeState app) {
     final current = app.currentWeightLb;
-    final goal = app.profile.goalWeightLb;
     if (current == null) {
       return const SubsystemStatus(
         name: 'Body',
@@ -244,24 +327,12 @@ class BodyStatusService {
         detail: 'Log or connect weight',
       );
     }
-
-    if (goal == null) {
-      return SubsystemStatus(
-        name: 'Body',
-        level: StatusLevel.good,
-        value: '${current.toStringAsFixed(1)} lb',
-        detail: 'No weight goal set',
-      );
-    }
-
-    final remaining = current - goal;
+    final trend = weightTrend(app);
     return SubsystemStatus(
       name: 'Body',
-      level: StatusLevel.good,
+      level: trend.level,
       value: '${current.toStringAsFixed(1)} lb',
-      detail: remaining > 0
-          ? '${remaining.toStringAsFixed(1)} lb to goal'
-          : 'At or beyond goal',
+      detail: trend.detail,
     );
   }
 
@@ -277,7 +348,6 @@ class BodyStatusService {
 
     final dated = app.labs.where((lab) => lab.date != null).toList()
       ..sort((a, b) => b.date!.compareTo(a.date!));
-
     if (dated.isEmpty) {
       return SubsystemStatus(
         name: 'Labs',
@@ -300,63 +370,31 @@ class BodyStatusService {
     );
   }
 
-  static SubsystemStatus _recoveryStatus(
-    SubsystemStatus sleep,
-    SubsystemStatus cardio,
-    HealthSnapshot health,
-  ) {
-    if (sleep.level == StatusLevel.noData &&
-        cardio.level == StatusLevel.noData) {
-      return const SubsystemStatus(
-        name: 'Recovery',
-        level: StatusLevel.noData,
-        value: 'No data',
-        detail: 'Needs sleep or cardio data',
-      );
-    }
-
-    final levels = [sleep.level, cardio.level];
-    final level = levels.contains(StatusLevel.watch)
-        ? StatusLevel.watch
-        : levels.contains(StatusLevel.fair)
-            ? StatusLevel.fair
-            : StatusLevel.good;
-
-    final parts = <String>[];
-    if (health.hrvMs != null) {
-      parts.add('HRV ${health.hrvMs!.round()} ms');
-    }
-    if (health.sleepMinutes > 0) {
-      parts.add(_minutes(health.sleepMinutes));
-    }
-
+  static SubsystemStatus _recoveryStatus(RecoveryReport report) {
+    final level = switch (report.band) {
+      RecoveryBand.good => StatusLevel.good,
+      RecoveryBand.fair => StatusLevel.fair,
+      RecoveryBand.watch => StatusLevel.watch,
+      RecoveryBand.noData => StatusLevel.noData,
+    };
     return SubsystemStatus(
       name: 'Recovery',
       level: level,
-      value: level == StatusLevel.good
-          ? 'Good'
-          : level == StatusLevel.fair
-              ? 'Fair'
-              : 'Watch',
-      detail: parts.isEmpty ? 'Based on available signals' : parts.join(' • '),
+      value: report.label,
+      detail: report.summary,
     );
   }
 
-  static List<DailyChange> _changes(
-    HealthyMeState app,
-    SleepGuidance guidance,
-  ) {
+  static List<DailyChange> _changes(HealthyMeState app) {
     final changes = <DailyChange>[];
     final h = app.health;
 
-    final recentSleep =
-        h.sleepMinutes7.where((minutes) => minutes > 0).toList();
+    final recentSleep = h.sleepMinutes7.where((minutes) => minutes > 0).toList();
     if (h.sleepMinutes > 0 && recentSleep.length >= 3) {
       final previous = recentSleep.length > 1
           ? recentSleep.sublist(0, recentSleep.length - 1)
           : recentSleep;
-      final avg =
-          previous.reduce((a, b) => a + b) / max(1, previous.length);
+      final avg = previous.reduce((a, b) => a + b) / max(1, previous.length);
       final delta = h.sleepMinutes - avg;
       if (delta.abs() >= 30) {
         changes.add(
@@ -364,20 +402,34 @@ class BodyStatusService {
             title: delta < 0
                 ? 'Sleep was shorter than your recent average'
                 : 'Sleep was longer than your recent average',
-            detail:
-                '${_minutes(h.sleepMinutes)} vs ${_minutes(avg.round())} recent average',
+            detail: '${_minutes(h.sleepMinutes)} vs ${_minutes(avg.round())} recent average',
             level: delta < -60 ? StatusLevel.watch : StatusLevel.fair,
           ),
         );
       }
     }
 
-    if (h.restingHeartRate != null &&
-        h.restingHeartRate30.length >= 4) {
+    final recentSteps = h.dailySteps30.where((steps) => steps > 0).toList();
+    if (DateTime.now().hour >= 17 && recentSteps.length >= 4) {
+      final previous = recentSteps.length > 1
+          ? recentSteps.sublist(0, recentSteps.length - 1)
+          : recentSteps;
+      final tail = previous.length > 7 ? previous.sublist(previous.length - 7) : previous;
+      final avg = tail.reduce((a, b) => a + b) / tail.length;
+      if (avg > 0 && h.stepsToday < avg * 0.7) {
+        changes.add(
+          DailyChange(
+            title: 'Activity is below your recent pace',
+            detail: '${_steps(h.stepsToday)} steps vs ${_steps(avg.round())} recent daily average',
+            level: StatusLevel.fair,
+          ),
+        );
+      }
+    }
+
+    if (h.restingHeartRate != null && h.restingHeartRate30.length >= 4) {
       final values = h.restingHeartRate30;
-      final base = values
-              .sublist(0, values.length - 1)
-              .reduce((a, b) => a + b) /
+      final base = values.sublist(0, values.length - 1).reduce((a, b) => a + b) /
           (values.length - 1);
       final delta = h.restingHeartRate! - base;
       if (delta.abs() >= 5) {
@@ -386,31 +438,42 @@ class BodyStatusService {
             title: delta > 0
                 ? 'Resting heart rate is above your baseline'
                 : 'Resting heart rate is below your baseline',
-            detail:
-                '${h.restingHeartRate!.round()} bpm (${delta >= 0 ? '+' : ''}${delta.round()} vs baseline)',
+            detail: '${h.restingHeartRate!.round()} bpm (${delta >= 0 ? '+' : ''}${delta.round()} vs baseline)',
             level: delta > 10 ? StatusLevel.watch : StatusLevel.fair,
           ),
         );
       }
     }
 
-    final weights = app.mergedWeightHistory;
-    if (weights.length >= 2) {
-      final first = weights.first.pounds;
-      final last = weights.last.pounds;
-      final delta = last - first;
-      if (delta.abs() >= 0.5) {
+    if (h.respiratoryRate != null && h.respiratoryRate30.length >= 4) {
+      final values = h.respiratoryRate30;
+      final base = values.sublist(0, values.length - 1).reduce((a, b) => a + b) /
+          (values.length - 1);
+      final delta = h.respiratoryRate! - base;
+      if (delta > 1.5) {
         changes.add(
           DailyChange(
-            title: delta < 0
-                ? 'Weight trend is moving down'
-                : 'Weight trend is moving up',
-            detail:
-                '${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)} lb across available history',
-            level: StatusLevel.good,
+            title: 'Breathing rate is above your baseline',
+            detail: '${h.respiratoryRate!.toStringAsFixed(1)} br/min (${delta.toStringAsFixed(1)} above baseline)',
+            level: delta > 3 ? StatusLevel.watch : StatusLevel.fair,
           ),
         );
       }
+    }
+
+    final trend = weightTrend(app);
+    if (trend.hasTrend && trend.weeklyDeltaLb != null && trend.weeklyDeltaLb!.abs() >= 0.2) {
+      changes.add(
+        DailyChange(
+          title: trend.level == StatusLevel.good
+              ? 'Weight moved toward your goal this week'
+              : trend.level == StatusLevel.watch
+                  ? 'Weight moved away from your goal this week'
+                  : 'Weight was mostly steady this week',
+          detail: trend.detail,
+          level: trend.level,
+        ),
+      );
     }
 
     if (changes.isEmpty) {
@@ -437,4 +500,7 @@ class BodyStatusService {
     final minutes = total % 60;
     return '${hours}h ${minutes.toString().padLeft(2, '0')}m';
   }
+
+  static String _signed(double value) =>
+      '${value >= 0 ? '+' : ''}${value.toStringAsFixed(1)}';
 }

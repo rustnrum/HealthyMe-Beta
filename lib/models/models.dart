@@ -225,6 +225,8 @@ class HealthSnapshot {
   final double? maximumHeartRate;
   final List<HeartPoint> heartSeries;
   final List<double> restingHeartRate30;
+  final List<double> respiratoryRate30;
+  final List<double> hrv30;
   final double? weightLb;
   final double? bodyFatPercent;
   final double? bloodOxygenPercent;
@@ -259,6 +261,8 @@ class HealthSnapshot {
     this.maximumHeartRate,
     this.heartSeries = const [],
     this.restingHeartRate30 = const [],
+    this.respiratoryRate30 = const [],
+    this.hrv30 = const [],
     this.weightLb,
     this.bodyFatPercent,
     this.bloodOxygenPercent,
@@ -295,6 +299,8 @@ class HealthSnapshot {
     double? maximumHeartRate,
     List<HeartPoint>? heartSeries,
     List<double>? restingHeartRate30,
+    List<double>? respiratoryRate30,
+    List<double>? hrv30,
     double? weightLb,
     double? bodyFatPercent,
     double? bloodOxygenPercent,
@@ -330,6 +336,8 @@ class HealthSnapshot {
       maximumHeartRate: maximumHeartRate ?? this.maximumHeartRate,
       heartSeries: heartSeries ?? this.heartSeries,
       restingHeartRate30: restingHeartRate30 ?? this.restingHeartRate30,
+      respiratoryRate30: respiratoryRate30 ?? this.respiratoryRate30,
+      hrv30: hrv30 ?? this.hrv30,
       weightLb: weightLb ?? this.weightLb,
       bodyFatPercent: bodyFatPercent ?? this.bodyFatPercent,
       bloodOxygenPercent: bloodOxygenPercent ?? this.bloodOxygenPercent,
@@ -366,6 +374,8 @@ class HealthSnapshot {
         'maximumHeartRate': maximumHeartRate,
         'heartSeries': heartSeries.map((e) => e.toJson()).toList(),
         'restingHeartRate30': restingHeartRate30,
+        'respiratoryRate30': respiratoryRate30,
+        'hrv30': hrv30,
         'weightLb': weightLb,
         'bodyFatPercent': bodyFatPercent,
         'bloodOxygenPercent': bloodOxygenPercent,
@@ -426,6 +436,8 @@ class HealthSnapshot {
               .map(HeartPoint.fromJson)
               .toList(),
       restingHeartRate30: doubles('restingHeartRate30'),
+      respiratoryRate30: doubles('respiratoryRate30'),
+      hrv30: doubles('hrv30'),
       weightLb: (json['weightLb'] as num?)?.toDouble(),
       bodyFatPercent: (json['bodyFatPercent'] as num?)?.toDouble(),
       bloodOxygenPercent:

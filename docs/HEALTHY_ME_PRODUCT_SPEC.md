@@ -70,3 +70,21 @@ The approved five-phone mockup supplied by the user is the UI target: deep navy 
 ## Healthy Me sections / future modules
 
 The primary app bar includes a section launcher so Healthy Me can grow into multiple coordinated modules without crowding the Fitness navigation. Fitness remains the current section with Home / Activity / Sleep / Body / More. Diet is reserved as a future section and will use its own bottom navigation: Diet / Menu / Planning / Grocery List. Future menu planning can feed planned calories/macros back into shared daily wellness context. Only the launcher is implemented in this build; Diet functionality remains future work.
+
+## Locked Home command-center behavior — v0.3.3
+
+The Home screen is not just a tracker dashboard. It must answer: what is my body status today, why did Healthy Me rate it that way, what changed, and what should I do today.
+
+The Body Status hero uses a calm scenic background and is tappable. The detail page explains negative contributors, positive signals and suggested actions. Healthy Me must not invent missed meals or other nutrition events before real Diet data exists.
+
+Recovery remains a primary Home subsystem, but it is a calculated wellness signal rather than a duplicate of Sleep. Current Recovery inputs are sleep duration/consistency, cardio recovery signals (resting HR, HRV and respiratory rate when available) and recent workout load estimated from workout duration, workout type/intensity and recency. Nutrition is explicitly shown as unavailable until Diet provides actual meal/fueling data. Recovery shows both a score/status and confidence based on available telemetry.
+
+The Body tile reflects progress toward the user's weight goal rather than coloring the current weight green by default. For a weight-loss goal, a weekly downward trend is positive, a weekly upward trend is negative, and insufficient/flat data is neutral/fair. The same logic reverses for a weight-gain goal.
+
+The Cardio tile may show resting heart rate plus respiratory rate in breaths/minute when Health Connect supplies it. Cardio and Recovery should prefer personal-baseline changes over arbitrary population thresholds.
+
+Home includes a separate Today's focus/action area in addition to What changed today and Data freshness.
+
+## Beta update channel
+
+Healthy Me Beta keeps the stable Android package ID `com.rustnrum.healthyme.beta03` and monotonically increasing Android version codes. The permanent beta channel will use one stable release signing key stored only in GitHub Secrets. The first permanently signed build may require one final uninstall of the current debug-signed beta; all later signed beta APKs should install as normal in-place updates and preserve app data. The signing key must never be committed to the public repository.

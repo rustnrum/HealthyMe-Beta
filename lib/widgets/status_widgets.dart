@@ -60,7 +60,10 @@ class SubsystemTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = statusColor(system.level);
+    final color = (system.level == StatusLevel.fair &&
+            (system.name == 'Recovery' || system.name == 'Body'))
+        ? AppTheme.amber
+        : statusColor(system.level);
 
     return Material(
       color: Colors.transparent,
