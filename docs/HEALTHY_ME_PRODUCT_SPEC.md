@@ -88,3 +88,18 @@ Home includes a separate Today's focus/action area in addition to What changed t
 ## Beta update channel
 
 Healthy Me Beta keeps the stable Android package ID `com.rustnrum.healthyme.beta03` and monotonically increasing Android version codes. The permanent beta channel will use one stable release signing key stored only in GitHub Secrets. The first permanently signed build may require one final uninstall of the current debug-signed beta; all later signed beta APKs should install as normal in-place updates and preserve app data. The signing key must never be committed to the public repository.
+
+## Home Command Center refinement — v0.3.4 (locked)
+- The Home page must not repeat the Body Status explanation as a full "What changed today" section immediately beneath the system tiles.
+- Order after the six system tiles: Today's Focus, Data Freshness, then a compact Signals to Watch section near the bottom.
+- Recovery is a numeric 0–100 Healthy Me readiness estimate, not only a Good/Fair/Watch label.
+- Recovery uses available personal-baseline signals from sleep, HRV, resting heart rate, respiratory-rate stability and recent training load. Missing signals are excluded rather than guessed.
+- Recovery must expose data-coverage confidence. Nutrition is not included until the Diet module has real food data.
+- Recovery is a wellness estimate, not a medical diagnosis and not a claim to reproduce any proprietary wearable score.
+
+## Diet module shell — v0.3.4 (locked)
+- The Healthy Me top-level section switcher opens Diet as a separate in-app module.
+- Diet uses the same design language but a distinctly warm amber/orange dark palette so the active module is unmistakable.
+- Diet has its own bottom navigation: Diet / Menu / Planning / Grocery List.
+- v0.3.4 provides navigation and placeholder pages only; food logging, recipes, calories/macros, planning logic and grocery generation are future work.
+- Future Planning values will feed planned daily calories/macros back into the Fitness/body context without duplicate entry.

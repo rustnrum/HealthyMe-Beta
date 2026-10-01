@@ -1,10 +1,10 @@
-# Healthy Me Beta v0.3.3
+# Healthy Me Beta v0.3.4
 
 Healthy Me is a personal body command center built around connected health telemetry, personal baselines, freshness, trends and plain-language wellness suggestions.
 
 This build focuses on making Home behave like a command center rather than another tracker.
 
-## v0.3.3 focus
+## v0.3.4 focus
 
 - Scenic, tappable Body Status hero
 - Body Status detail page explaining what affected the rating, positive signals and suggested actions
@@ -29,4 +29,4 @@ The beta keeps the stable package ID `com.rustnrum.healthyme.beta03` and increas
 - Sleep targets are derived from age/profile.
 - Suggestions are wellness guidance, not medical diagnosis or treatment.
 
-See `docs/HEALTHY_ME_PRODUCT_SPEC.md`, `docs/UI_ACCEPTANCE.md`, `docs/CHANGELOG_v0.3.3.md` and `docs/PERMANENT_BETA_UPDATES.md`.
+See `docs/HEALTHY_ME_PRODUCT_SPEC.md`, `docs/UI_ACCEPTANCE.md`, `docs/CHANGELOG_v0.3.4.md` and `docs/PERMANENT_BETA_UPDATES.md`.

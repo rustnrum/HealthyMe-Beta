@@ -7,6 +7,7 @@ import '../state/health_sync_provider.dart';
 import '../state/navigation_provider.dart';
 import 'activity_screen.dart';
 import 'body_screen.dart';
+import 'diet/diet_shell.dart';
 import 'home_screen.dart';
 import 'more_screen.dart';
 import 'profile_screen.dart';
@@ -90,15 +91,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         actions: [
           _SectionMenuButton(
             onFitness: () => ref.read(navigationProvider.notifier).go(0),
-            onDiet: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Diet is the next Healthy Me section. Its tabs will be Diet, Menu, Planning and Grocery List.',
-                  ),
-                ),
-              );
-            },
+            onDiet: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DietShell()),
+            ),
           ),
           if (index == 0)
             const Padding(
@@ -257,7 +252,7 @@ class _SectionMenuButton extends StatelessWidget {
                 ),
               ),
               Text(
-                'Soon',
+                'Open',
                 style: TextStyle(
                   color: AppTheme.amber,
                   fontSize: 12,

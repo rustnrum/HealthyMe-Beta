@@ -11,12 +11,14 @@ class RecoveryContributor {
   final int? score;
   final String detail;
   final bool available;
+  final int weight;
 
   const RecoveryContributor({
     required this.name,
     required this.score,
     required this.detail,
     this.available = true,
+    this.weight = 0,
   });
 }
 
@@ -38,82 +40,85 @@ class RecoveryReport {
   });
 }
 
+/// Healthy Me recovery readiness estimate.
+///
+/// This intentionally does not copy a proprietary wearable formula. It uses
+/// the same broad signal families used by major readiness systems: recent
+/// sleep, HRV versus personal baseline, resting HR versus personal baseline,
+/// respiratory-rate stability, and recent training load. Missing signals are
+/// excluded rather than guessed, and [confidence] reflects data coverage.
 class RecoveryService {
-  static RecoveryReport build(HealthyMeState app) {
-    final health = app.health;
-    final sleep = _sleepContributor(app);
-    final cardio = _cardioContributor(health);
-    final training = _trainingContributor(health);
+  static const int _sleepWeight = 35;
+  static const int _hrvWeight = 20;
+  static const int _rhrWeight = 15;
+  static const int _breathingWeight = 10;
+  static const int _trainingWeight = 20;
 
-    final available = <({RecoveryContributor item, double weight})>[
-      if (sleep.available) (item: sleep, weight: 0.45),
-      if (cardio.available) (item: cardio, weight: 0.35),
-      if (training.available) (item: training, weight: 0.20),
+  static RecoveryReport build(HealthyMeState app) {
+    final contributors = <RecoveryContributor>[
+      _sleepContributor(app),
+      _hrvContributor(app.health),
+      _restingHeartRateContributor(app.health),
+      _breathingContributor(app.health),
+      _trainingContributor(app.health),
+      const RecoveryContributor(
+        name: 'Nutrition',
+        score: null,
+        detail: 'Not included until Diet has real food data',
+        available: false,
+        weight: 0,
+      ),
     ];
 
-    final nutrition = const RecoveryContributor(
-      name: 'Nutrition',
-      score: null,
-      detail: 'Not included until Diet has real food data',
-      available: false,
-    );
-
-    if (available.isEmpty) {
+    final scored = contributors.where((item) => item.available && item.score != null).toList();
+    if (scored.isEmpty) {
       return RecoveryReport(
         score: null,
         confidence: 0,
         band: RecoveryBand.noData,
         label: 'No data',
-        summary: 'Recovery needs sleep, cardio or workout telemetry.',
-        contributors: [sleep, cardio, training, nutrition],
+        summary: 'Recovery needs sleep, cardio baseline or workout telemetry.',
+        contributors: contributors,
       );
     }
 
-    final weightTotal = available.fold<double>(0.0, (sum, entry) => sum + entry.weight);
-    final weighted = available.fold<double>(
-      0.0,
-      (sum, entry) => sum + (entry.item.score ?? 0) * entry.weight,
+    final totalWeight = scored.fold<int>(0, (sum, item) => sum + item.weight);
+    final weighted = scored.fold<int>(
+      0,
+      (sum, item) => sum + (item.score ?? 0) * item.weight,
     );
-    final score = (weighted / weightTotal).round().clamp(0, 100).toInt();
+    final score = (weighted / max(1, totalWeight)).round().clamp(0, 100).toInt();
 
-    var confidence = 0;
-    if (sleep.available) confidence += health.sleepMinutes7.where((v) => v > 0).length >= 4 ? 38 : 30;
-    if (cardio.available) {
-      confidence += health.restingHeartRate30.length >= 4 ? 27 : 19;
-      if (health.hrv30.length >= 4 || health.respiratoryRate30.length >= 4) {
-        confidence += 8;
-      }
-    }
-    if (training.available) confidence += 27;
-    confidence = confidence.clamp(0, 100).toInt();
+    // Confidence is deliberately tied to usable signal coverage rather than
+    // pretending a partial dataset is as reliable as a full one.
+    final confidence = totalWeight.clamp(0, 100).toInt();
 
     final band = score >= 80
         ? RecoveryBand.good
         : score >= 60
             ? RecoveryBand.fair
             : RecoveryBand.watch;
-    final label = band == RecoveryBand.good
-        ? 'Good'
-        : band == RecoveryBand.fair
-            ? 'Fair'
-            : 'Watch';
+    final label = score >= 80
+        ? 'High'
+        : score >= 60
+            ? 'Moderate'
+            : score >= 40
+                ? 'Low'
+                : 'Very low';
 
-    final reasons = <String>[];
-    if ((sleep.score ?? 100) < 75) reasons.add('shorter sleep');
-    if ((cardio.score ?? 100) < 75) reasons.add('cardio strain');
-    if ((training.score ?? 100) < 70) reasons.add('recent training load');
-
-    final summary = reasons.isEmpty
-        ? 'Available recovery signals are steady.'
-        : reasons.take(2).join(' + ');
+    final ranked = [...scored]..sort((a, b) => (a.score ?? 100).compareTo(b.score ?? 100));
+    final lowest = ranked.where((item) => (item.score ?? 100) < 80).take(2).toList();
+    final summary = lowest.isEmpty
+        ? 'Recovery signals are close to your recent baseline.'
+        : '${lowest.map((item) => item.name.toLowerCase()).join(' + ')} are pulling recovery down.';
 
     return RecoveryReport(
       score: score,
       confidence: confidence,
       band: band,
       label: label,
-      summary: _sentence(summary),
-      contributors: [sleep, cardio, training, nutrition],
+      summary: summary,
+      contributors: contributors,
     );
   }
 
@@ -126,103 +131,163 @@ class RecoveryService {
         score: null,
         detail: 'No usable sleep data',
         available: false,
+        weight: _sleepWeight,
       );
     }
 
-    final target = guidance.minimumMinutes;
-    var score = 100.0;
+    final target = guidance.minimumMinutes.toDouble();
+    final upper = guidance.upperMinutes?.toDouble();
+
+    double durationScore;
     if (h.sleepMinutes < target) {
-      final shortage = target - h.sleepMinutes;
-      score -= min<double>(55.0, shortage / target * 100 * 1.5);
-    } else if (guidance.upperMinutes != null && h.sleepMinutes > guidance.upperMinutes!) {
-      final over = h.sleepMinutes - guidance.upperMinutes!;
-      score -= min<double>(15.0, over / 60 * 4);
+      durationScore = (h.sleepMinutes / target * 100).clamp(35, 100).toDouble();
+    } else if (upper != null && h.sleepMinutes > upper + 90) {
+      durationScore = 88;
+    } else {
+      durationScore = 100;
     }
 
     final recent = h.sleepMinutes7.where((v) => v > 0).toList();
+    double balanceScore = durationScore;
     if (recent.length >= 4) {
-      final comparison = recent.length > 1 ? recent.sublist(0, recent.length - 1) : recent;
-      final avg = comparison.reduce((a, b) => a + b) / comparison.length;
-      final delta = (h.sleepMinutes - avg).abs();
-      if (delta > 45) score -= min<double>(12.0, (delta - 45) / 15 * 2);
+      final history = recent.length > 1 ? recent.sublist(0, recent.length - 1) : recent;
+      final avg = history.reduce((a, b) => a + b) / history.length;
+      balanceScore = (avg / target * 100).clamp(45, 100).toDouble();
     }
 
-    score = score.clamp(0, 100).toDouble();
+    // Last night matters most, but a single long night should not completely
+    // erase several short nights.
+    final score = (durationScore * 0.70 + balanceScore * 0.30).round().clamp(0, 100).toInt();
+
     String detail;
-    if (recent.length >= 3) {
-      final previous = recent.length > 1 ? recent.sublist(0, recent.length - 1) : recent;
-      final avg = previous.reduce((a, b) => a + b) / previous.length;
-      final diff = h.sleepMinutes - avg;
-      if (diff <= -30) {
-        detail = '${_minutes(h.sleepMinutes)} • ${(-diff).round()} min below recent average';
-      } else if (diff >= 30) {
-        detail = '${_minutes(h.sleepMinutes)} • ${diff.round()} min above recent average';
-      } else {
-        detail = '${_minutes(h.sleepMinutes)} • near recent average';
-      }
+    if (recent.length >= 4) {
+      final history = recent.length > 1 ? recent.sublist(0, recent.length - 1) : recent;
+      final avg = history.reduce((a, b) => a + b) / history.length;
+      final delta = h.sleepMinutes - avg;
+      final comparison = delta.abs() < 20
+          ? 'near recent average'
+          : '${delta.abs().round()} min ${delta < 0 ? 'below' : 'above'} recent average';
+      detail = '${_minutes(h.sleepMinutes)} • $comparison';
     } else {
       detail = '${_minutes(h.sleepMinutes)} • target ${guidance.label}';
     }
 
     return RecoveryContributor(
       name: 'Sleep',
-      score: score.round(),
+      score: score,
       detail: detail,
+      weight: _sleepWeight,
     );
   }
 
-  static RecoveryContributor _cardioContributor(HealthSnapshot h) {
-    final hasAny = h.restingHeartRate != null || h.hrvMs != null || h.respiratoryRate != null;
-    if (!hasAny) {
+  static RecoveryContributor _hrvContributor(HealthSnapshot h) {
+    final current = h.hrvMs;
+    if (current == null || h.hrv30.length < 4) {
       return const RecoveryContributor(
-        name: 'Cardio',
+        name: 'HRV',
         score: null,
-        detail: 'No recovery-oriented cardio data',
+        detail: 'Building your personal HRV baseline',
         available: false,
+        weight: _hrvWeight,
       );
     }
 
-    var score = 88.0;
-    final notes = <String>[];
-
-    final rhr = h.restingHeartRate;
-    if (rhr != null && h.restingHeartRate30.length >= 4) {
-      final baselineValues = h.restingHeartRate30.sublist(0, h.restingHeartRate30.length - 1);
-      final baseline = _avg(baselineValues);
-      final delta = rhr - baseline;
-      if (delta > 3) score -= min<double>(28.0, delta * 3.5);
-      notes.add('HR ${rhr.round()} bpm ${delta.abs() < 1 ? 'near baseline' : '${delta >= 0 ? '+' : ''}${delta.round()} vs baseline'}');
-    } else if (rhr != null) {
-      notes.add('HR ${rhr.round()} bpm');
+    final history = _baselineWithoutCurrent(h.hrv30);
+    final baseline = _avg(history);
+    if (baseline <= 0) {
+      return const RecoveryContributor(
+        name: 'HRV',
+        score: null,
+        detail: 'Building your personal HRV baseline',
+        available: false,
+        weight: _hrvWeight,
+      );
     }
 
-    final resp = h.respiratoryRate;
-    if (resp != null && h.respiratoryRate30.length >= 4) {
-      final baselineValues = h.respiratoryRate30.sublist(0, h.respiratoryRate30.length - 1);
-      final baseline = _avg(baselineValues);
-      final delta = resp - baseline;
-      if (delta > 1.5) score -= min<double>(18.0, delta * 7);
-      notes.add('${resp.toStringAsFixed(0)} br/min');
-    } else if (resp != null) {
-      notes.add('${resp.toStringAsFixed(0)} br/min');
-    }
-
-    final hrv = h.hrvMs;
-    if (hrv != null && h.hrv30.length >= 4) {
-      final baselineValues = h.hrv30.sublist(0, h.hrv30.length - 1);
-      final baseline = _avg(baselineValues);
-      if (baseline > 0) {
-        final ratio = hrv / baseline;
-        if (ratio < 0.8) score -= min<double>(22.0, (0.8 - ratio) * 70);
-      }
-      notes.add('HRV ${hrv.round()} ms');
-    }
-
-    score = score.clamp(0, 100).toDouble();
+    final ratio = current / baseline;
+    final score = ratio >= 1.0
+        ? 95
+        : ratio >= 0.90
+            ? 88
+            : ratio >= 0.80
+                ? 75
+                : ratio >= 0.70
+                    ? 60
+                    : 42;
+    final pct = ((ratio - 1) * 100).round();
     return RecoveryContributor(
-      name: 'Cardio',
-      score: score.round(),
-      detail: notes.isEmpty ? 'Building your cardio baseline' : notes.take(2).join(' • '),
+      name: 'HRV',
+      score: score,
+      detail: '${current.round()} ms • ${pct >= 0 ? '+' : ''}$pct% vs baseline',
+      weight: _hrvWeight,
+    );
+  }
+
+  static RecoveryContributor _restingHeartRateContributor(HealthSnapshot h) {
+    final current = h.restingHeartRate;
+    if (current == null || h.restingHeartRate30.length < 4) {
+      return const RecoveryContributor(
+        name: 'Resting HR',
+        score: null,
+        detail: 'Building your resting-HR baseline',
+        available: false,
+        weight: _rhrWeight,
+      );
+    }
+
+    final baseline = _avg(_baselineWithoutCurrent(h.restingHeartRate30));
+    final delta = current - baseline;
+    final score = delta <= 0
+        ? 95
+        : delta <= 2
+            ? 90
+            : delta <= 4
+                ? 78
+                : delta <= 6
+                    ? 64
+                    : delta <= 9
+                        ? 48
+                        : 30;
+
+    return RecoveryContributor(
+      name: 'Resting HR',
+      score: score,
+      detail: '${current.round()} bpm • ${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)} vs baseline',
+      weight: _rhrWeight,
+    );
+  }
+
+  static RecoveryContributor _breathingContributor(HealthSnapshot h) {
+    final current = h.respiratoryRate;
+    if (current == null || h.respiratoryRate30.length < 4) {
+      return const RecoveryContributor(
+        name: 'Breathing',
+        score: null,
+        detail: 'Building your respiratory baseline',
+        available: false,
+        weight: _breathingWeight,
+      );
+    }
+
+    final baseline = _avg(_baselineWithoutCurrent(h.respiratoryRate30));
+    final delta = (current - baseline).abs();
+    final score = delta <= 0.5
+        ? 95
+        : delta <= 1.0
+            ? 86
+            : delta <= 1.5
+                ? 74
+                : delta <= 2.0
+                    ? 60
+                    : delta <= 3.0
+                        ? 45
+                        : 30;
+
+    return RecoveryContributor(
+      name: 'Breathing',
+      score: score,
+      detail: '${current.toStringAsFixed(1)} br/min • ${delta.toStringAsFixed(1)} from baseline',
+      weight: _breathingWeight,
     );
   }
 
@@ -233,49 +298,76 @@ class RecoveryService {
         score: null,
         detail: 'Connect workout data',
         available: false,
+        weight: _trainingWeight,
       );
     }
 
     final now = DateTime.now();
-    var load = 0.0;
+    var recentLoad = 0.0;
+    var baselineLoad = 0.0;
     var recentMinutes = 0;
-    var hardest = 0.0;
+
     for (final workout in h.workouts) {
       final age = now.difference(workout.end);
-      if (age.isNegative || age > const Duration(hours: 48)) continue;
-      final intensity = _intensity(workout.type);
-      final recency = age <= const Duration(hours: 24) ? 1.0 : 0.55;
+      if (age.isNegative) continue;
       final minutes = max(0, workout.minutes);
-      load += minutes * intensity * recency;
-      recentMinutes += minutes;
-      hardest = max(hardest, intensity);
+      if (minutes == 0) continue;
+      final rawLoad = minutes * _intensity(workout.type);
+
+      if (age <= const Duration(hours: 72)) {
+        final decay = exp(-age.inHours / 54.0);
+        recentLoad += rawLoad * decay;
+        recentMinutes += minutes;
+      } else if (age <= const Duration(days: 21)) {
+        baselineLoad += rawLoad;
+      }
     }
 
-    final score = load <= 25
-        ? 95
-        : load <= 60
-            ? 84
-            : load <= 100
-                ? 70
-                : load <= 150
-                    ? 55
-                    : 40;
-    final intensityLabel = hardest >= 1.45
-        ? 'high'
-        : hardest >= 1.15
-            ? 'moderate'
-            : recentMinutes > 0
-                ? 'light'
-                : 'none';
-    final detail = recentMinutes == 0
-        ? 'No workout load in the last 48 hr'
-        : '$recentMinutes min • $intensityLabel recent load';
+    // Convert the older 18-day window to a 3-day expected load so we compare
+    // like with like. This is a transparent duration/intensity estimate, not a
+    // claim to reproduce Garmin EPOC or a proprietary wearable algorithm.
+    final expectedThreeDayLoad = baselineLoad > 0 ? baselineLoad / 18 * 3 : 0.0;
+    int score;
+    String comparison;
+    if (recentLoad == 0) {
+      score = 96;
+      comparison = 'No recent workout strain';
+    } else if (expectedThreeDayLoad > 8) {
+      final ratio = recentLoad / expectedThreeDayLoad;
+      score = ratio <= 0.7
+          ? 92
+          : ratio <= 1.0
+              ? 84
+              : ratio <= 1.3
+                  ? 72
+                  : ratio <= 1.6
+                      ? 58
+                      : 40;
+      comparison = '${ratio.toStringAsFixed(1)}× recent-vs-usual load';
+    } else {
+      score = recentLoad <= 35
+          ? 90
+          : recentLoad <= 75
+              ? 80
+              : recentLoad <= 120
+                  ? 68
+                  : recentLoad <= 180
+                      ? 54
+                      : 40;
+      comparison = 'Building your training-load baseline';
+    }
 
     return RecoveryContributor(
       name: 'Training load',
       score: score,
-      detail: detail,
+      detail: '$recentMinutes min in last 72 hr • $comparison',
+      weight: _trainingWeight,
     );
+  }
+
+  static List<double> _baselineWithoutCurrent(List<double> values) {
+    if (values.length <= 1) return values;
+    return values.sublist(0, values.length - 1);
   }
 
   static double _intensity(String type) {
@@ -311,11 +403,5 @@ class RecoveryService {
     final hours = total ~/ 60;
     final minutes = total % 60;
     return '${hours}h ${minutes.toString().padLeft(2, '0')}m';
-  }
-
-  static String _sentence(String value) {
-    if (value.isEmpty) return value;
-    final normalized = value.endsWith('.') ? value.substring(0, value.length - 1) : value;
-    return '${normalized[0].toUpperCase()}${normalized.substring(1)}.';
   }
 }

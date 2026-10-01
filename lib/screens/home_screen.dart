@@ -86,26 +86,6 @@ class HomeScreen extends ConsumerWidget {
         ),
         const SizedBox(height: 24),
         HmSectionHeader(
-          title: 'What changed today',
-          action: 'See all',
-          onAction: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const BodyStatusDetailScreen()),
-          ),
-        ),
-        const SizedBox(height: 10),
-        CommandCard(
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
-          child: Column(
-            children: [
-              for (var i = 0; i < report.changes.length; i++) ...[
-                _ChangeRow(change: report.changes[i]),
-                if (i != report.changes.length - 1) const Divider(height: 1),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        HmSectionHeader(
           title: "Today's focus",
           action: 'See all',
           onAction: () => Navigator.of(context).push(
@@ -158,6 +138,36 @@ class HomeScreen extends ConsumerWidget {
             ),
           ],
         ),
+        const SizedBox(height: 24),
+        HmSectionHeader(
+          title: 'Signals to watch',
+          action: 'Status details',
+          onAction: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const BodyStatusDetailScreen()),
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (report.changes.isEmpty)
+          const CommandCard(
+            child: HmEmptyState(
+              icon: Icons.check_circle_outline_rounded,
+              title: 'No meaningful deviations detected',
+              detail: 'Healthy Me will surface changes from your personal baseline here.',
+            ),
+          )
+        else
+          CommandCard(
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
+            child: Column(
+              children: [
+                for (var i = 0; i < report.changes.take(3).length; i++) ...[
+                  _ChangeRow(change: report.changes[i]),
+                  if (i != report.changes.take(3).length - 1)
+                    const Divider(height: 1),
+                ],
+              ],
+            ),
+          ),
         if (app.health.error != null) ...[
           const SizedBox(height: 14),
           CommandCard(

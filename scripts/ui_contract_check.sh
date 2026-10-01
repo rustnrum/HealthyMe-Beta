@@ -19,6 +19,7 @@ RECOVERY_FILE="lib/services/recovery_service.dart"
 BODY_STATUS_FILE="lib/services/body_status_service.dart"
 BODY_DETAIL_FILE="lib/screens/body_status_detail_screen.dart"
 RECOVERY_DETAIL_FILE="lib/screens/recovery_detail_screen.dart"
+DIET_SHELL_FILE="lib/screens/diet/diet_shell.dart"
 
 for required in "'Home'" "'Activity'" "'Sleep'" "'Body'" "'More'"; do
   grep -q "$required" "$SHELL_FILE" || fail "missing bottom-nav destination $required"
@@ -30,7 +31,7 @@ for forbidden in "Beta 0.2" "label: 'Today'" "label: 'Progress'" "label: 'Connec
   fi
 done
 
-for required in "Body Status" "What changed today" "Today's focus" "Data freshness" "hero_mountains.jpg"; do
+for required in "Body Status" "Today's focus" "Data freshness" "Signals to watch" "hero_mountains.jpg"; do
   grep -q "$required" "$HOME_FILE" || fail "home screen missing approved section: $required"
 done
 
@@ -62,12 +63,20 @@ grep -q "resolvedMotionSource" "$HEALTH_FILE" || fail "motion metrics must avoid
 grep -q "respiratoryRate30" "$HEALTH_FILE" || fail "respiratory history must be retained for personal baseline logic"
 grep -q "hrv30" "$HEALTH_FILE" || fail "HRV history must be retained for recovery baseline logic"
 grep -q "class RecoveryService" "$RECOVERY_FILE" || fail "recovery must be a calculated service"
+grep -q "_hrvContributor" "$RECOVERY_FILE" || fail "recovery must use HRV when a baseline is available"
+grep -q "_restingHeartRateContributor" "$RECOVERY_FILE" || fail "recovery must use resting HR against personal baseline"
+grep -q "_breathingContributor" "$RECOVERY_FILE" || fail "recovery must use respiratory stability when available"
 grep -q "Training load" "$RECOVERY_FILE" || fail "recovery must include recent training load"
+grep -q "report.score" "$BODY_STATUS_FILE" || fail "home Recovery tile must show a numeric recovery score"
 grep -q "Not included until Diet has real food data" "$RECOVERY_FILE" || fail "recovery must not guess nutrition"
 grep -q "weightTrend" "$BODY_STATUS_FILE" || fail "body status must use weekly goal-directed weight trend"
 grep -q "respiratoryRate" "$BODY_STATUS_FILE" || fail "cardio tile must support respiratory rate"
 grep -q "What.s affecting your status" "$BODY_DETAIL_FILE" || fail "Body Status detail must explain the rating"
 grep -q "Recovery contributors" "$RECOVERY_DETAIL_FILE" || fail "Recovery detail must show contributors"
+for required in "Diet" "Menu" "Planning" "Grocery List"; do
+  grep -q "$required" "$DIET_SHELL_FILE" || fail "Diet module shell missing bottom-nav destination: $required"
+done
+grep -q "DietShell" "$SHELL_FILE" || fail "Fitness section must open the Diet module shell"
 test -f lib/assets/images/hero_mountains.jpg || fail "scenic Body Status hero asset missing"
 
 grep -q "isExpanded: true" "$SOURCES_FILE" || fail "source dropdowns must be overflow-safe"
@@ -88,6 +97,11 @@ files = [
     'lib/screens/body_status_detail_screen.dart',
     'lib/screens/recovery_detail_screen.dart',
     'lib/widgets/sleep_window_dial.dart',
+    'lib/screens/diet/diet_shell.dart',
+    'lib/screens/diet/diet_home_screen.dart',
+    'lib/screens/diet/diet_menu_screen.dart',
+    'lib/screens/diet/diet_planning_screen.dart',
+    'lib/screens/diet/grocery_list_screen.dart',
 ]
 violations=[]
 for name in files:

@@ -73,4 +73,26 @@ void main() {
     final hardTraining = hard.contributors.firstWhere((item) => item.name == 'Training load');
     expect(hardTraining.score!, lessThan(lightTraining.score!));
   });
+
+  test('recovery produces a numeric 0 to 100 readiness score when usable signals exist', () {
+    final report = RecoveryService.build(
+      HealthyMeState(
+        profile: UserProfile(birthday: DateTime(1972, 1, 1)),
+        health: const HealthSnapshot(
+          authorized: true,
+          sleepMinutes: 450,
+          sleepMinutes7: [440, 445, 455, 450],
+          restingHeartRate: 64,
+          restingHeartRate30: [65, 64, 65, 64],
+          respiratoryRate: 14,
+          respiratoryRate30: [14, 14.2, 14.1, 14],
+          hrvMs: 42,
+          hrv30: [40, 41, 42, 42],
+        ),
+      ),
+    );
+    expect(report.score, isNotNull);
+    expect(report.score!, inInclusiveRange(0, 100));
+    expect(report.confidence, greaterThanOrEqualTo(80));
+  });
 }

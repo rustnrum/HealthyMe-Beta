@@ -380,8 +380,10 @@ class BodyStatusService {
     return SubsystemStatus(
       name: 'Recovery',
       level: level,
-      value: report.label,
-      detail: report.summary,
+      value: report.score == null ? '—' : report.score.toString(),
+      detail: report.score == null
+          ? 'Need more recovery data'
+          : '${report.label} • ${report.confidence}% confidence',
     );
   }
 
