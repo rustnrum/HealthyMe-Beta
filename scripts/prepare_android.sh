@@ -129,10 +129,10 @@ from pathlib import Path
 p = Path('android/app/src/main/AndroidManifest.xml')
 s = p.read_text()
 import re
-s = re.sub(r'android:label="[^"]+"', 'android:label="Healthy Me Beta 0.3.4"', s, count=1)
+s = re.sub(r'android:label="[^"]+"', 'android:label="Healthy Me Beta 0.3.5"', s, count=1)
 p.write_text(s)
 PYLABEL
 
-echo "Healthy Me Beta 0.3.4 Android identity + Health Connect configuration applied."
+echo "Healthy Me Beta 0.3.5 Android identity + Health Connect configuration applied."
 
 bash scripts/ui_contract_check.sh

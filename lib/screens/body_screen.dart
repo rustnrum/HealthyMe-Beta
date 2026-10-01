@@ -224,8 +224,11 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
   }
 
   Widget _compositionTab(BuildContext context, HealthyMeState app) {
+    final bmi = _bmi(app);
     return Column(
       children: [
+        _bmiCard(app),
+        const SizedBox(height: 12),
         _bodyFatCard(app),
         const SizedBox(height: 12),
         CommandCard(
@@ -248,18 +251,95 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
                     : '${app.currentWeightLb!.toStringAsFixed(1)} lb',
               ),
               _dataLine(
-                'Weight source',
-                app.health.weightLb != null ? 'Connected source' : 'Manual',
+                'Weight type',
+                app.health.weightLb != null ? 'Measured' : 'Manual',
               ),
               _dataLine(
-                'Body-fat freshness',
-                relativeAge(app.health.freshness['Body fat']),
+                'BMI',
+                bmi == null ? '—' : bmi.toStringAsFixed(1),
               ),
+              _dataLine('BMI type', 'Calculated'),
+              _dataLine(
+                'Body fat type',
+                app.health.bodyFatPercent == null ? 'No measured reading' : 'Measured',
+              ),
+              if (app.health.bodyFatPercent != null)
+                _dataLine(
+                  'Body-fat freshness',
+                  relativeAge(app.health.freshness['Body fat']),
+                ),
             ],
           ),
         ),
       ],
     );
+  }
+
+  Widget _bmiCard(HealthyMeState app) {
+    final bmi = _bmi(app);
+    return CommandCard(
+      child: Row(
+        children: [
+          const HmIconBadge(
+            icon: Icons.calculate_rounded,
+            color: AppTheme.mint,
+            size: 44,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'BMI',
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    HmStatusPill(text: 'Calculated', color: AppTheme.mint),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  bmi == null ? '—' : bmi.toStringAsFixed(1),
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  bmi == null
+                      ? 'Add height and a current weight to calculate BMI.'
+                      : 'Calculated locally from your current weight and profile height.',
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double? _bmi(HealthyMeState app) {
+    final height = app.profile.heightIn;
+    final weight = app.currentWeightLb;
+    if (height == null || height <= 0 || weight == null || weight <= 0) {
+      return null;
+    }
+    return (weight * 703) / (height * height);
   }
 
   Widget _bodyFatCard(HealthyMeState app) {
@@ -277,18 +357,28 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Body Fat',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                  ),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Body Fat',
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    HmStatusPill(
+                      text: bodyFat == null ? 'No reading' : 'Measured',
+                      color: bodyFat == null ? AppTheme.textMuted : AppTheme.cyan,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 3),
                 Text(
                   bodyFat == null
-                      ? 'No connected reading'
+                      ? '—'
                       : '${bodyFat.toStringAsFixed(1)}%',
                   style: const TextStyle(
                     color: AppTheme.textPrimary,
@@ -299,8 +389,8 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
                 const SizedBox(height: 3),
                 Text(
                   bodyFat == null
-                      ? 'Body fat is never manually entered.'
-                      : 'From the selected connected scale/source.',
+                      ? 'Healthy Me does not ask you to manually enter body fat.'
+                      : 'Measured body-fat data read through Health Connect.',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
@@ -310,7 +400,6 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted, size: 22),
         ],
       ),
     );
@@ -583,10 +672,37 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
     BuildContext context,
     BodyMeasurements current,
   ) async {
+    final result = await showDialog<BodyMeasurements>(
+      context: context,
+      builder: (_) => _MeasurementsDialog(current: current),
+    );
+    if (result != null) {
+      ref.read(appStateProvider.notifier).saveMeasurements(result);
+    }
+  }
+
+}
+
+
+class _MeasurementsDialog extends StatefulWidget {
+  final BodyMeasurements current;
+
+  const _MeasurementsDialog({required this.current});
+
+  @override
+  State<_MeasurementsDialog> createState() => _MeasurementsDialogState();
+}
+
+class _MeasurementsDialogState extends State<_MeasurementsDialog> {
+  late final Map<String, TextEditingController> _controllers;
+
+  @override
+  void initState() {
+    super.initState();
     TextEditingController c(double? value) =>
         TextEditingController(text: value?.toStringAsFixed(1) ?? '');
-
-    final controllers = <String, TextEditingController>{
+    final current = widget.current;
+    _controllers = {
       'Neck': c(current.neck),
       'Chest': c(current.chest),
       'Waist': c(current.waist),
@@ -598,57 +714,72 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
       'Left calf': c(current.leftCalf),
       'Right calf': c(current.rightCalf),
     };
+  }
 
-    final save = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Body measurements'),
-        content: SizedBox(
-          width: 430,
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                for (final entry in controllers.entries) ...[
-                  TextField(
-                    controller: entry.value,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(labelText: '${entry.key} (in)'),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save')),
-        ],
-      ),
-    );
-
-    if (save == true) {
-      double? v(String key) => double.tryParse(controllers[key]!.text.trim());
-      ref.read(appStateProvider.notifier).saveMeasurements(
-            BodyMeasurements(
-              neck: v('Neck'),
-              chest: v('Chest'),
-              waist: v('Waist'),
-              hips: v('Hips'),
-              leftArm: v('Left arm'),
-              rightArm: v('Right arm'),
-              leftThigh: v('Left thigh'),
-              rightThigh: v('Right thigh'),
-              leftCalf: v('Left calf'),
-              rightCalf: v('Right calf'),
-            ),
-          );
-    }
-    for (final controller in controllers.values) {
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
       controller.dispose();
     }
+    super.dispose();
+  }
+
+  double? _value(String key) =>
+      double.tryParse(_controllers[key]!.text.trim());
+
+  void _save() {
+    Navigator.pop(
+      context,
+      BodyMeasurements(
+        neck: _value('Neck'),
+        chest: _value('Chest'),
+        waist: _value('Waist'),
+        hips: _value('Hips'),
+        leftArm: _value('Left arm'),
+        rightArm: _value('Right arm'),
+        leftThigh: _value('Left thigh'),
+        rightThigh: _value('Right thigh'),
+        leftCalf: _value('Left calf'),
+        rightCalf: _value('Right calf'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Body measurements'),
+      content: SizedBox(
+        width: 430,
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              for (final entry in _controllers.entries) ...[
+                TextField(
+                  controller: entry.value,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(labelText: '${entry.key} (in)'),
+                ),
+                const SizedBox(height: 10),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _save,
+          child: const Text('Save'),
+        ),
+      ],
+    );
   }
 }
+
 
 class _RangeSelector extends StatelessWidget {
   final String selected;

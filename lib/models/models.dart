@@ -235,6 +235,7 @@ class HealthSnapshot {
   final List<WeightPoint> weightHistory;
   final List<WorkoutEntry> workouts;
   final List<String> detectedSources;
+  final Map<String, List<String>> availableSources;
   final Map<String, DateTime> freshness;
 
   const HealthSnapshot({
@@ -271,6 +272,7 @@ class HealthSnapshot {
     this.weightHistory = const [],
     this.workouts = const [],
     this.detectedSources = const [],
+    this.availableSources = const {},
     this.freshness = const {},
   });
 
@@ -309,6 +311,7 @@ class HealthSnapshot {
     List<WeightPoint>? weightHistory,
     List<WorkoutEntry>? workouts,
     List<String>? detectedSources,
+    Map<String, List<String>>? availableSources,
     Map<String, DateTime>? freshness,
   }) {
     return HealthSnapshot(
@@ -346,6 +349,7 @@ class HealthSnapshot {
       weightHistory: weightHistory ?? this.weightHistory,
       workouts: workouts ?? this.workouts,
       detectedSources: detectedSources ?? this.detectedSources,
+      availableSources: availableSources ?? this.availableSources,
       freshness: freshness ?? this.freshness,
     );
   }
@@ -384,6 +388,7 @@ class HealthSnapshot {
         'weightHistory': weightHistory.map((e) => e.toJson()).toList(),
         'workouts': workouts.map((e) => e.toJson()).toList(),
         'detectedSources': detectedSources,
+        'availableSources': availableSources,
         'freshness': freshness.map(
           (key, value) => MapEntry(key, value.toIso8601String()),
         ),
@@ -402,6 +407,8 @@ class HealthSnapshot {
 
     final rawFresh =
         json['freshness'] as Map<String, dynamic>? ?? const {};
+    final rawSources =
+        json['availableSources'] as Map<String, dynamic>? ?? const {};
 
     return HealthSnapshot(
       authorized: json['authorized'] == true,
@@ -458,6 +465,14 @@ class HealthSnapshot {
           (json['detectedSources'] as List<dynamic>? ?? const [])
               .map((e) => e.toString())
               .toList(),
+      availableSources: rawSources.map(
+        (key, value) => MapEntry(
+          key,
+          (value as List<dynamic>? ?? const [])
+              .map((item) => item.toString())
+              .toList(),
+        ),
+      ),
       freshness: rawFresh.map(
         (key, value) => MapEntry(
           key,

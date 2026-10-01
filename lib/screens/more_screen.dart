@@ -8,8 +8,6 @@ import '../state/app_state.dart';
 import '../widgets/command_card.dart';
 import '../widgets/design_widgets.dart';
 import 'goals_screen.dart';
-import 'heart_screen.dart';
-import 'labs_screen.dart';
 import 'photos_screen.dart';
 import 'plan_screen.dart';
 import 'profile_screen.dart';
@@ -22,44 +20,60 @@ class MoreScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appStateProvider);
     final plan = PlanService.build(app);
-    final sources = app.health.detectedSources;
-
-    final detectedProviders =
-        SourceNameService.detectedFriendlyProviders(sources);
-    final providers = <_ProviderDisplay>[
-      _ProviderDisplay(
-        name: 'Health Connect',
-        icon: Icons.health_and_safety_rounded,
-        color: AppTheme.cyan,
-        connected: app.health.authorized,
-        subtitle: app.health.authorized
-            ? _lastSync(app)
-            : 'Android health-data hub',
-      ),
-      for (final provider in detectedProviders)
-        _providerFromDetectedName(provider),
-    ];
+    final sourceCount = SourceNameService.uniqueRawByFriendly(
+      app.health.availableSources.values.expand((sources) => sources),
+    ).length;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 30),
       children: [
         HmSectionHeader(
-          title: 'Connected Sources',
-          action: 'See all',
+          title: 'Data Sources',
+          action: 'Manage',
           onAction: () => _push(context, const SourcesScreen()),
         ),
         const SizedBox(height: 10),
         CommandCard(
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 3),
-          child: Column(
+          onTap: () => _push(context, const SourcesScreen()),
+          child: Row(
             children: [
-              for (var i = 0; i < providers.length; i++) ...[
-                _SourceRow(
-                  provider: providers[i],
-                  onTap: () => _push(context, const SourcesScreen()),
+              const HmIconBadge(
+                icon: Icons.health_and_safety_rounded,
+                color: AppTheme.cyan,
+                size: 44,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Health Connect',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      app.health.authorized
+                          ? '${_lastRefresh(app)} • $sourceCount source${sourceCount == 1 ? '' : 's'} available'
+                          : 'Connect once, then choose one simple source per metric.',
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12.5,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
                 ),
-                if (i != providers.length - 1) const Divider(height: 1),
-              ],
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppTheme.textMuted,
+                size: 22,
+              ),
             ],
           ),
         ),
@@ -86,19 +100,11 @@ class MoreScreen extends ConsumerWidget {
           child: Column(
             children: [
               _ToolRow(
-                icon: Icons.favorite_rounded,
-                color: AppTheme.rose,
-                title: 'Heart Health',
-                subtitle: 'Resting HR, HRV, oxygen and respiratory data',
-                onTap: () => _push(context, const HeartScreen()),
-              ),
-              const Divider(height: 1),
-              _ToolRow(
-                icon: Icons.science_rounded,
-                color: AppTheme.amber,
-                title: 'Bloodwork',
-                subtitle: 'Raw results, history and freshness',
-                onTap: () => _push(context, const LabsScreen()),
+                icon: Icons.health_and_safety_rounded,
+                color: AppTheme.purple,
+                title: 'Health',
+                subtitle: 'Vitals and bloodwork in one section',
+                onTap: () => Navigator.of(context).pushNamed('/health'),
               ),
               const Divider(height: 1),
               _ToolRow(
@@ -131,62 +137,9 @@ class MoreScreen extends ConsumerWidget {
     );
   }
 
-  _ProviderDisplay _providerFromDetectedName(String name) {
-    switch (name) {
-      case 'Samsung Health':
-        return const _ProviderDisplay(
-          name: 'Samsung Health',
-          icon: Icons.directions_run_rounded,
-          color: AppTheme.mint,
-          connected: true,
-          subtitle: 'Connected through Health Connect',
-        );
-      case 'Garmin Connect':
-        return const _ProviderDisplay(
-          name: 'Garmin Connect',
-          icon: Icons.navigation_rounded,
-          color: AppTheme.textPrimary,
-          connected: true,
-          subtitle: 'Connected through Health Connect',
-        );
-      case 'Fitbit':
-        return const _ProviderDisplay(
-          name: 'Fitbit',
-          icon: Icons.watch_rounded,
-          color: AppTheme.cyan,
-          connected: true,
-          subtitle: 'Connected through Health Connect',
-        );
-      case 'Withings Scale':
-        return const _ProviderDisplay(
-          name: 'Withings Scale',
-          icon: Icons.monitor_weight_outlined,
-          color: AppTheme.blue,
-          connected: true,
-          subtitle: 'Connected through Health Connect',
-        );
-      case 'Google Fit':
-        return const _ProviderDisplay(
-          name: 'Google Fit',
-          icon: Icons.fitness_center_rounded,
-          color: AppTheme.mint,
-          connected: true,
-          subtitle: 'Connected through Health Connect',
-        );
-      default:
-        return _ProviderDisplay(
-          name: name,
-          icon: Icons.sensors_rounded,
-          color: AppTheme.purple,
-          connected: true,
-          subtitle: 'Connected through Health Connect',
-        );
-    }
-  }
-
-  String _lastSync(HealthyMeState app) {
+  String _lastRefresh(HealthyMeState app) {
     final sync = app.health.lastSync;
-    if (sync == null) return 'Connected • not synced yet';
+    if (sync == null) return 'Not refreshed yet';
     final now = DateTime.now();
     final sameDay = sync.year == now.year &&
         sync.month == now.month &&
@@ -195,85 +148,13 @@ class MoreScreen extends ConsumerWidget {
       final hour = sync.hour % 12 == 0 ? 12 : sync.hour % 12;
       final minute = sync.minute.toString().padLeft(2, '0');
       final suffix = sync.hour >= 12 ? 'PM' : 'AM';
-      return 'Connected • Last sync: Today, $hour:$minute $suffix';
+      return 'Refreshed today $hour:$minute $suffix';
     }
-    return 'Connected • Last sync: ${sync.month}/${sync.day}/${sync.year}';
+    return 'Refreshed ${sync.month}/${sync.day}/${sync.year}';
   }
 
   void _push(BuildContext context, Widget screen) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
-  }
-}
-
-class _ProviderDisplay {
-  final String name;
-  final IconData icon;
-  final Color color;
-  final bool connected;
-  final String subtitle;
-
-  const _ProviderDisplay({
-    required this.name,
-    required this.icon,
-    required this.color,
-    required this.connected,
-    required this.subtitle,
-  });
-}
-
-class _SourceRow extends StatelessWidget {
-  final _ProviderDisplay provider;
-  final VoidCallback onTap;
-
-  const _SourceRow({required this.provider, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 13),
-        child: Row(
-          children: [
-            HmIconBadge(icon: provider.icon, color: provider.color, size: 44),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    provider.name,
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    provider.subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 12.5,
-                      height: 1.25,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            HmStatusPill(
-              text: provider.connected ? 'Connected' : 'Not detected',
-              color: provider.connected ? AppTheme.mint : AppTheme.rose,
-            ),
-            const SizedBox(width: 4),
-            const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted, size: 22),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -320,41 +201,31 @@ class _PlanRow extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted, size: 22),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: AppTheme.textMuted,
+            size: 22,
+          ),
         ],
       ),
     );
   }
 
-  Color _color(String category) {
-    switch (category) {
-      case 'Sleep':
-        return AppTheme.purple;
-      case 'Training':
-        return AppTheme.mint;
-      case 'Nutrition':
-        return AppTheme.amber;
-      case 'Labs':
-        return AppTheme.cyan;
-      default:
-        return AppTheme.cyan;
-    }
-  }
+  Color _color(String category) => switch (category) {
+        'Sleep' => AppTheme.purple,
+        'Activity' => AppTheme.cyan,
+        'Body' => AppTheme.mint,
+        'Recovery' => AppTheme.amber,
+        _ => AppTheme.cyan,
+      };
 
-  IconData _icon(String category) {
-    switch (category) {
-      case 'Sleep':
-        return Icons.bedtime_rounded;
-      case 'Training':
-        return Icons.directions_run_rounded;
-      case 'Nutrition':
-        return Icons.restaurant_rounded;
-      case 'Labs':
-        return Icons.science_rounded;
-      default:
-        return Icons.sensors_rounded;
-    }
-  }
+  IconData _icon(String category) => switch (category) {
+        'Sleep' => Icons.bedtime_rounded,
+        'Activity' => Icons.directions_walk_rounded,
+        'Body' => Icons.monitor_weight_outlined,
+        'Recovery' => Icons.bolt_rounded,
+        _ => Icons.track_changes_rounded,
+      };
 }
 
 class _ToolRow extends StatelessWidget {
@@ -380,8 +251,8 @@ class _ToolRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 13),
         child: Row(
           children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(width: 13),
+            HmIconBadge(icon: icon, color: color, size: 42),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -397,18 +268,19 @@ class _ToolRow extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12.5,
-                      height: 1.3,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted, size: 22),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppTheme.textMuted,
+              size: 22,
+            ),
           ],
         ),
       ),

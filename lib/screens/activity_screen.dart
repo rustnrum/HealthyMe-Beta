@@ -44,8 +44,8 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
 
     final selectedStepSource = app.metricSources['Steps'];
     final stepSourceLabel = selectedStepSource == null || selectedStepSource == 'Auto'
-        ? 'Health Connect • Auto'
-        : '${SourceNameService.friendly(selectedStepSource)} • Health Connect';
+        ? 'Health Connect recommended'
+        : SourceNameService.friendly(selectedStepSource);
     final stepFreshness = health.freshness['Steps'];
 
     return ListView(

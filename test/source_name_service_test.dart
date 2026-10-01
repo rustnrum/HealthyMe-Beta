@@ -16,11 +16,10 @@ void main() {
     );
   });
 
-  test('hides unknown long package ids behind readable label', () {
-    expect(
-      SourceNameService.friendly('com.vendor.internal.really.long.package.identifier'),
-      'Connected health source',
-    );
+  test('unknown package ids become human readable and never expose com prefix', () {
+    final label = SourceNameService.friendly('com.vendor.internal.health.client');
+    expect(label, 'Vendor');
+    expect(label.contains('com.'), isFalse);
   });
 
   test('deduplicates sources by friendly provider name', () {

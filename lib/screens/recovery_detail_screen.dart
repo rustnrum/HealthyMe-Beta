@@ -142,7 +142,7 @@ class RecoveryDetailScreen extends ConsumerWidget {
       return 'Healthy Me does not have enough recovery telemetry yet. Sleep, cardio and connected workout history will improve this estimate.';
     }
     if (report.band == RecoveryBand.good) {
-      return 'Your available sleep, cardio and recent training-load signals are generally supportive of normal activity today.';
+      return 'Your available sleep, cardiovascular, breathing and recent training-load signals are generally supportive of normal activity today.';
     }
     if (report.band == RecoveryBand.fair) {
       return 'One or more recovery signals are less favorable than your recent pattern. A sensible training day is still possible, but avoid treating one score as a command.';
@@ -183,6 +183,9 @@ class _ContributorRow extends StatelessWidget {
     final icon = switch (item.name) {
       'Sleep' => Icons.bedtime_rounded,
       'Cardio' => Icons.favorite_rounded,
+      'HRV' => Icons.insights_rounded,
+      'Resting HR' => Icons.favorite_border_rounded,
+      'Breathing' => Icons.air_rounded,
       'Training load' => Icons.directions_run_rounded,
       'Nutrition' => Icons.restaurant_rounded,
       _ => Icons.insights_rounded,

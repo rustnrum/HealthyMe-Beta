@@ -410,7 +410,9 @@ class HealthConnectService {
           (p) => WeightPoint(
             date: p.dateTo,
             pounds: number(p)!,
-            source: p.sourceName.isEmpty ? 'Health Connect' : p.sourceName,
+            source: p.sourceName.isEmpty
+                ? 'Health Connect'
+                : SourceNameService.friendly(p.sourceName),
           ),
         )
         .toList();
@@ -422,7 +424,9 @@ class HealthConnectService {
         type: _friendlyWorkout(type),
         start: p.dateFrom,
         end: p.dateTo,
-        source: p.sourceName.isEmpty ? 'Health Connect' : p.sourceName,
+        source: p.sourceName.isEmpty
+            ? 'Health Connect'
+            : SourceNameService.friendly(p.sourceName),
       );
     }).toList();
 
@@ -455,6 +459,34 @@ class HealthConnectService {
       }
       return null;
     }
+
+    List<String> originsFor(Iterable<HealthDataType> types) {
+      final allowed = types.toSet();
+      return SourceNameService.uniqueRawByFriendly(
+        points
+            .where((point) => allowed.contains(point.type))
+            .map((point) => point.sourceName.trim())
+            .where((source) => source.isNotEmpty),
+      )..sort(
+          (a, b) => SourceNameService.friendly(a)
+              .compareTo(SourceNameService.friendly(b)),
+        );
+    }
+
+    final availableSources = <String, List<String>>{
+      'Steps': originsFor([HealthDataType.STEPS]),
+      'Sleep': originsFor(sleepTypes),
+      'Heart rate': originsFor([
+        HealthDataType.HEART_RATE,
+        HealthDataType.RESTING_HEART_RATE,
+        HealthDataType.HEART_RATE_VARIABILITY_RMSSD,
+        HealthDataType.RESPIRATORY_RATE,
+        HealthDataType.BLOOD_OXYGEN,
+      ]),
+      'Weight': originsFor([HealthDataType.WEIGHT]),
+      'Body fat': originsFor([HealthDataType.BODY_FAT_PERCENTAGE]),
+      'Workouts': originsFor([HealthDataType.WORKOUT]),
+    };
 
     return HealthSnapshot(
       authorized: true,
@@ -491,6 +523,7 @@ class HealthConnectService {
       weightHistory: weightHistory,
       workouts: workouts,
       detectedSources: sources,
+      availableSources: availableSources,
       freshness: freshness,
     );
   }

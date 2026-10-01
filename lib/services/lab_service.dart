@@ -1,167 +1,179 @@
-import 'dart:convert';
-import 'dart:typed_data';
+class LabMarkerDefinition {
+  final String name;
+  final String unit;
 
-import 'package:excel/excel.dart';
+  const LabMarkerDefinition(this.name, [this.unit = '']);
+}
 
-import '../models/models.dart';
+class LabPanelDefinition {
+  final String name;
+  final String description;
+  final List<LabMarkerDefinition> markers;
+
+  const LabPanelDefinition({
+    required this.name,
+    required this.description,
+    required this.markers,
+  });
+}
 
 class LabService {
-  static const common = [
-    'A1C',
-    'Fasting glucose',
-    'Total cholesterol',
-    'LDL cholesterol',
-    'HDL cholesterol',
-    'Triglycerides',
-    'Vitamin D',
-    'Ferritin',
-    'Iron',
-    'Hemoglobin',
-    'Hematocrit',
-    'Vitamin B12',
-    'Folate',
-    'TSH',
-    'Free T4',
-    'AST',
-    'ALT',
-    'Creatinine',
-    'eGFR',
-    'Sodium',
-    'Potassium',
-    'Magnesium',
-    'hs-CRP',
-    'Cortisol',
-  ];
+  static const cbc = LabPanelDefinition(
+    name: 'CBC',
+    description: 'Blood cells and oxygen-carrying markers commonly included in a complete blood count.',
+    markers: [
+      LabMarkerDefinition('WBC', 'x10³/µL'),
+      LabMarkerDefinition('RBC', 'x10⁶/µL'),
+      LabMarkerDefinition('Hemoglobin', 'g/dL'),
+      LabMarkerDefinition('Hematocrit', '%'),
+      LabMarkerDefinition('MCV', 'fL'),
+      LabMarkerDefinition('MCH', 'pg'),
+      LabMarkerDefinition('MCHC', 'g/dL'),
+      LabMarkerDefinition('RDW', '%'),
+      LabMarkerDefinition('Platelets', 'x10³/µL'),
+      LabMarkerDefinition('Neutrophils', '%'),
+      LabMarkerDefinition('Lymphocytes', '%'),
+      LabMarkerDefinition('Monocytes', '%'),
+      LabMarkerDefinition('Eosinophils', '%'),
+      LabMarkerDefinition('Basophils', '%'),
+    ],
+  );
 
-  static const male = [
-    'Total testosterone',
-    'Free testosterone',
-    'SHBG',
-    'Estradiol',
-  ];
+  static const cmp = LabPanelDefinition(
+    name: 'CMP / Metabolic',
+    description: 'Common metabolic, kidney, electrolyte, protein and liver markers.',
+    markers: [
+      LabMarkerDefinition('Glucose', 'mg/dL'),
+      LabMarkerDefinition('BUN', 'mg/dL'),
+      LabMarkerDefinition('Creatinine', 'mg/dL'),
+      LabMarkerDefinition('eGFR', 'mL/min/1.73m²'),
+      LabMarkerDefinition('Sodium', 'mmol/L'),
+      LabMarkerDefinition('Potassium', 'mmol/L'),
+      LabMarkerDefinition('Chloride', 'mmol/L'),
+      LabMarkerDefinition('CO₂ / Bicarbonate', 'mmol/L'),
+      LabMarkerDefinition('Calcium', 'mg/dL'),
+      LabMarkerDefinition('Total protein', 'g/dL'),
+      LabMarkerDefinition('Albumin', 'g/dL'),
+      LabMarkerDefinition('Globulin', 'g/dL'),
+      LabMarkerDefinition('Total bilirubin', 'mg/dL'),
+      LabMarkerDefinition('ALP', 'U/L'),
+      LabMarkerDefinition('AST', 'U/L'),
+      LabMarkerDefinition('ALT', 'U/L'),
+    ],
+  );
 
-  static const female = [
-    'Estradiol',
-    'Progesterone',
-    'FSH',
-    'LH',
-    'Total testosterone',
-    'Free testosterone',
-    'SHBG',
-  ];
+  static const lipids = LabPanelDefinition(
+    name: 'Lipids',
+    description: 'Common cholesterol and cardiometabolic markers.',
+    markers: [
+      LabMarkerDefinition('Total cholesterol', 'mg/dL'),
+      LabMarkerDefinition('LDL cholesterol', 'mg/dL'),
+      LabMarkerDefinition('HDL cholesterol', 'mg/dL'),
+      LabMarkerDefinition('Triglycerides', 'mg/dL'),
+      LabMarkerDefinition('Non-HDL cholesterol', 'mg/dL'),
+      LabMarkerDefinition('ApoB', 'mg/dL'),
+      LabMarkerDefinition('Lipoprotein(a)'),
+    ],
+  );
 
-  static List<String> markersForSex(String sex) {
-    final values = <String>{
-      ...common,
-      ...(sex == 'Female' ? female : male),
-    }.toList()
-      ..sort();
-    return values;
-  }
+  static const glucose = LabPanelDefinition(
+    name: 'Glucose control',
+    description: 'Longer-term and fasting glucose context used alongside activity and nutrition trends.',
+    markers: [
+      LabMarkerDefinition('HbA1c', '%'),
+      LabMarkerDefinition('Fasting glucose', 'mg/dL'),
+      LabMarkerDefinition('Fasting insulin', 'µIU/mL'),
+    ],
+  );
 
-  static List<LabResult> parseCsv(Uint8List bytes) {
-    final text = utf8.decode(bytes, allowMalformed: true);
-    final lines = const LineSplitter().convert(text);
-    if (lines.isEmpty) return const [];
+  static const thyroid = LabPanelDefinition(
+    name: 'Thyroid',
+    description: 'Common thyroid markers that can add context to energy and metabolism trends.',
+    markers: [
+      LabMarkerDefinition('TSH', 'µIU/mL'),
+      LabMarkerDefinition('Free T4', 'ng/dL'),
+      LabMarkerDefinition('Free T3', 'pg/mL'),
+    ],
+  );
 
-    final rows = lines
-        .map((line) => _csvLine(line))
-        .where((row) => row.any((value) => value.trim().isNotEmpty))
-        .toList();
+  static const nutrition = LabPanelDefinition(
+    name: 'Iron & nutrients',
+    description: 'Markers commonly useful when reviewing nutrition, energy and training context.',
+    markers: [
+      LabMarkerDefinition('Ferritin', 'ng/mL'),
+      LabMarkerDefinition('Serum iron', 'µg/dL'),
+      LabMarkerDefinition('TIBC', 'µg/dL'),
+      LabMarkerDefinition('Transferrin saturation', '%'),
+      LabMarkerDefinition('Vitamin D', 'ng/mL'),
+      LabMarkerDefinition('Vitamin B12', 'pg/mL'),
+      LabMarkerDefinition('Folate', 'ng/mL'),
+      LabMarkerDefinition('Magnesium', 'mg/dL'),
+    ],
+  );
 
-    return _rowsToLabs(rows);
-  }
+  static const maleHormones = LabPanelDefinition(
+    name: 'Hormones',
+    description: 'Sex-appropriate hormone markers when they are part of the user’s bloodwork.',
+    markers: [
+      LabMarkerDefinition('Total testosterone', 'ng/dL'),
+      LabMarkerDefinition('Free testosterone'),
+      LabMarkerDefinition('SHBG', 'nmol/L'),
+      LabMarkerDefinition('Estradiol', 'pg/mL'),
+      LabMarkerDefinition('LH', 'mIU/mL'),
+      LabMarkerDefinition('FSH', 'mIU/mL'),
+    ],
+  );
 
-  static List<LabResult> parseXlsx(Uint8List bytes) {
-    final book = Excel.decodeBytes(bytes);
-    final all = <LabResult>[];
+  static const femaleHormones = LabPanelDefinition(
+    name: 'Hormones',
+    description: 'Sex-appropriate hormone markers when they are part of the user’s bloodwork.',
+    markers: [
+      LabMarkerDefinition('Estradiol', 'pg/mL'),
+      LabMarkerDefinition('Progesterone', 'ng/mL'),
+      LabMarkerDefinition('Total testosterone', 'ng/dL'),
+      LabMarkerDefinition('Free testosterone'),
+      LabMarkerDefinition('SHBG', 'nmol/L'),
+      LabMarkerDefinition('LH', 'mIU/mL'),
+      LabMarkerDefinition('FSH', 'mIU/mL'),
+    ],
+  );
 
-    for (final name in book.tables.keys) {
-      final table = book.tables[name];
-      if (table == null) continue;
-      final rows = table.rows
-          .map(
-            (row) => row
-                .map((cell) => cell?.value?.toString().trim() ?? '')
-                .toList(),
-          )
-          .toList();
-      all.addAll(_rowsToLabs(rows));
-    }
+  static const advanced = LabPanelDefinition(
+    name: 'Advanced',
+    description: 'Useful additional markers that are not part of every routine draw.',
+    markers: [
+      LabMarkerDefinition('hs-CRP', 'mg/L'),
+      LabMarkerDefinition('Cortisol', 'µg/dL'),
+      LabMarkerDefinition('CK', 'U/L'),
+    ],
+  );
 
-    return all;
-  }
+  static List<LabPanelDefinition> panelsForSex(String sex) => [
+        cbc,
+        cmp,
+        lipids,
+        glucose,
+        thyroid,
+        nutrition,
+        sex == 'Female' ? femaleHormones : maleHormones,
+        advanced,
+      ];
 
-  static List<LabResult> _rowsToLabs(List<List<String>> rows) {
-    if (rows.isEmpty) return const [];
-
-    final header = rows.first.map((e) => e.trim().toLowerCase()).toList();
-    int find(List<String> names) {
-      for (var i = 0; i < header.length; i++) {
-        if (names.contains(header[i])) return i;
-      }
-      return -1;
-    }
-
-    final testIndex = find(['test', 'test name', 'testname', 'marker', 'lab']);
-    final valueIndex = find(['result', 'result value', 'resultvalue', 'value']);
-    final unitIndex = find(['unit', 'units']);
-    final dateIndex = find(['date', 'collection date', 'collectiondate']);
-    final sourceIndex = find(['source', 'lab source', 'labsource']);
-
-    final hasHeader = testIndex >= 0 && valueIndex >= 0;
-    final sourceRows = hasHeader ? rows.skip(1) : rows;
-
-    String at(List<String> row, int index) {
-      if (index < 0 || index >= row.length) return '';
-      return row[index].trim();
-    }
-
-    final results = <LabResult>[];
-    for (final row in sourceRows) {
-      final test = hasHeader ? at(row, testIndex) : at(row, 0);
-      final value = hasHeader ? at(row, valueIndex) : at(row, 1);
-      if (test.isEmpty || value.isEmpty) continue;
-
-      results.add(
-        LabResult(
-          id: '${DateTime.now().microsecondsSinceEpoch}_${results.length}',
-          name: test,
-          value: value,
-          unit: hasHeader ? at(row, unitIndex) : at(row, 2),
-          date: DateTime.tryParse(
-            hasHeader ? at(row, dateIndex) : at(row, 3),
-          ),
-          source: hasHeader ? at(row, sourceIndex) : at(row, 4),
-        ),
-      );
-    }
-
-    return results;
-  }
-
-  static List<String> _csvLine(String line) {
-    final result = <String>[];
-    final field = StringBuffer();
-    var quoted = false;
-
-    for (var i = 0; i < line.length; i++) {
-      final char = line[i];
-      if (char == '"') {
-        if (quoted && i + 1 < line.length && line[i + 1] == '"') {
-          field.write('"');
-          i++;
-        } else {
-          quoted = !quoted;
-        }
-      } else if (char == ',' && !quoted) {
-        result.add(field.toString());
-        field.clear();
-      } else {
-        field.write(char);
+  static List<LabMarkerDefinition> markersForSex(String sex) {
+    final seen = <String>{};
+    final result = <LabMarkerDefinition>[];
+    for (final panel in panelsForSex(sex)) {
+      for (final marker in panel.markers) {
+        if (seen.add(marker.name)) result.add(marker);
       }
     }
-    result.add(field.toString());
     return result;
+  }
+
+  static String defaultUnitFor(String sex, String markerName) {
+    for (final marker in markersForSex(sex)) {
+      if (marker.name == markerName) return marker.unit;
+    }
+    return '';
   }
 }

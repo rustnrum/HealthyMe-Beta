@@ -103,3 +103,20 @@ Healthy Me Beta keeps the stable Android package ID `com.rustnrum.healthyme.beta
 - Diet has its own bottom navigation: Diet / Menu / Planning / Grocery List.
 - v0.3.4 provides navigation and placeholder pages only; food logging, recipes, calories/macros, planning logic and grocery generation are future work.
 - Future Planning values will feed planned daily calories/macros back into the Fitness/body context without duplicate entry.
+
+## Locked v0.3.5 module/data-source requirements
+
+- Current top-level sections are **Fitness**, **Diet**, and **Health**. Do not add top-level modules merely to imitate competitor apps.
+- Diet primary navigation is locked to **Today**, **Meals**, **Plan**, and **Grocery**.
+- Diet must not display invented calories/macros/nutrients before real food data exists.
+- The Health section may fully use existing Health Connect vitals and user-entered bloodwork; unsupported future health features remain absent or clearly unimplemented.
+- BMI is a local calculated value from current weight + profile height and must be labeled **Calculated**, not treated as a connected-source metric.
+- Body-fat percentage remains a measured connected-source metric and is never a manual field.
+- Data-source control must use one straightforward pattern: `Metric -> Current source -> Change`.
+- Default metric source is **Health Connect recommended**. A user-selected source filters Healthy Me's reads; Healthy Me does not silently rewrite Health Connect's own source-priority configuration.
+- Source choices must be discovered from data actually present for that metric. Health-engine logic must not assume a particular manufacturer.
+- Raw Android package IDs must not be shown to the user.
+- The UI term **Refresh** means reread current Health Connect data; it must not imply Healthy Me can force an upstream watch/vendor application to sync.
+- Bloodwork entry is organized around common panels/markers. CSV/XLSX is not the primary entry workflow.
+- Labs store raw result, unit, date, and source. No automatic high/low diagnosis.
+- The Home sun icon was non-functional and is removed. Dark mode remains the only supported theme in this beta until a real theme system is implemented.

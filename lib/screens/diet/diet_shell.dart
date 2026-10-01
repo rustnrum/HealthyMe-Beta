@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/module_menu_button.dart';
 import 'diet_home_screen.dart';
 import 'diet_menu_screen.dart';
 import 'diet_planning_screen.dart';
@@ -35,7 +36,7 @@ class _DietShellState extends State<DietShell> {
     GroceryListScreen(),
   ];
 
-  static const _titles = ['Diet', 'Menu', 'Planning', 'Grocery List'];
+  static const _titles = ['Today', 'Meals', 'Plan', 'Grocery'];
 
   @override
   Widget build(BuildContext context) {
@@ -59,36 +60,20 @@ class _DietShellState extends State<DietShell> {
         appBar: AppBar(
           title: Text('Healthy Me • ${_titles[_index]}'),
           actions: [
-            PopupMenuButton<String>(
-              tooltip: 'Healthy Me sections',
-              icon: const Icon(Icons.apps_rounded),
-              onSelected: (value) {
-                if (value == 'fitness') Navigator.of(context).pop();
+            HealthyMeModuleMenuButton(
+              current: HealthyMeModule.diet,
+              onSelected: (module) {
+                switch (module) {
+                  case HealthyMeModule.fitness:
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    break;
+                  case HealthyMeModule.diet:
+                    break;
+                  case HealthyMeModule.health:
+                    Navigator.of(context).pushReplacementNamed('/health');
+                    break;
+                }
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem<String>(
-                  value: 'fitness',
-                  child: Row(
-                    children: [
-                      Icon(Icons.monitor_heart_rounded, color: Color(0xFF28DDB8)),
-                      SizedBox(width: 10),
-                      Text('Fitness'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem<String>(
-                  enabled: false,
-                  child: Row(
-                    children: [
-                      Icon(Icons.restaurant_menu_rounded, color: DietPalette.accent),
-                      SizedBox(width: 10),
-                      Text('Diet'),
-                      Spacer(),
-                      Icon(Icons.check_rounded, color: DietPalette.accent),
-                    ],
-                  ),
-                ),
-              ],
             ),
             const SizedBox(width: 6),
           ],
@@ -113,10 +98,10 @@ class _DietBottomNav extends StatelessWidget {
   const _DietBottomNav({required this.index, required this.onChanged});
 
   static const _items = [
-    (Icons.restaurant_rounded, 'Diet'),
-    (Icons.menu_book_rounded, 'Menu'),
-    (Icons.calendar_month_rounded, 'Planning'),
-    (Icons.shopping_cart_outlined, 'Grocery List'),
+    (Icons.today_rounded, 'Today'),
+    (Icons.restaurant_menu_rounded, 'Meals'),
+    (Icons.calendar_month_rounded, 'Plan'),
+    (Icons.shopping_cart_outlined, 'Grocery'),
   ];
 
   @override
@@ -144,7 +129,9 @@ class _DietBottomNav extends StatelessWidget {
                     children: [
                       Icon(
                         _items[i].$1,
-                        color: i == index ? DietPalette.accent : DietPalette.textSecondary,
+                        color: i == index
+                            ? DietPalette.accent
+                            : DietPalette.textSecondary,
                         size: 23,
                       ),
                       const SizedBox(height: 5),
@@ -153,9 +140,13 @@ class _DietBottomNav extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: i == index ? DietPalette.textPrimary : DietPalette.textSecondary,
-                          fontSize: 12,
-                          fontWeight: i == index ? FontWeight.w800 : FontWeight.w600,
+                          color: i == index
+                              ? DietPalette.textPrimary
+                              : DietPalette.textSecondary,
+                          fontSize: 12.5,
+                          fontWeight: i == index
+                              ? FontWeight.w800
+                              : FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 5),
@@ -164,7 +155,9 @@ class _DietBottomNav extends StatelessWidget {
                         width: i == index ? 18 : 4,
                         height: 2,
                         decoration: BoxDecoration(
-                          color: i == index ? DietPalette.accent : Colors.transparent,
+                          color: i == index
+                              ? DietPalette.accent
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(99),
                         ),
                       ),

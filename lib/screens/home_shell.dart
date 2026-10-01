@@ -7,11 +7,11 @@ import '../state/health_sync_provider.dart';
 import '../state/navigation_provider.dart';
 import 'activity_screen.dart';
 import 'body_screen.dart';
-import 'diet/diet_shell.dart';
 import 'home_screen.dart';
 import 'more_screen.dart';
 import 'profile_screen.dart';
 import 'sleep_screen.dart';
+import '../widgets/module_menu_button.dart';
 
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
@@ -20,8 +20,30 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends ConsumerState<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   bool _autoSyncStarted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    final app = ref.read(appStateProvider);
+    final sync = ref.read(healthSyncProvider);
+    if (app.health.authorized && !sync.isLoading) {
+      ref.read(healthSyncProvider.notifier).sync();
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -89,21 +111,22 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         title: Text(titles[index]),
         centerTitle: index != 0,
         actions: [
-          _SectionMenuButton(
-            onFitness: () => ref.read(navigationProvider.notifier).go(0),
-            onDiet: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const DietShell()),
-            ),
+          HealthyMeModuleMenuButton(
+            current: HealthyMeModule.fitness,
+            onSelected: (module) {
+              switch (module) {
+                case HealthyMeModule.fitness:
+                  ref.read(navigationProvider.notifier).go(0);
+                  break;
+                case HealthyMeModule.diet:
+                  Navigator.of(context).pushNamed('/diet');
+                  break;
+                case HealthyMeModule.health:
+                  Navigator.of(context).pushNamed('/health');
+                  break;
+              }
+            },
           ),
-          if (index == 0)
-            const Padding(
-              padding: EdgeInsets.only(right: 2),
-              child: Icon(
-                Icons.wb_sunny_rounded,
-                color: AppTheme.amber,
-                size: 23,
-              ),
-            ),
           if (sync.isLoading)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 14),
@@ -116,7 +139,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           else if (index == 0)
             IconButton(
               tooltip: app.health.authorized
-                  ? 'Sync Health Connect'
+                  ? 'Refresh health data'
                   : 'Connect Health Connect',
               onPressed: _syncOrConnect,
               icon: Icon(
@@ -152,117 +175,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         index: index,
         onChanged: ref.read(navigationProvider.notifier).go,
       ),
-    );
-  }
-}
-
-class _SectionMenuButton extends StatelessWidget {
-  final VoidCallback onFitness;
-  final VoidCallback onDiet;
-
-  const _SectionMenuButton({
-    required this.onFitness,
-    required this.onDiet,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      tooltip: 'Healthy Me sections',
-      icon: const Icon(Icons.apps_rounded, size: 22),
-      onSelected: (value) {
-        if (value == 'fitness') {
-          onFitness();
-        } else if (value == 'diet') {
-          onDiet();
-        }
-      },
-      itemBuilder: (context) => [
-        const PopupMenuItem<String>(
-          enabled: false,
-          child: Text(
-            'Healthy Me sections',
-            style: TextStyle(
-              color: AppTheme.textMuted,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.4,
-            ),
-          ),
-        ),
-        const PopupMenuItem<String>(
-          value: 'fitness',
-          child: Row(
-            children: [
-              Icon(Icons.monitor_heart_rounded, color: AppTheme.mint, size: 22),
-              SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Fitness',
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      'Current section',
-                      style: TextStyle(
-                        color: AppTheme.textMuted,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.check_rounded, color: AppTheme.mint, size: 21),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
-        const PopupMenuItem<String>(
-          value: 'diet',
-          child: Row(
-            children: [
-              Icon(Icons.restaurant_menu_rounded, color: AppTheme.amber, size: 22),
-              SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Diet',
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      'Diet • Menu • Planning • Grocery List',
-                      style: TextStyle(
-                        color: AppTheme.textMuted,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                'Open',
-                style: TextStyle(
-                  color: AppTheme.amber,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

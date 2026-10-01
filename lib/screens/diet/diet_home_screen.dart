@@ -10,7 +10,7 @@ class DietHomeScreen extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 30),
       children: const [
         Text(
-          'Diet',
+          'Today',
           style: TextStyle(
             color: DietPalette.textPrimary,
             fontSize: 28,
@@ -19,20 +19,24 @@ class DietHomeScreen extends StatelessWidget {
         ),
         SizedBox(height: 5),
         Text(
-          'A separate Healthy Me module for food, calories and nutrition planning.',
-          style: TextStyle(color: DietPalette.textSecondary, fontSize: 14, height: 1.4),
+          'Daily food and nutrition will live here. No calories or nutrients are guessed until real meal data exists.',
+          style: TextStyle(
+            color: DietPalette.textSecondary,
+            fontSize: 14,
+            height: 1.4,
+          ),
         ),
         SizedBox(height: 18),
         DietPlaceholderCard(
-          icon: Icons.restaurant_rounded,
-          title: 'Diet dashboard',
-          detail: 'The module shell is ready. Food logging and nutrition analysis will be added later.',
+          icon: Icons.add_a_photo_rounded,
+          title: 'Add Food',
+          detail: 'Planned entry methods: AI meal photo, barcode, food search, describe or voice entry, and saved meals. The logging engine is not enabled yet.',
         ),
         SizedBox(height: 12),
         DietPlaceholderCard(
-          icon: Icons.sync_alt_rounded,
-          title: 'Fitness connection',
-          detail: 'Future planned meals and calories will feed the daily fitness/body picture without duplicating entry.',
+          icon: Icons.pie_chart_rounded,
+          title: 'Daily nutrition',
+          detail: 'Calories, protein, carbs, fat, fiber and useful micronutrients will appear only after food has actually been logged.',
           accent: DietPalette.green,
         ),
       ],
