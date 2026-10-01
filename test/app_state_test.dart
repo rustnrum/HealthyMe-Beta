@@ -17,4 +17,13 @@ void main() {
     );
     expect(state.currentWeightLb, 200);
   });
+
+  test('planned sleep duration crosses midnight correctly', () {
+    const profile = UserProfile(
+      sleepBedtimeMinutes: 23 * 60,
+      sleepWakeMinutes: 7 * 60,
+    );
+    expect(profile.plannedSleepMinutes, 8 * 60);
+  });
+
 }

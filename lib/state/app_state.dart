@@ -211,6 +211,19 @@ class AppStateNotifier extends Notifier<HealthyMeState> {
     }
     _set(state.copyWith(metricSources: next));
   }
+
+  void setSleepWindow({required int bedtimeMinutes, required int wakeMinutes}) {
+    final bed = bedtimeMinutes.clamp(0, (24 * 60) - 1).toInt();
+    final wake = wakeMinutes.clamp(0, (24 * 60) - 1).toInt();
+    _set(
+      state.copyWith(
+        profile: state.profile.copyWith(
+          sleepBedtimeMinutes: bed,
+          sleepWakeMinutes: wake,
+        ),
+      ),
+    );
+  }
 }
 
 final appStateProvider =

@@ -40,7 +40,7 @@ Provider selection is dynamic and never Samsung-only.
 
 ## Sleep
 
-Sleep target is calculated from age/profile, not entered arbitrarily by the user. Adult 18–64 guidance is 7–9 hours; 65+ is 7–8 hours. Healthy Me may display a clearly described duration score, but must not pretend to have a proprietary recovery/readiness score it cannot calculate.
+Sleep target is calculated from age/profile, not entered arbitrarily by the user. Adult 18–64 guidance is 7–9 hours; 65+ is 7–8 hours. Healthy Me may display a clearly described duration score, but must not pretend to have a proprietary recovery/readiness score it cannot calculate. The Plan experience may include a circular bedtime/wake planner with draggable handles and planned sleep duration in the center.
 
 ## Body
 
@@ -52,7 +52,7 @@ Bloodwork stores test name, result, unit, collection date and lab/source. CSV/XL
 
 ## Sources
 
-Health Connect is the Android aggregation layer. Healthy Me must show real detected source names and support Auto/Recommended plus per-metric overrides. Vendor names are never marked connected unless actually authorized/detected.
+Health Connect is the Android aggregation layer. Healthy Me must show real detected source names and support Auto/Recommended plus per-metric overrides. Vendor names are never shown in Connected Sources unless real records identify that vendor; Health Connect itself may still be shown as the aggregation hub.
 
 ## Suggestions
 
@@ -65,3 +65,8 @@ Nutrition should not require exact manual logging. Future modes may include simp
 ## Visual contract
 
 The approved five-phone mockup supplied by the user is the UI target: deep navy command-center background, compact dark cards, restrained cyan/blue/mint/purple/rose/amber accents, modern spacing, readable typography, and no terminal-green/retro-computer appearance.
+
+
+## Healthy Me sections / future modules
+
+The primary app bar includes a section launcher so Healthy Me can grow into multiple coordinated modules without crowding the Fitness navigation. Fitness remains the current section with Home / Activity / Sleep / Body / More. Diet is reserved as a future section and will use its own bottom navigation: Diet / Menu / Planning / Grocery List. Future menu planning can feed planned calories/macros back into shared daily wellness context. Only the launcher is implemented in this build; Diet functionality remains future work.

@@ -24,6 +24,8 @@ class MoreScreen extends ConsumerWidget {
     final plan = PlanService.build(app);
     final sources = app.health.detectedSources;
 
+    final detectedProviders =
+        SourceNameService.detectedFriendlyProviders(sources);
     final providers = <_ProviderDisplay>[
       _ProviderDisplay(
         name: 'Health Connect',
@@ -34,42 +36,8 @@ class MoreScreen extends ConsumerWidget {
             ? _lastSync(app)
             : 'Android health-data hub',
       ),
-      _ProviderDisplay(
-        name: 'Samsung Health',
-        icon: Icons.directions_run_rounded,
-        color: AppTheme.mint,
-        connected: SourceNameService.detected(sources, 'Samsung Health'),
-        subtitle: SourceNameService.detected(sources, 'Samsung Health')
-            ? 'Connected through Health Connect'
-            : 'No data detected yet',
-      ),
-      _ProviderDisplay(
-        name: 'Garmin Connect',
-        icon: Icons.navigation_rounded,
-        color: AppTheme.textPrimary,
-        connected: SourceNameService.detected(sources, 'Garmin Connect'),
-        subtitle: SourceNameService.detected(sources, 'Garmin Connect')
-            ? 'Connected through Health Connect'
-            : 'No data detected yet',
-      ),
-      _ProviderDisplay(
-        name: 'Fitbit',
-        icon: Icons.watch_rounded,
-        color: AppTheme.cyan,
-        connected: SourceNameService.detected(sources, 'Fitbit'),
-        subtitle: SourceNameService.detected(sources, 'Fitbit')
-            ? 'Connected through Health Connect'
-            : 'No data detected yet',
-      ),
-      _ProviderDisplay(
-        name: 'Withings Scale',
-        icon: Icons.monitor_weight_outlined,
-        color: AppTheme.blue,
-        connected: SourceNameService.detected(sources, 'Withings Scale'),
-        subtitle: SourceNameService.detected(sources, 'Withings Scale')
-            ? 'Connected through Health Connect'
-            : 'No data detected yet',
-      ),
+      for (final provider in detectedProviders)
+        _providerFromDetectedName(provider),
     ];
 
     return ListView(
@@ -161,6 +129,59 @@ class MoreScreen extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  _ProviderDisplay _providerFromDetectedName(String name) {
+    switch (name) {
+      case 'Samsung Health':
+        return const _ProviderDisplay(
+          name: 'Samsung Health',
+          icon: Icons.directions_run_rounded,
+          color: AppTheme.mint,
+          connected: true,
+          subtitle: 'Connected through Health Connect',
+        );
+      case 'Garmin Connect':
+        return const _ProviderDisplay(
+          name: 'Garmin Connect',
+          icon: Icons.navigation_rounded,
+          color: AppTheme.textPrimary,
+          connected: true,
+          subtitle: 'Connected through Health Connect',
+        );
+      case 'Fitbit':
+        return const _ProviderDisplay(
+          name: 'Fitbit',
+          icon: Icons.watch_rounded,
+          color: AppTheme.cyan,
+          connected: true,
+          subtitle: 'Connected through Health Connect',
+        );
+      case 'Withings Scale':
+        return const _ProviderDisplay(
+          name: 'Withings Scale',
+          icon: Icons.monitor_weight_outlined,
+          color: AppTheme.blue,
+          connected: true,
+          subtitle: 'Connected through Health Connect',
+        );
+      case 'Google Fit':
+        return const _ProviderDisplay(
+          name: 'Google Fit',
+          icon: Icons.fitness_center_rounded,
+          color: AppTheme.mint,
+          connected: true,
+          subtitle: 'Connected through Health Connect',
+        );
+      default:
+        return _ProviderDisplay(
+          name: name,
+          icon: Icons.sensors_rounded,
+          color: AppTheme.purple,
+          connected: true,
+          subtitle: 'Connected through Health Connect',
+        );
+    }
   }
 
   String _lastSync(HealthyMeState app) {

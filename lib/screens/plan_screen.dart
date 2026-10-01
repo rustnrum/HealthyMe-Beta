@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_theme.dart';
 import '../services/plan_service.dart';
+import '../services/sleep_guidance_service.dart';
 import '../state/app_state.dart';
 import '../widgets/command_card.dart';
 import '../widgets/design_widgets.dart';
+import '../widgets/sleep_window_dial.dart';
 
 class PlanScreen extends ConsumerWidget {
   const PlanScreen({super.key});
@@ -55,8 +57,22 @@ class PlanScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           for (final item in plan)
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _PlanCard(item: item),
+              padding: const EdgeInsets.only(bottom: 10),
+              child: item.category == 'Sleep'
+                  ? _SleepPlanCard(
+                      item: item,
+                      bedtimeMinutes: app.profile.sleepBedtimeMinutes,
+                      wakeMinutes: app.profile.sleepWakeMinutes,
+                      targetLabel:
+                          SleepGuidanceService.forAge(app.profile.age).label,
+                      onSaved: (bedtime, wake) => ref
+                          .read(appStateProvider.notifier)
+                          .setSleepWindow(
+                            bedtimeMinutes: bedtime,
+                            wakeMinutes: wake,
+                          ),
+                    )
+                  : _PlanCard(item: item),
             ),
           const SizedBox(height: 6),
           const Text(
@@ -94,6 +110,86 @@ class _ContextPill extends StatelessWidget {
           fontSize: 12.5,
           fontWeight: FontWeight.w600,
         ),
+      ),
+    );
+  }
+}
+
+
+class _SleepPlanCard extends StatelessWidget {
+  final PlanItem item;
+  final int bedtimeMinutes;
+  final int wakeMinutes;
+  final String targetLabel;
+  final void Function(int bedtimeMinutes, int wakeMinutes) onSaved;
+
+  const _SleepPlanCard({
+    required this.item,
+    required this.bedtimeMinutes,
+    required this.wakeMinutes,
+    required this.targetLabel,
+    required this.onSaved,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CommandCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const HmIconBadge(
+                icon: Icons.bedtime_rounded,
+                color: AppTheme.purple,
+                size: 42,
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'SLEEP',
+                      style: TextStyle(
+                        color: AppTheme.purple,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      item.title,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.detail,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SleepWindowDial(
+            bedtimeMinutes: bedtimeMinutes,
+            wakeMinutes: wakeMinutes,
+            targetLabel: targetLabel,
+            onSaved: onSaved,
+          ),
+        ],
       ),
     );
   }

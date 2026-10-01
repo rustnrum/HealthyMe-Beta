@@ -5,6 +5,7 @@ import 'package:health/health.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../models/models.dart';
+import 'source_name_service.dart';
 
 class HealthConnectService {
   final Health _health = Health();
@@ -102,7 +103,6 @@ class HealthConnectService {
       endTime: now,
       preferredUnits: const {
         HealthDataType.WEIGHT: HealthDataUnit.POUND,
-        HealthDataType.DISTANCE_DELTA: HealthDataUnit.MILE,
         HealthDataType.ACTIVE_ENERGY_BURNED: HealthDataUnit.KILOCALORIE,
         HealthDataType.BODY_FAT_PERCENTAGE: HealthDataUnit.PERCENT,
         HealthDataType.BLOOD_OXYGEN: HealthDataUnit.PERCENT,
@@ -117,6 +117,11 @@ class HealthConnectService {
         .toList()
       ..sort();
 
+    bool sourceMatches(HealthDataPoint point, String? selectedSource) {
+      if (selectedSource == null || selectedSource == 'Auto') return true;
+      return SourceNameService.sameProvider(point.sourceName, selectedSource);
+    }
+
     List<HealthDataPoint> filtered(
       HealthDataType type,
       String metric,
@@ -124,8 +129,18 @@ class HealthConnectService {
       final source = metricSources[metric];
       return points.where((p) {
         if (p.type != type) return false;
-        if (source == null || source == 'Auto') return true;
-        return p.sourceName == source;
+        return sourceMatches(p, source);
+      }).toList()
+        ..sort((a, b) => a.dateTo.compareTo(b.dateTo));
+    }
+
+    List<HealthDataPoint> filteredForSource(
+      HealthDataType type,
+      String? selectedSource,
+    ) {
+      return points.where((p) {
+        if (p.type != type) return false;
+        return sourceMatches(p, selectedSource);
       }).toList()
         ..sort((a, b) => a.dateTo.compareTo(b.dateTo));
     }
@@ -157,16 +172,26 @@ class HealthConnectService {
     final rawSteps = filtered(HealthDataType.STEPS, 'Steps');
 
     int rawStepTotal(DateTime start, DateTime end) {
-      return rawSteps
-          .where(
-            (p) =>
-                !p.dateTo.isBefore(start) &&
-                p.dateFrom.isBefore(end),
-          )
-          .fold<int>(
-            0,
-            (sum, p) => sum + (number(p)?.round() ?? 0),
-          );
+      var total = 0.0;
+      for (final p in rawSteps) {
+        if (p.dateTo.isBefore(start) || !p.dateFrom.isBefore(end)) continue;
+        final value = number(p);
+        if (value == null || value <= 0) continue;
+
+        final overlapStart = p.dateFrom.isAfter(start) ? p.dateFrom : start;
+        final overlapEnd = p.dateTo.isBefore(end) ? p.dateTo : end;
+        if (!overlapEnd.isAfter(overlapStart)) continue;
+
+        final recordMs = p.dateTo.difference(p.dateFrom).inMilliseconds;
+        if (recordMs <= 0) {
+          total += value;
+          continue;
+        }
+        final overlapMs = overlapEnd.difference(overlapStart).inMilliseconds;
+        final ratio = (overlapMs / recordMs).clamp(0.0, 1.0).toDouble();
+        total += value * ratio;
+      }
+      return total.round();
     }
 
     Future<int> stepTotal(DateTime start, DateTime end) async {
@@ -213,16 +238,32 @@ class HealthConnectService {
       }
     }
 
-    final calories = filtered(
+    // Motion metrics can be written by several apps at once. For Auto steps,
+    // Health Connect's aggregate API resolves step duplication. Distance and
+    // active calories do not have the same aggregate helper in this plugin, so
+    // anchor them to one actual motion origin rather than summing Samsung +
+    // Garmin + phone records together.
+    final selectedStepSource = metricSources['Steps'];
+    final resolvedMotionSource =
+        selectedStepSource != null && selectedStepSource != 'Auto'
+            ? selectedStepSource
+            : _latestSourceFor(points, HealthDataType.STEPS) ??
+                _latestSourceFor(points, HealthDataType.DISTANCE_DELTA);
+
+    final calories = filteredForSource(
       HealthDataType.ACTIVE_ENERGY_BURNED,
-      'Activity',
+      resolvedMotionSource,
     );
-    final distance = filtered(
+    final distance = filteredForSource(
       HealthDataType.DISTANCE_DELTA,
-      'Activity',
+      resolvedMotionSource,
     );
     final activeCaloriesToday = sumNumeric(calories, start: today, end: now);
-    final distanceMilesToday = sumNumeric(distance, start: today, end: now);
+    final distanceMilesToday = _sumDistanceMiles(
+      distance,
+      start: today,
+      end: now,
+    );
 
     final sleepSource = metricSources['Sleep'];
     final sleepTypes = <HealthDataType>[
@@ -235,8 +276,7 @@ class HealthConnectService {
 
     final sleepPoints = points.where((p) {
       if (!sleepTypes.contains(p.type)) return false;
-      if (sleepSource == null || sleepSource == 'Auto') return true;
-      return p.sourceName == sleepSource;
+      return sourceMatches(p, sleepSource);
     }).toList();
 
     Map<String, Map<String, int>> sleepByDay = {};
@@ -441,6 +481,49 @@ class HealthConnectService {
       detectedSources: sources,
       freshness: freshness,
     );
+  }
+
+  static double distanceValueToMiles(double value, HealthDataUnit unit) {
+    final name = unit.name.toUpperCase();
+    if (name.contains('MILE')) return value;
+    if (name.contains('KILOMETER')) return value * 0.6213711922;
+    if (name.contains('YARD')) return value / 1760.0;
+    if (name.contains('FOOT') || name.contains('FEET')) return value / 5280.0;
+    if (name.contains('CENTIMETER')) return value / 160934.4;
+    // Health Connect's canonical distance storage is meters. Unknown units from
+    // Android are therefore treated as meters instead of being displayed raw.
+    return value / 1609.344;
+  }
+
+  static String? _latestSourceFor(
+    List<HealthDataPoint> points,
+    HealthDataType type,
+  ) {
+    HealthDataPoint? latest;
+    for (final point in points) {
+      if (point.type != type || point.sourceName.trim().isEmpty) continue;
+      if (latest == null || point.dateTo.isAfter(latest.dateTo)) {
+        latest = point;
+      }
+    }
+    return latest?.sourceName;
+  }
+
+  static double _sumDistanceMiles(
+    List<HealthDataPoint> list, {
+    DateTime? start,
+    DateTime? end,
+  }) {
+    var total = 0.0;
+    for (final p in list) {
+      if (start != null && p.dateTo.isBefore(start)) continue;
+      if (end != null && p.dateFrom.isAfter(end)) continue;
+      final value = p.value;
+      if (value is NumericHealthValue) {
+        total += distanceValueToMiles(value.numericValue.toDouble(), p.unit);
+      }
+    }
+    return total;
   }
 
   static String _friendlyWorkout(String value) {

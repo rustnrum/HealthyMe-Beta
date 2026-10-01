@@ -88,6 +88,18 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         title: Text(titles[index]),
         centerTitle: index != 0,
         actions: [
+          _SectionMenuButton(
+            onFitness: () => ref.read(navigationProvider.notifier).go(0),
+            onDiet: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Diet is the next Healthy Me section. Its tabs will be Diet, Menu, Planning and Grocery List.',
+                  ),
+                ),
+              );
+            },
+          ),
           if (index == 0)
             const Padding(
               padding: EdgeInsets.only(right: 2),
@@ -145,6 +157,117 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         index: index,
         onChanged: ref.read(navigationProvider.notifier).go,
       ),
+    );
+  }
+}
+
+class _SectionMenuButton extends StatelessWidget {
+  final VoidCallback onFitness;
+  final VoidCallback onDiet;
+
+  const _SectionMenuButton({
+    required this.onFitness,
+    required this.onDiet,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'Healthy Me sections',
+      icon: const Icon(Icons.apps_rounded, size: 22),
+      onSelected: (value) {
+        if (value == 'fitness') {
+          onFitness();
+        } else if (value == 'diet') {
+          onDiet();
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem<String>(
+          enabled: false,
+          child: Text(
+            'Healthy Me sections',
+            style: TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'fitness',
+          child: Row(
+            children: [
+              Icon(Icons.monitor_heart_rounded, color: AppTheme.mint, size: 22),
+              SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Fitness',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      'Current section',
+                      style: TextStyle(
+                        color: AppTheme.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.check_rounded, color: AppTheme.mint, size: 21),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem<String>(
+          value: 'diet',
+          child: Row(
+            children: [
+              Icon(Icons.restaurant_menu_rounded, color: AppTheme.amber, size: 22),
+              SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Diet',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      'Diet • Menu • Planning • Grocery List',
+                      style: TextStyle(
+                        color: AppTheme.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                'Soon',
+                style: TextStyle(
+                  color: AppTheme.amber,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

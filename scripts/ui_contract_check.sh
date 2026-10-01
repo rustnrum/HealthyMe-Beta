@@ -13,6 +13,8 @@ SLEEP_FILE="lib/screens/sleep_screen.dart"
 BODY_FILE="lib/screens/body_screen.dart"
 MORE_FILE="lib/screens/more_screen.dart"
 SOURCES_FILE="lib/screens/sources_screen.dart"
+PLAN_FILE="lib/screens/plan_screen.dart"
+HEALTH_FILE="lib/services/health_connect_service.dart"
 
 for required in "'Home'" "'Activity'" "'Sleep'" "'Body'" "'More'"; do
   grep -q "$required" "$SHELL_FILE" || fail "missing bottom-nav destination $required"
@@ -40,9 +42,19 @@ for required in "Weight" "Measurements" "Composition" "Body Measurements" "Body 
   grep -q "$required" "$BODY_FILE" || fail "body screen missing approved section: $required"
 done
 
-for required in "Connected Sources" "Your Plan" "Samsung Health" "Garmin Connect" "Fitbit" "Withings Scale"; do
-  grep -q "$required" "$MORE_FILE" || fail "More screen missing approved element: $required"
+for required in "Connected Sources" "Your Plan" "detectedFriendlyProviders"; do
+  grep -q "$required" "$MORE_FILE" || fail "More screen missing detection-driven source element: $required"
 done
+
+for required in "Healthy Me sections" "Fitness" "Diet" "Diet • Menu • Planning • Grocery List"; do
+  grep -q "$required" "$SHELL_FILE" || fail "section launcher missing: $required"
+done
+
+grep -q "Source: \$stepSourceLabel" "$ACTIVITY_FILE" || fail "activity must identify the selected step source"
+grep -q "Step data" "$ACTIVITY_FILE" || fail "activity must show step data freshness"
+grep -q "SleepWindowDial" "$PLAN_FILE" || fail "plan must include the circular sleep-window control"
+grep -q "distanceValueToMiles" "$HEALTH_FILE" || fail "distance must be normalized before display"
+grep -q "resolvedMotionSource" "$HEALTH_FILE" || fail "motion metrics must avoid multi-provider double counting"
 
 grep -q "isExpanded: true" "$SOURCES_FILE" || fail "source dropdowns must be overflow-safe"
 grep -q "SourceNameService" "$SOURCES_FILE" || fail "source screen must normalize raw provider IDs"
@@ -58,6 +70,8 @@ files = [
     'lib/screens/more_screen.dart',
     'lib/screens/sources_screen.dart',
     'lib/screens/home_shell.dart',
+    'lib/screens/plan_screen.dart',
+    'lib/widgets/sleep_window_dial.dart',
 ]
 violations=[]
 for name in files:

@@ -11,6 +11,8 @@ class UserProfile {
   final String activityLevel;
   final int stepGoal;
   final int workoutGoalPerWeek;
+  final int sleepBedtimeMinutes;
+  final int sleepWakeMinutes;
 
   const UserProfile({
     this.completed = false,
@@ -25,6 +27,8 @@ class UserProfile {
     this.activityLevel = 'Mostly seated',
     this.stepGoal = 10000,
     this.workoutGoalPerWeek = 4,
+    this.sleepBedtimeMinutes = 23 * 60,
+    this.sleepWakeMinutes = 7 * 60,
   });
 
   int? get age {
@@ -35,6 +39,11 @@ class UserProfile {
         (now.month == birthday!.month && now.day >= birthday!.day);
     if (!passed) value--;
     return value;
+  }
+
+  int get plannedSleepMinutes {
+    final raw = sleepWakeMinutes - sleepBedtimeMinutes;
+    return raw > 0 ? raw : raw + (24 * 60);
   }
 
   UserProfile copyWith({
@@ -50,6 +59,8 @@ class UserProfile {
     String? activityLevel,
     int? stepGoal,
     int? workoutGoalPerWeek,
+    int? sleepBedtimeMinutes,
+    int? sleepWakeMinutes,
   }) {
     return UserProfile(
       completed: completed ?? this.completed,
@@ -66,6 +77,9 @@ class UserProfile {
       stepGoal: stepGoal ?? this.stepGoal,
       workoutGoalPerWeek:
           workoutGoalPerWeek ?? this.workoutGoalPerWeek,
+      sleepBedtimeMinutes:
+          sleepBedtimeMinutes ?? this.sleepBedtimeMinutes,
+      sleepWakeMinutes: sleepWakeMinutes ?? this.sleepWakeMinutes,
     );
   }
 
@@ -82,6 +96,8 @@ class UserProfile {
         'activityLevel': activityLevel,
         'stepGoal': stepGoal,
         'workoutGoalPerWeek': workoutGoalPerWeek,
+        'sleepBedtimeMinutes': sleepBedtimeMinutes,
+        'sleepWakeMinutes': sleepWakeMinutes,
       };
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -100,6 +116,10 @@ class UserProfile {
       stepGoal: (json['stepGoal'] as num?)?.toInt() ?? 10000,
       workoutGoalPerWeek:
           (json['workoutGoalPerWeek'] as num?)?.toInt() ?? 4,
+      sleepBedtimeMinutes:
+          (json['sleepBedtimeMinutes'] as num?)?.toInt() ?? 23 * 60,
+      sleepWakeMinutes:
+          (json['sleepWakeMinutes'] as num?)?.toInt() ?? 7 * 60,
     );
   }
 }

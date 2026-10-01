@@ -41,4 +41,27 @@ class SourceNameService {
   static bool detected(Iterable<String> sources, String provider) {
     return sources.any((source) => friendly(source) == provider);
   }
+
+  static bool sameProvider(String a, String b) => friendly(a) == friendly(b);
+
+  static const Set<String> recognizedProviders = {
+    'Samsung Health',
+    'Garmin Connect',
+    'Fitbit',
+    'Withings Scale',
+    'Google Fit',
+  };
+
+  static List<String> detectedFriendlyProviders(Iterable<String> sources) {
+    final result = <String>[];
+    final seen = <String>{};
+    for (final source in sources) {
+      final name = friendly(source);
+      if (recognizedProviders.contains(name) && seen.add(name)) {
+        result.add(name);
+      }
+    }
+    result.sort();
+    return result;
+  }
 }

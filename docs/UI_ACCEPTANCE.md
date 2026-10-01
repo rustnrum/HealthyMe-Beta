@@ -1,4 +1,4 @@
-# Healthy Me v0.3.1 UI Acceptance Contract
+# Healthy Me v0.3.2 UI Acceptance Contract
 
 The approved five-phone command-center mockup is the visual/product contract for this build. The implementation should match its structure, density, hierarchy and accent language while remaining truthful to available data.
 
@@ -52,8 +52,8 @@ The previous v0.2 navigation (Today / Progress / Connect / Labs / Plan) is not a
 
 ## More / Sources & Plan
 
-- Health Connect plus Samsung Health, Garmin Connect, Fitbit and Withings rows
-- Never claim a vendor is connected unless real records detect it
+- Health Connect plus only vendor rows actually detected from Health Connect records
+- Never list Fitbit, Withings, Samsung, Garmin or another vendor merely as a static option in Connected Sources
 - Never display raw package IDs as provider names
 - Metric routing remains available in detailed Sources screen
 - Personalized wellness suggestions from PlanService
@@ -69,3 +69,11 @@ The previous v0.2 navigation (Today / Progress / Connect / Labs / Plan) is not a
 - No giant Material selection pill
 - No visible Beta 0.2 badge
 - Responsive layouts must avoid overflow on common Android phone widths
+
+
+## Section launcher
+
+- A top-level Healthy Me sections menu is present in the primary app bar.
+- Fitness is the active section.
+- Diet is visible as future/coming soon only; it does not replace the current bottom navigation yet.
+- Future Diet navigation is reserved as Diet / Menu / Planning / Grocery List.

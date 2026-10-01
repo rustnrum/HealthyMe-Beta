@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/formatters.dart';
 import '../core/theme/app_theme.dart';
 import '../models/models.dart';
+import '../services/source_name_service.dart';
 import '../state/app_state.dart';
 import '../state/health_sync_provider.dart';
 import '../widgets/charts.dart';
@@ -40,6 +41,12 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
       'Month' => health.dailySteps30,
       _ => health.monthlySteps12,
     };
+
+    final selectedStepSource = app.metricSources['Steps'];
+    final stepSourceLabel = selectedStepSource == null || selectedStepSource == 'Auto'
+        ? 'Health Connect • Auto'
+        : '${SourceNameService.friendly(selectedStepSource)} • Health Connect';
+    final stepFreshness = health.freshness['Steps'];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 30),
@@ -86,6 +93,27 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                             fontSize: 14,
                           ),
                         ),
+                        const SizedBox(height: 5),
+                        Text(
+                          'Source: $stepSourceLabel',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppTheme.cyan,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (stepFreshness != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Step data ${relativeAge(stepFreshness)}',
+                            style: const TextStyle(
+                              color: AppTheme.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
