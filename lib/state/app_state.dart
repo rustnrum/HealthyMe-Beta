@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/daily_state.dart';
 import '../models/models.dart';
 import '../services/storage_service.dart';
 
@@ -14,6 +15,9 @@ class HealthyMeState {
   final List<LabResult> labs;
   final List<ProgressPhoto> photos;
   final Map<String, String> metricSources;
+  final bool dailyStateEnabled;
+  final int dailyStateStartMinutes;
+  final List<DailyStateEntry> dailyStates;
 
   const HealthyMeState({
     this.profile = const UserProfile(),
@@ -23,6 +27,9 @@ class HealthyMeState {
     this.labs = const [],
     this.photos = const [],
     this.metricSources = const {},
+    this.dailyStateEnabled = true,
+    this.dailyStateStartMinutes = 8 * 60,
+    this.dailyStates = const [],
   });
 
   double? get currentWeightLb =>
@@ -42,6 +49,9 @@ class HealthyMeState {
     List<LabResult>? labs,
     List<ProgressPhoto>? photos,
     Map<String, String>? metricSources,
+    bool? dailyStateEnabled,
+    int? dailyStateStartMinutes,
+    List<DailyStateEntry>? dailyStates,
   }) {
     return HealthyMeState(
       profile: profile ?? this.profile,
@@ -51,6 +61,10 @@ class HealthyMeState {
       labs: labs ?? this.labs,
       photos: photos ?? this.photos,
       metricSources: metricSources ?? this.metricSources,
+      dailyStateEnabled: dailyStateEnabled ?? this.dailyStateEnabled,
+      dailyStateStartMinutes:
+          dailyStateStartMinutes ?? this.dailyStateStartMinutes,
+      dailyStates: dailyStates ?? this.dailyStates,
     );
   }
 
@@ -62,6 +76,9 @@ class HealthyMeState {
         'labs': labs.map((e) => e.toJson()).toList(),
         'photos': photos.map((e) => e.toJson()).toList(),
         'metricSources': metricSources,
+        'dailyStateEnabled': dailyStateEnabled,
+        'dailyStateStartMinutes': dailyStateStartMinutes,
+        'dailyStates': dailyStates.map((e) => e.toJson()).toList(),
       };
 
   factory HealthyMeState.fromJson(Map<String, dynamic> json) {
@@ -93,6 +110,16 @@ class HealthyMeState {
       metricSources:
           (json['metricSources'] as Map<String, dynamic>? ?? const {})
               .map((key, value) => MapEntry(key, value.toString())),
+      dailyStateEnabled: json['dailyStateEnabled'] != false,
+      dailyStateStartMinutes:
+          ((json['dailyStateStartMinutes'] as num?)?.toInt() ?? 8 * 60)
+              .clamp(0, (24 * 60) - 1)
+              .toInt(),
+      dailyStates:
+          (json['dailyStates'] as List<dynamic>? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(DailyStateEntry.fromJson)
+              .toList(),
     );
   }
 
@@ -223,6 +250,41 @@ class AppStateNotifier extends Notifier<HealthyMeState> {
         ),
       ),
     );
+  }
+
+  void setDailyStateSettings({bool? enabled, int? startMinutes}) {
+    _set(
+      state.copyWith(
+        dailyStateEnabled: enabled ?? state.dailyStateEnabled,
+        dailyStateStartMinutes: (startMinutes ?? state.dailyStateStartMinutes)
+            .clamp(0, (24 * 60) - 1)
+            .toInt(),
+      ),
+    );
+  }
+
+  void saveDailyState(DailyStateEntry entry) {
+    final next = [
+      for (final item in state.dailyStates)
+        if (item.dayKey != entry.dayKey) item,
+      entry,
+    ]..sort((a, b) => a.date.compareTo(b.date));
+    _set(state.copyWith(dailyStates: next));
+  }
+
+  void markDailyStateToday(String status) {
+    saveDailyState(DailyStateEntry(date: DateTime.now(), status: status));
+  }
+
+  void setDailyStateFeedback(String dayKey, String feedback) {
+    final next = [
+      for (final item in state.dailyStates)
+        if (item.dayKey == dayKey)
+          item.copyWith(resetFeedback: feedback)
+        else
+          item,
+    ];
+    _set(state.copyWith(dailyStates: next));
   }
 }
 

@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme/app_theme.dart';
+import 'screens/daily_state_screen.dart';
 import 'screens/diet/diet_shell.dart';
 import 'screens/health/health_shell.dart';
 import 'screens/home_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'state/app_state.dart';
+import 'widgets/morning_checkin_gate.dart';
 
 class HealthyMeApp extends ConsumerWidget {
   const HealthyMeApp({super.key});
@@ -24,9 +26,10 @@ class HealthyMeApp extends ConsumerWidget {
       routes: {
         '/diet': (_) => const DietShell(),
         '/health': (_) => const HealthShell(),
+        '/daily-state': (_) => const DailyStateScreen(),
       },
       home: state.profile.completed
-          ? const HomeShell()
+          ? const MorningCheckInGate(child: HomeShell())
           : const OnboardingScreen(),
     );
   }

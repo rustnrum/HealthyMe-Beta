@@ -17,7 +17,16 @@ class RecoveryDetailScreen extends ConsumerWidget {
     final color = _bandColor(report.band);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Recovery')),
+      appBar: AppBar(
+        title: const Text('Recovery'),
+        actions: [
+          IconButton(
+            tooltip: 'Daily State',
+            icon: const Icon(Icons.self_improvement_rounded),
+            onPressed: () => Navigator.of(context).pushNamed('/daily-state'),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 30),
         children: [
@@ -105,7 +114,8 @@ class RecoveryDetailScreen extends ConsumerWidget {
               children: [
                 for (var i = 0; i < report.contributors.length; i++) ...[
                   _ContributorRow(item: report.contributors[i]),
-                  if (i != report.contributors.length - 1) const Divider(height: 1),
+                  if (i != report.contributors.length - 1)
+                    const Divider(height: 1),
                 ],
               ],
             ),
@@ -125,7 +135,7 @@ class RecoveryDetailScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 14),
           const Text(
-            'Recovery is a wellness estimate, not a medical diagnosis. Nutrition will become a contributor only after the Diet section has actual meal data.',
+            'Recovery is a wellness estimate, not a medical diagnosis. Daily State is a Healthy Me subjective input, not an official SRSS score. Nutrition will become a contributor only after the Diet section has actual meal data.',
             style: TextStyle(
               color: AppTheme.textMuted,
               fontSize: 12.5,
@@ -139,15 +149,15 @@ class RecoveryDetailScreen extends ConsumerWidget {
 
   static String _meaning(RecoveryReport report) {
     if (report.score == null) {
-      return 'Healthy Me does not have enough recovery telemetry yet. Sleep, cardio and connected workout history will improve this estimate.';
+      return 'Healthy Me does not have enough recovery telemetry yet. Daily State, sleep, cardio and connected workout history will improve this estimate.';
     }
     if (report.band == RecoveryBand.good) {
-      return 'Your available sleep, cardiovascular, breathing and recent training-load signals are generally supportive of normal activity today.';
+      return 'Your available subjective, sleep, cardiovascular, breathing and recent training-load signals are generally supportive of normal activity today.';
     }
     if (report.band == RecoveryBand.fair) {
       return 'One or more recovery signals are less favorable than your recent pattern. A sensible training day is still possible, but avoid treating one score as a command.';
     }
-    return 'Several available recovery signals are off your recent pattern. Consider an easier training day and prioritize sleep and hydration.';
+    return 'Several available recovery signals are off your recent pattern. Consider an easier training day and prioritize recovery basics.';
   }
 
   static Color _bandColor(RecoveryBand band) {
@@ -182,6 +192,7 @@ class _ContributorRow extends StatelessWidget {
                 : AppTheme.rose;
     final icon = switch (item.name) {
       'Sleep' => Icons.bedtime_rounded,
+      'Daily state' => Icons.self_improvement_rounded,
       'Cardio' => Icons.favorite_rounded,
       'HRV' => Icons.insights_rounded,
       'Resting HR' => Icons.favorite_border_rounded,

@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../models/models.dart';
 import '../state/app_state.dart';
+import 'daily_state_service.dart';
 import 'sleep_guidance_service.dart';
 
 enum RecoveryBand { good, fair, watch, noData }
@@ -40,15 +41,19 @@ class RecoveryReport {
   });
 }
 
-/// Healthy Me recovery readiness estimate.
+/// Healthy Me recovery wellness estimate.
 ///
-/// This intentionally does not copy a proprietary wearable formula. It uses
-/// the same broad signal families used by major readiness systems: recent
-/// sleep, HRV versus personal baseline, resting HR versus personal baseline,
-/// respiratory-rate stability, and recent training load. Missing signals are
-/// excluded rather than guessed, and [confidence] reflects data coverage.
+/// Objective telemetry and the optional Daily State check-in are blended into
+/// a transparent app score. This does not copy a proprietary wearable formula
+/// and is not an official score from SRSS or a medical/diagnostic instrument.
+/// Missing signals are excluded rather than guessed, and [confidence] reflects
+/// how much of the configured signal set is actually available.
 class RecoveryService {
+  // Keep the original objective recovery formula intact. Daily State is
+  // blended only after an actual check-in is completed so enabling the feature
+  // cannot change recovery by itself.
   static const int _sleepWeight = 35;
+  static const int _dailyStateWeight = 30;
   static const int _hrvWeight = 20;
   static const int _rhrWeight = 15;
   static const int _breathingWeight = 10;
@@ -57,6 +62,7 @@ class RecoveryService {
   static RecoveryReport build(HealthyMeState app) {
     final contributors = <RecoveryContributor>[
       _sleepContributor(app),
+      _dailyStateContributor(app),
       _hrvContributor(app.health),
       _restingHeartRateContributor(app.health),
       _breathingContributor(app.health),
@@ -70,28 +76,55 @@ class RecoveryService {
       ),
     ];
 
-    final scored = contributors.where((item) => item.available && item.score != null).toList();
+    final scored = contributors
+        .where((item) => item.available && item.score != null)
+        .toList();
     if (scored.isEmpty) {
       return RecoveryReport(
         score: null,
         confidence: 0,
         band: RecoveryBand.noData,
         label: 'No data',
-        summary: 'Recovery needs sleep, cardio baseline or workout telemetry.',
+        summary: 'Recovery needs a Daily State check-in, sleep, cardio baseline or workout telemetry.',
         contributors: contributors,
       );
     }
 
-    final totalWeight = scored.fold<int>(0, (sum, item) => sum + item.weight);
-    final weighted = scored.fold<int>(
+    final objectiveScored = scored.where((item) => item.name != 'Daily state').toList();
+    final objectiveWeight =
+        objectiveScored.fold<int>(0, (sum, item) => sum + item.weight);
+    final objectiveWeighted = objectiveScored.fold<int>(
       0,
       (sum, item) => sum + (item.score ?? 0) * item.weight,
     );
-    final score = (weighted / max(1, totalWeight)).round().clamp(0, 100).toInt();
+    final objectiveScore = objectiveScored.isEmpty
+        ? null
+        : (objectiveWeighted / max(1, objectiveWeight))
+            .round()
+            .clamp(0, 100)
+            .toInt();
 
-    // Confidence is deliberately tied to usable signal coverage rather than
-    // pretending a partial dataset is as reliable as a full one.
-    final confidence = totalWeight.clamp(0, 100).toInt();
+    final dailyItems =
+        scored.where((item) => item.name == 'Daily state').toList();
+    final dailyScore = dailyItems.isEmpty ? null : dailyItems.first.score;
+
+    final int score;
+    if (objectiveScore != null && dailyScore != null) {
+      score = (objectiveScore * 0.70 + dailyScore * 0.30)
+          .round()
+          .clamp(0, 100)
+          .toInt();
+    } else if (objectiveScore != null) {
+      score = objectiveScore;
+    } else {
+      score = dailyScore!;
+    }
+
+    final objectiveConfidence =
+        (objectiveWeight / 100 * 100).round().clamp(0, 100).toInt();
+    final confidence = dailyScore == null
+        ? objectiveConfidence
+        : (objectiveConfidence * 0.70 + 30).round().clamp(0, 100).toInt();
 
     final band = score >= 80
         ? RecoveryBand.good
@@ -106,8 +139,10 @@ class RecoveryService {
                 ? 'Low'
                 : 'Very low';
 
-    final ranked = [...scored]..sort((a, b) => (a.score ?? 100).compareTo(b.score ?? 100));
-    final lowest = ranked.where((item) => (item.score ?? 100) < 80).take(2).toList();
+    final ranked = [...scored]
+      ..sort((a, b) => (a.score ?? 100).compareTo(b.score ?? 100));
+    final lowest =
+        ranked.where((item) => (item.score ?? 100) < 80).take(2).toList();
     final summary = lowest.isEmpty
         ? 'Recovery signals are close to your recent baseline.'
         : '${lowest.map((item) => item.name.toLowerCase()).join(' + ')} are pulling recovery down.';
@@ -119,6 +154,38 @@ class RecoveryService {
       label: label,
       summary: summary,
       contributors: contributors,
+    );
+  }
+
+  static RecoveryContributor _dailyStateContributor(HealthyMeState app) {
+    if (!app.dailyStateEnabled) {
+      return const RecoveryContributor(
+        name: 'Daily state',
+        score: null,
+        detail: 'Morning check-in disabled',
+        available: false,
+        weight: 0,
+      );
+    }
+
+    final entry = DailyStateService.today(app);
+    final score = DailyStateService.recoveryEstimate(entry);
+    if (entry == null || score == null) {
+      return const RecoveryContributor(
+        name: 'Daily state',
+        score: null,
+        detail: 'Morning check-in not completed today',
+        available: false,
+        weight: _dailyStateWeight,
+      );
+    }
+
+    return RecoveryContributor(
+      name: 'Daily state',
+      score: score,
+      detail:
+          'Recovery ${entry.recoveryAverage!.toStringAsFixed(1)}/6 • Stress ${entry.stressAverage!.toStringAsFixed(1)}/6',
+      weight: _dailyStateWeight,
     );
   }
 
@@ -140,7 +207,8 @@ class RecoveryService {
 
     double durationScore;
     if (h.sleepMinutes < target) {
-      durationScore = (h.sleepMinutes / target * 100).clamp(35, 100).toDouble();
+      durationScore =
+          (h.sleepMinutes / target * 100).clamp(35, 100).toDouble();
     } else if (upper != null && h.sleepMinutes > upper + 90) {
       durationScore = 88;
     } else {
@@ -150,18 +218,21 @@ class RecoveryService {
     final recent = h.sleepMinutes7.where((v) => v > 0).toList();
     double balanceScore = durationScore;
     if (recent.length >= 4) {
-      final history = recent.length > 1 ? recent.sublist(0, recent.length - 1) : recent;
+      final history =
+          recent.length > 1 ? recent.sublist(0, recent.length - 1) : recent;
       final avg = history.reduce((a, b) => a + b) / history.length;
       balanceScore = (avg / target * 100).clamp(45, 100).toDouble();
     }
 
-    // Last night matters most, but a single long night should not completely
-    // erase several short nights.
-    final score = (durationScore * 0.70 + balanceScore * 0.30).round().clamp(0, 100).toInt();
+    final score = (durationScore * 0.70 + balanceScore * 0.30)
+        .round()
+        .clamp(0, 100)
+        .toInt();
 
     String detail;
     if (recent.length >= 4) {
-      final history = recent.length > 1 ? recent.sublist(0, recent.length - 1) : recent;
+      final history =
+          recent.length > 1 ? recent.sublist(0, recent.length - 1) : recent;
       final avg = history.reduce((a, b) => a + b) / history.length;
       final delta = h.sleepMinutes - avg;
       final comparison = delta.abs() < 20
@@ -218,7 +289,8 @@ class RecoveryService {
     return RecoveryContributor(
       name: 'HRV',
       score: score,
-      detail: '${current.round()} ms • ${pct >= 0 ? '+' : ''}$pct% vs baseline',
+      detail:
+          '${current.round()} ms • ${pct >= 0 ? '+' : ''}$pct% vs baseline',
       weight: _hrvWeight,
     );
   }
@@ -252,7 +324,8 @@ class RecoveryService {
     return RecoveryContributor(
       name: 'Resting HR',
       score: score,
-      detail: '${current.round()} bpm • ${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)} vs baseline',
+      detail:
+          '${current.round()} bpm • ${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)} vs baseline',
       weight: _rhrWeight,
     );
   }
@@ -286,7 +359,8 @@ class RecoveryService {
     return RecoveryContributor(
       name: 'Breathing',
       score: score,
-      detail: '${current.toStringAsFixed(1)} br/min • ${delta.toStringAsFixed(1)} from baseline',
+      detail:
+          '${current.toStringAsFixed(1)} br/min • ${delta.toStringAsFixed(1)} from baseline',
       weight: _breathingWeight,
     );
   }
@@ -323,10 +397,8 @@ class RecoveryService {
       }
     }
 
-    // Convert the older 18-day window to a 3-day expected load so we compare
-    // like with like. This is a transparent duration/intensity estimate, not a
-    // claim to reproduce Garmin EPOC or a proprietary wearable algorithm.
-    final expectedThreeDayLoad = baselineLoad > 0 ? baselineLoad / 18 * 3 : 0.0;
+    final expectedThreeDayLoad =
+        baselineLoad > 0 ? baselineLoad / 18 * 3 : 0.0;
     int score;
     String comparison;
     if (recentLoad == 0) {
