@@ -1,0 +1,111 @@
+name: Update and Build Healthy Me Beta v0.9 Source Discovery
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'HealthyMe-v0.9-SOURCE-DISCOVERY.zip'
+      - '.github/workflows/UPDATE-v0.9-source-discovery.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Expand v0.9 source-discovery overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE="HealthyMe-v0.9-SOURCE-DISCOVERY.zip"
+          test -f "$ARCHIVE"
+
+          rm -rf /tmp/healthy-me-v09
+          mkdir -p /tmp/healthy-me-v09
+          unzip -q -o "$ARCHIVE" -d /tmp/healthy-me-v09
+          cp -a /tmp/healthy-me-v09/. "$GITHUB_WORKSPACE"/
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Ensure Android SDK 37
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -d "${ANDROID_HOME}/platforms/android-37" ]; then
+            "$SDKMANAGER" "platforms;android-37"
+          fi
+
+      - name: Create Android platform shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f android/gradlew ]; then
+            rm -rf /tmp/healthy_me_android
+            flutter create \
+              --platforms=android \
+              --org com.rustnrum \
+              --project-name healthy_me \
+              --no-pub \
+              /tmp/healthy_me_android
+            cp -R /tmp/healthy_me_android/android ./android
+          fi
+
+          bash scripts/prepare_android.sh
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build Beta v0.9 APK
+        run: flutter build apk --debug
+
+      - name: Commit validated v0.9 source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -f HealthyMe-v0.9-SOURCE-DISCOVERY.zip
+
+          rm -rf android
+          git checkout -- android 2>/dev/null || true
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+          else
+            git commit -m "Healthy Me Beta v0.9 source discovery"
+            git push origin HEAD:main
+          fi
+
+      - name: Upload Beta v0.9 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HealthyMe-Beta-v0.9-source-discovery-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
