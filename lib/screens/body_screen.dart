@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/formatters.dart';
 import '../core/theme/app_theme.dart';
 import '../models/models.dart';
+import '../services/source_name_service.dart';
 import '../state/app_state.dart';
 import '../widgets/charts.dart';
 import '../widgets/command_card.dart';
@@ -119,6 +120,25 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
                             ),
                           ),
                         ],
+                        const SizedBox(height: 5),
+                        Text(
+                          app.health.weightLb == null
+                              ? 'Source: Manual'
+                              : 'Source: ${_sourceLabel(app, 'Weight')}',
+                          style: const TextStyle(
+                            color: AppTheme.cyan,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (app.health.freshness['Weight'] != null)
+                          Text(
+                            'Weight data ${relativeAge(app.health.freshness['Weight'])}',
+                            style: const TextStyle(
+                              color: AppTheme.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -252,7 +272,11 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
               ),
               _dataLine(
                 'Weight type',
-                app.health.weightLb != null ? 'Measured' : 'Manual',
+                app.health.weightLb != null ? 'Device reading' : 'Manual',
+              ),
+              _dataLine(
+                'Weight source',
+                app.health.weightLb != null ? _sourceLabel(app, 'Weight') : 'Manual',
               ),
               _dataLine(
                 'BMI',
@@ -261,8 +285,24 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
               _dataLine('BMI type', 'Calculated'),
               _dataLine(
                 'Body fat type',
-                app.health.bodyFatPercent == null ? 'No measured reading' : 'Measured',
+                app.health.bodyFatPercent == null ? 'No device reading' : 'Device reading',
               ),
+              if (app.health.bodyFatPercent != null)
+                _dataLine('Body fat source', _sourceLabel(app, 'Body fat')),
+              if (app.health.bodyWaterMassKg != null)
+                _dataLine(
+                  'Body water',
+                  _bodyWaterLabel(app),
+                ),
+              if (app.health.bodyWaterMassKg != null)
+                _dataLine('Body water source', _sourceLabel(app, 'Body water')),
+              if (app.health.leanBodyMassKg != null)
+                _dataLine(
+                  'Lean body mass',
+                  '${(app.health.leanBodyMassKg! * 2.2046226218).toStringAsFixed(1)} lb',
+                ),
+              if (app.health.leanBodyMassKg != null)
+                _dataLine('Lean mass source', _sourceLabel(app, 'Lean body mass')),
               if (app.health.bodyFatPercent != null)
                 _dataLine(
                   'Body-fat freshness',
@@ -390,7 +430,7 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
                 Text(
                   bodyFat == null
                       ? 'Healthy Me does not ask you to manually enter body fat.'
-                      : 'Measured body-fat data read through Health Connect.',
+                      : 'Device body-fat reading from ${_sourceLabel(app, 'Body fat')}.',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
@@ -403,6 +443,30 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
         ],
       ),
     );
+  }
+
+  String _sourceLabel(HealthyMeState app, String metric) {
+    final key = app.health.resolvedSources[metric];
+    if (key == null || key.isEmpty) return 'Connected source';
+    return app.health.sourceLabels[key] ?? SourceNameService.friendly(key);
+  }
+
+  String _bodyWaterLabel(HealthyMeState app) {
+    final kg = app.health.bodyWaterMassKg;
+    if (kg == null) return '—';
+    final pounds = kg * 2.2046226218;
+    final weight = app.health.weightLb;
+    final waterSource = app.health.resolvedSources['Body water'];
+    final weightSource = app.health.resolvedSources['Weight'];
+    if (weight != null &&
+        weight > 0 &&
+        waterSource != null &&
+        weightSource != null &&
+        SourceNameService.sameProvider(waterSource, weightSource)) {
+      final percent = (pounds / weight * 100).clamp(0, 100);
+      return '${percent.toStringAsFixed(1)}% • ${pounds.toStringAsFixed(1)} lb';
+    }
+    return '${pounds.toStringAsFixed(1)} lb';
   }
 
   Widget _measurementGrid(BodyMeasurements m, {bool preview = false}) {

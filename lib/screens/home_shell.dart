@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,16 +24,26 @@ class HomeShell extends ConsumerStatefulWidget {
 
 class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   bool _autoSyncStarted = false;
+  Timer? _foregroundSyncTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _foregroundSyncTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (!mounted) return;
+      final app = ref.read(appStateProvider);
+      final sync = ref.read(healthSyncProvider);
+      if (app.health.authorized && !sync.isLoading) {
+        ref.read(healthSyncProvider.notifier).sync();
+      }
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _foregroundSyncTimer?.cancel();
     super.dispose();
   }
 

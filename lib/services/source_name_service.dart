@@ -1,9 +1,42 @@
 class SourceNameService {
+  static String key({
+    required String sourceId,
+    required String sourceName,
+  }) {
+    final id = sourceId.trim();
+    if (id.isNotEmpty) return id;
+    return sourceName.trim();
+  }
+
+  static String displayFor({
+    required String sourceId,
+    required String sourceName,
+  }) {
+    final name = sourceName.trim();
+    if (name.isNotEmpty && !_looksLikePackageId(name)) {
+      return friendly(name);
+    }
+    final id = sourceId.trim();
+    if (id.isNotEmpty) return friendly(id);
+    return friendly(name);
+  }
+
   static String friendly(String source) {
     final raw = source.trim();
     final lower = raw.toLowerCase();
     if (lower.isEmpty) return 'Connected source';
 
+    // These mappings are display-only. Metric behavior remains provider-neutral.
+    if (lower.contains('com.app.cq.ring') ||
+        lower == 'qring' ||
+        lower.contains('qring')) {
+      return 'QRing';
+    }
+    if (lower.contains('com.xs.imoni') ||
+        lower == 'imoni' ||
+        lower.contains('imoni')) {
+      return 'iMoni';
+    }
     if (lower.contains('health connect') ||
         lower.contains('healthconnect') ||
         lower.contains('com.android.healthconnect') ||
@@ -106,7 +139,17 @@ class SourceNameService {
   }
 
   static bool sameProvider(String a, String b) {
+    if (a.trim().isEmpty || b.trim().isEmpty) return false;
     if (a.trim() == b.trim()) return true;
     return friendly(a) == friendly(b);
+  }
+
+  static bool pointMatches({
+    required String selected,
+    required String sourceId,
+    required String sourceName,
+  }) {
+    return sameProvider(selected, sourceId) ||
+        sameProvider(selected, sourceName);
   }
 }

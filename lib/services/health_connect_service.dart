@@ -21,6 +21,8 @@ class HealthConnectService {
     HealthDataType.BLOOD_OXYGEN,
     HealthDataType.WEIGHT,
     HealthDataType.BODY_FAT_PERCENTAGE,
+    HealthDataType.BODY_WATER_MASS,
+    HealthDataType.LEAN_BODY_MASS,
     HealthDataType.SLEEP_ASLEEP,
     HealthDataType.SLEEP_AWAKE,
     HealthDataType.SLEEP_REM,
@@ -110,26 +112,87 @@ class HealthConnectService {
     );
     points = _health.removeDuplicates(points);
 
-    final sources = points
-        .map((p) => p.sourceName.trim())
-        .where((name) => name.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    String originKey(HealthDataPoint point) => SourceNameService.key(
+          sourceId: point.sourceId,
+          sourceName: point.sourceName,
+        );
+
+    String originLabel(HealthDataPoint point) => SourceNameService.displayFor(
+          sourceId: point.sourceId,
+          sourceName: point.sourceName,
+        );
+
+    final sourceLabels = <String, String>{};
+    final sourceLastSeen = <String, DateTime>{};
+    for (final point in points) {
+      final key = originKey(point);
+      if (key.isEmpty) continue;
+      sourceLabels[key] = originLabel(point);
+      final previous = sourceLastSeen[key];
+      if (previous == null || point.dateTo.isAfter(previous)) {
+        sourceLastSeen[key] = point.dateTo;
+      }
+    }
+
+    final sources = sourceLabels.keys.toList()
+      ..sort((a, b) => (sourceLabels[a] ?? a).compareTo(sourceLabels[b] ?? b));
 
     bool sourceMatches(HealthDataPoint point, String? selectedSource) {
       if (selectedSource == null || selectedSource == 'Auto') return true;
-      return SourceNameService.sameProvider(point.sourceName, selectedSource);
+      return SourceNameService.pointMatches(
+        selected: selectedSource,
+        sourceId: point.sourceId,
+        sourceName: point.sourceName,
+      );
+    }
+
+    final resolvedSources = <String, String>{};
+
+    String? latestOriginForTypes(Iterable<HealthDataType> types) {
+      final allowed = types.toSet();
+      HealthDataPoint? latest;
+      for (final point in points) {
+        if (!allowed.contains(point.type) || originKey(point).isEmpty) continue;
+        if (latest == null || point.dateTo.isAfter(latest.dateTo)) {
+          latest = point;
+        }
+      }
+      return latest == null ? null : originKey(latest);
+    }
+
+    String? resolvedOrigin(
+      String metric,
+      Iterable<HealthDataType> types,
+    ) {
+      final selected = metricSources[metric];
+      if (selected != null && selected != 'Auto') {
+        final matching = points
+            .where((p) => types.contains(p.type) && sourceMatches(p, selected))
+            .toList()
+          ..sort((a, b) => a.dateTo.compareTo(b.dateTo));
+        if (matching.isNotEmpty) {
+          final key = originKey(matching.last);
+          if (key.isNotEmpty) {
+            resolvedSources[metric] = key;
+            return key;
+          }
+        }
+      }
+
+      final auto = latestOriginForTypes(types);
+      if (auto != null) resolvedSources[metric] = auto;
+      return auto;
     }
 
     List<HealthDataPoint> filtered(
       HealthDataType type,
       String metric,
     ) {
-      final source = metricSources[metric];
+      final resolved = resolvedOrigin(metric, [type]);
+      if (resolved == null) return <HealthDataPoint>[];
       return points.where((p) {
         if (p.type != type) return false;
-        return sourceMatches(p, source);
+        return originKey(p) == resolved;
       }).toList()
         ..sort((a, b) => a.dateTo.compareTo(b.dateTo));
     }
@@ -140,7 +203,8 @@ class HealthConnectService {
     ) {
       return points.where((p) {
         if (p.type != type) return false;
-        return sourceMatches(p, selectedSource);
+        if (selectedSource == null) return true;
+        return originKey(p) == selectedSource || sourceMatches(p, selectedSource);
       }).toList()
         ..sort((a, b) => a.dateTo.compareTo(b.dateTo));
     }
@@ -169,7 +233,23 @@ class HealthConnectService {
 
     final today = DateTime(now.year, now.month, now.day);
 
-    final rawSteps = filtered(HealthDataType.STEPS, 'Steps');
+    final selectedStepSource = metricSources['Steps'];
+    final allStepPoints = points
+        .where((p) => p.type == HealthDataType.STEPS)
+        .toList()
+      ..sort((a, b) => a.dateTo.compareTo(b.dateTo));
+    final rawSteps = selectedStepSource != null && selectedStepSource != 'Auto'
+        ? allStepPoints.where((p) => sourceMatches(p, selectedStepSource)).toList()
+        : allStepPoints;
+    if (selectedStepSource != null &&
+        selectedStepSource != 'Auto' &&
+        rawSteps.isNotEmpty) {
+      resolvedSources['Steps'] = originKey(rawSteps.last);
+    } else {
+      const aggregateKey = '__health_connect_steps_aggregate__';
+      sourceLabels[aggregateKey] = 'Health Connect aggregate';
+      resolvedSources['Steps'] = aggregateKey;
+    }
 
     int rawStepTotal(DateTime start, DateTime end) {
       var total = 0.0;
@@ -243,12 +323,13 @@ class HealthConnectService {
     // active calories do not have the same aggregate helper in this plugin, so
     // anchor them to one actual motion origin rather than summing Samsung +
     // Garmin + phone records together.
-    final selectedStepSource = metricSources['Steps'];
     final resolvedMotionSource =
         selectedStepSource != null && selectedStepSource != 'Auto'
-            ? selectedStepSource
-            : _latestSourceFor(points, HealthDataType.STEPS) ??
-                _latestSourceFor(points, HealthDataType.DISTANCE_DELTA);
+            ? resolvedSources['Steps']
+            : latestOriginForTypes([
+                HealthDataType.STEPS,
+                HealthDataType.DISTANCE_DELTA,
+              ]);
 
     final calories = filteredForSource(
       HealthDataType.ACTIVE_ENERGY_BURNED,
@@ -265,7 +346,6 @@ class HealthConnectService {
       end: now,
     );
 
-    final sleepSource = metricSources['Sleep'];
     final sleepTypes = <HealthDataType>[
       HealthDataType.SLEEP_ASLEEP,
       HealthDataType.SLEEP_AWAKE,
@@ -274,9 +354,10 @@ class HealthConnectService {
       HealthDataType.SLEEP_DEEP,
     ];
 
+    final sleepResolved = resolvedOrigin('Sleep', sleepTypes);
     final sleepPoints = points.where((p) {
       if (!sleepTypes.contains(p.type)) return false;
-      return sourceMatches(p, sleepSource);
+      return sleepResolved != null && originKey(p) == sleepResolved;
     }).toList();
 
     Map<String, Map<String, int>> sleepByDay = {};
@@ -367,7 +448,7 @@ class HealthConnectService {
 
     final resting = filtered(
       HealthDataType.RESTING_HEART_RATE,
-      'Heart rate',
+      'Resting heart rate',
     );
     final restingValues = resting
         .map(number)
@@ -377,11 +458,11 @@ class HealthConnectService {
 
     final hrv = filtered(
       HealthDataType.HEART_RATE_VARIABILITY_RMSSD,
-      'Heart rate',
+      'HRV',
     );
     final respiratory = filtered(
       HealthDataType.RESPIRATORY_RATE,
-      'Heart rate',
+      'Respiratory rate',
     );
     final hrvValues = hrv
         .map(number)
@@ -395,13 +476,21 @@ class HealthConnectService {
         .toList();
     final oxygen = filtered(
       HealthDataType.BLOOD_OXYGEN,
-      'Heart rate',
+      'SpO2',
     );
 
     final weight = filtered(HealthDataType.WEIGHT, 'Weight');
     final bodyFat = filtered(
       HealthDataType.BODY_FAT_PERCENTAGE,
       'Body fat',
+    );
+    final bodyWater = filtered(
+      HealthDataType.BODY_WATER_MASS,
+      'Body water',
+    );
+    final leanBodyMass = filtered(
+      HealthDataType.LEAN_BODY_MASS,
+      'Lean body mass',
     );
 
     final weightHistory = weight
@@ -410,9 +499,7 @@ class HealthConnectService {
           (p) => WeightPoint(
             date: p.dateTo,
             pounds: number(p)!,
-            source: p.sourceName.isEmpty
-                ? 'Health Connect'
-                : SourceNameService.friendly(p.sourceName),
+            source: originLabel(p),
           ),
         )
         .toList();
@@ -424,9 +511,7 @@ class HealthConnectService {
         type: _friendlyWorkout(type),
         start: p.dateFrom,
         end: p.dateTo,
-        source: p.sourceName.isEmpty
-            ? 'Health Connect'
-            : SourceNameService.friendly(p.sourceName),
+        source: originLabel(p),
       );
     }).toList();
 
@@ -446,9 +531,15 @@ class HealthConnectService {
     addFresh('Steps', rawSteps);
     addFresh('Activity', [...calories, ...distance]);
     addFresh('Sleep', sleepPoints);
-    addFresh('Heart rate', [...heart, ...resting]);
+    addFresh('Heart rate', heart);
+    addFresh('Resting heart rate', resting);
+    addFresh('HRV', hrv);
+    addFresh('Respiratory rate', respiratory);
+    addFresh('SpO2', oxygen);
     addFresh('Weight', weight);
     addFresh('Body fat', bodyFat);
+    addFresh('Body water', bodyWater);
+    addFresh('Lean body mass', leanBodyMass);
     addFresh('Workouts', workoutPoints);
 
     double? lastNumber(List<HealthDataPoint> list) {
@@ -462,29 +553,31 @@ class HealthConnectService {
 
     List<String> originsFor(Iterable<HealthDataType> types) {
       final allowed = types.toSet();
-      return SourceNameService.uniqueRawByFriendly(
-        points
-            .where((point) => allowed.contains(point.type))
-            .map((point) => point.sourceName.trim())
-            .where((source) => source.isNotEmpty),
-      )..sort(
-          (a, b) => SourceNameService.friendly(a)
-              .compareTo(SourceNameService.friendly(b)),
-        );
+      final values = points
+          .where((point) => allowed.contains(point.type))
+          .map(originKey)
+          .where((source) => source.isNotEmpty)
+          .toSet()
+          .toList();
+      values.sort(
+        (a, b) => (sourceLabels[a] ?? SourceNameService.friendly(a))
+            .compareTo(sourceLabels[b] ?? SourceNameService.friendly(b)),
+      );
+      return values;
     }
 
     final availableSources = <String, List<String>>{
       'Steps': originsFor([HealthDataType.STEPS]),
       'Sleep': originsFor(sleepTypes),
-      'Heart rate': originsFor([
-        HealthDataType.HEART_RATE,
-        HealthDataType.RESTING_HEART_RATE,
-        HealthDataType.HEART_RATE_VARIABILITY_RMSSD,
-        HealthDataType.RESPIRATORY_RATE,
-        HealthDataType.BLOOD_OXYGEN,
-      ]),
+      'Heart rate': originsFor([HealthDataType.HEART_RATE]),
+      'Resting heart rate': originsFor([HealthDataType.RESTING_HEART_RATE]),
+      'HRV': originsFor([HealthDataType.HEART_RATE_VARIABILITY_RMSSD]),
+      'Respiratory rate': originsFor([HealthDataType.RESPIRATORY_RATE]),
+      'SpO2': originsFor([HealthDataType.BLOOD_OXYGEN]),
       'Weight': originsFor([HealthDataType.WEIGHT]),
       'Body fat': originsFor([HealthDataType.BODY_FAT_PERCENTAGE]),
+      'Body water': originsFor([HealthDataType.BODY_WATER_MASS]),
+      'Lean body mass': originsFor([HealthDataType.LEAN_BODY_MASS]),
       'Workouts': originsFor([HealthDataType.WORKOUT]),
     };
 
@@ -517,6 +610,8 @@ class HealthConnectService {
       hrv30: hrvValues,
       weightLb: lastNumber(weight),
       bodyFatPercent: lastNumber(bodyFat),
+      bodyWaterMassKg: lastNumber(bodyWater),
+      leanBodyMassKg: lastNumber(leanBodyMass),
       bloodOxygenPercent: lastNumber(oxygen),
       respiratoryRate: lastNumber(respiratory),
       hrvMs: lastNumber(hrv),
@@ -524,6 +619,9 @@ class HealthConnectService {
       workouts: workouts,
       detectedSources: sources,
       availableSources: availableSources,
+      sourceLabels: sourceLabels,
+      resolvedSources: resolvedSources,
+      sourceLastSeen: sourceLastSeen,
       freshness: freshness,
     );
   }
@@ -538,20 +636,6 @@ class HealthConnectService {
     // Health Connect's canonical distance storage is meters. Unknown units from
     // Android are therefore treated as meters instead of being displayed raw.
     return value / 1609.344;
-  }
-
-  static String? _latestSourceFor(
-    List<HealthDataPoint> points,
-    HealthDataType type,
-  ) {
-    HealthDataPoint? latest;
-    for (final point in points) {
-      if (point.type != type || point.sourceName.trim().isEmpty) continue;
-      if (latest == null || point.dateTo.isAfter(latest.dateTo)) {
-        latest = point;
-      }
-    }
-    return latest?.sourceName;
   }
 
   static double _sumDistanceMiles(

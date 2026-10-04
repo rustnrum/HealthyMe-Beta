@@ -39,7 +39,7 @@ for required in "Body Status" "Today's focus" "Data freshness" "Signals to watch
   grep -q "$required" "$HOME_FILE" || fail "home screen missing approved section: $required"
 done
 
-for required in "Day" "Week" "Month" "Year" "Workouts" "Weekly activity" "Health Connect recommended"; do
+for required in "Day" "Week" "Month" "Year" "Workouts" "Weekly activity" "Automatic"; do
   grep -q "$required" "$ACTIVITY_FILE" || fail "activity screen missing approved element: $required"
 done
 
@@ -68,7 +68,7 @@ for required in "Health" "Vitals" "Labs"; do
   grep -q "$required" "$HEALTH_SHELL_FILE" || fail "Health module shell missing destination: $required"
 done
 
-grep -q "Health Connect recommended" "$SOURCES_FILE" || fail "source selection must have one clear Health Connect default"
+grep -q "Automatic" "$SOURCES_FILE" || fail "source selection must have one clear automatic default"
 grep -q "Change" "$SOURCES_FILE" || fail "source selection must expose one clear change action"
 grep -q "availableSources" "$SOURCES_FILE" || fail "source options must be metric-specific"
 grep -q "SourceNameService.friendly" "$SOURCES_FILE" || fail "raw provider/package names must be normalized"

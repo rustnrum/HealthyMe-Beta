@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/formatters.dart';
 import '../core/theme/app_theme.dart';
 import '../services/sleep_guidance_service.dart';
+import '../services/source_name_service.dart';
 import '../state/app_state.dart';
 import '../widgets/charts.dart';
 import '../widgets/command_card.dart';
@@ -26,6 +27,12 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
     final app = ref.watch(appStateProvider);
     final h = app.health;
     final guidance = SleepGuidanceService.forAge(app.profile.age);
+    final sleepSourceKey = h.resolvedSources['Sleep'];
+    final sleepSourceLabel = sleepSourceKey == null
+        ? 'No connected source'
+        : (h.sourceLabels[sleepSourceKey] ??
+            SourceNameService.friendly(sleepSourceKey));
+    final sleepFreshness = h.freshness['Sleep'];
     final recent = h.sleepMinutes7.where((value) => value > 0).toList();
     final avg = recent.isEmpty
         ? 0
@@ -75,6 +82,27 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Source: $sleepSourceLabel',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.purple,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (sleepFreshness != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'Sleep data ${relativeAge(sleepFreshness)}',
+                        style: const TextStyle(
+                          color: AppTheme.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 7),
                     Text(
                       'Target: ${guidance.label} based on your age',

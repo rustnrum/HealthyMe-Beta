@@ -229,6 +229,8 @@ class HealthSnapshot {
   final List<double> hrv30;
   final double? weightLb;
   final double? bodyFatPercent;
+  final double? bodyWaterMassKg;
+  final double? leanBodyMassKg;
   final double? bloodOxygenPercent;
   final double? respiratoryRate;
   final double? hrvMs;
@@ -236,6 +238,9 @@ class HealthSnapshot {
   final List<WorkoutEntry> workouts;
   final List<String> detectedSources;
   final Map<String, List<String>> availableSources;
+  final Map<String, String> sourceLabels;
+  final Map<String, String> resolvedSources;
+  final Map<String, DateTime> sourceLastSeen;
   final Map<String, DateTime> freshness;
 
   const HealthSnapshot({
@@ -266,6 +271,8 @@ class HealthSnapshot {
     this.hrv30 = const [],
     this.weightLb,
     this.bodyFatPercent,
+    this.bodyWaterMassKg,
+    this.leanBodyMassKg,
     this.bloodOxygenPercent,
     this.respiratoryRate,
     this.hrvMs,
@@ -273,6 +280,9 @@ class HealthSnapshot {
     this.workouts = const [],
     this.detectedSources = const [],
     this.availableSources = const {},
+    this.sourceLabels = const {},
+    this.resolvedSources = const {},
+    this.sourceLastSeen = const {},
     this.freshness = const {},
   });
 
@@ -305,6 +315,8 @@ class HealthSnapshot {
     List<double>? hrv30,
     double? weightLb,
     double? bodyFatPercent,
+    double? bodyWaterMassKg,
+    double? leanBodyMassKg,
     double? bloodOxygenPercent,
     double? respiratoryRate,
     double? hrvMs,
@@ -312,6 +324,9 @@ class HealthSnapshot {
     List<WorkoutEntry>? workouts,
     List<String>? detectedSources,
     Map<String, List<String>>? availableSources,
+    Map<String, String>? sourceLabels,
+    Map<String, String>? resolvedSources,
+    Map<String, DateTime>? sourceLastSeen,
     Map<String, DateTime>? freshness,
   }) {
     return HealthSnapshot(
@@ -343,6 +358,8 @@ class HealthSnapshot {
       hrv30: hrv30 ?? this.hrv30,
       weightLb: weightLb ?? this.weightLb,
       bodyFatPercent: bodyFatPercent ?? this.bodyFatPercent,
+      bodyWaterMassKg: bodyWaterMassKg ?? this.bodyWaterMassKg,
+      leanBodyMassKg: leanBodyMassKg ?? this.leanBodyMassKg,
       bloodOxygenPercent: bloodOxygenPercent ?? this.bloodOxygenPercent,
       respiratoryRate: respiratoryRate ?? this.respiratoryRate,
       hrvMs: hrvMs ?? this.hrvMs,
@@ -350,6 +367,9 @@ class HealthSnapshot {
       workouts: workouts ?? this.workouts,
       detectedSources: detectedSources ?? this.detectedSources,
       availableSources: availableSources ?? this.availableSources,
+      sourceLabels: sourceLabels ?? this.sourceLabels,
+      resolvedSources: resolvedSources ?? this.resolvedSources,
+      sourceLastSeen: sourceLastSeen ?? this.sourceLastSeen,
       freshness: freshness ?? this.freshness,
     );
   }
@@ -382,6 +402,8 @@ class HealthSnapshot {
         'hrv30': hrv30,
         'weightLb': weightLb,
         'bodyFatPercent': bodyFatPercent,
+        'bodyWaterMassKg': bodyWaterMassKg,
+        'leanBodyMassKg': leanBodyMassKg,
         'bloodOxygenPercent': bloodOxygenPercent,
         'respiratoryRate': respiratoryRate,
         'hrvMs': hrvMs,
@@ -389,6 +411,11 @@ class HealthSnapshot {
         'workouts': workouts.map((e) => e.toJson()).toList(),
         'detectedSources': detectedSources,
         'availableSources': availableSources,
+        'sourceLabels': sourceLabels,
+        'resolvedSources': resolvedSources,
+        'sourceLastSeen': sourceLastSeen.map(
+          (key, value) => MapEntry(key, value.toIso8601String()),
+        ),
         'freshness': freshness.map(
           (key, value) => MapEntry(key, value.toIso8601String()),
         ),
@@ -409,6 +436,12 @@ class HealthSnapshot {
         json['freshness'] as Map<String, dynamic>? ?? const {};
     final rawSources =
         json['availableSources'] as Map<String, dynamic>? ?? const {};
+    final rawSourceLabels =
+        json['sourceLabels'] as Map<String, dynamic>? ?? const {};
+    final rawResolvedSources =
+        json['resolvedSources'] as Map<String, dynamic>? ?? const {};
+    final rawSourceLastSeen =
+        json['sourceLastSeen'] as Map<String, dynamic>? ?? const {};
 
     return HealthSnapshot(
       authorized: json['authorized'] == true,
@@ -447,6 +480,8 @@ class HealthSnapshot {
       hrv30: doubles('hrv30'),
       weightLb: (json['weightLb'] as num?)?.toDouble(),
       bodyFatPercent: (json['bodyFatPercent'] as num?)?.toDouble(),
+      bodyWaterMassKg: (json['bodyWaterMassKg'] as num?)?.toDouble(),
+      leanBodyMassKg: (json['leanBodyMassKg'] as num?)?.toDouble(),
       bloodOxygenPercent:
           (json['bloodOxygenPercent'] as num?)?.toDouble(),
       respiratoryRate: (json['respiratoryRate'] as num?)?.toDouble(),
@@ -471,6 +506,18 @@ class HealthSnapshot {
           (value as List<dynamic>? ?? const [])
               .map((item) => item.toString())
               .toList(),
+        ),
+      ),
+      sourceLabels: rawSourceLabels.map(
+        (key, value) => MapEntry(key, value.toString()),
+      ),
+      resolvedSources: rawResolvedSources.map(
+        (key, value) => MapEntry(key, value.toString()),
+      ),
+      sourceLastSeen: rawSourceLastSeen.map(
+        (key, value) => MapEntry(
+          key,
+          DateTime.tryParse(value.toString()) ?? DateTime.now(),
         ),
       ),
       freshness: rawFresh.map(

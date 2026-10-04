@@ -30,4 +30,34 @@ void main() {
     ]);
     expect(values.length, 2);
   });
+
+  test('recognizes QRing package id for display only', () {
+    expect(SourceNameService.friendly('com.app.cq.ring'), 'QRing');
+  });
+
+  test('recognizes iMoni package id for display only', () {
+    expect(SourceNameService.friendly('com.xs.imoni'), 'iMoni');
+  });
+
+  test('stable source key prefers sourceId over sourceName', () {
+    expect(
+      SourceNameService.key(
+        sourceId: 'com.app.cq.ring',
+        sourceName: 'QRing',
+      ),
+      'com.app.cq.ring',
+    );
+  });
+
+  test('source matching accepts package id or display name', () {
+    expect(
+      SourceNameService.pointMatches(
+        selected: 'QRing',
+        sourceId: 'com.app.cq.ring',
+        sourceName: 'QRing',
+      ),
+      isTrue,
+    );
+  });
+
 }

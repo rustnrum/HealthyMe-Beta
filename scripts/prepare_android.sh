@@ -29,6 +29,8 @@ if marker not in text:
     <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION" />
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />
     <uses-permission android:name="android.permission.health.READ_BODY_FAT" />
+    <uses-permission android:name="android.permission.health.READ_BODY_WATER_MASS" />
+    <uses-permission android:name="android.permission.health.READ_LEAN_BODY_MASS" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
@@ -129,10 +131,10 @@ from pathlib import Path
 p = Path('android/app/src/main/AndroidManifest.xml')
 s = p.read_text()
 import re
-s = re.sub(r'android:label="[^"]+"', 'android:label="Healthy Me Beta 0.3.5"', s, count=1)
+s = re.sub(r'android:label="[^"]+"', 'android:label="Healthy Me Beta 0.8"', s, count=1)
 p.write_text(s)
 PYLABEL
 
-echo "Healthy Me Beta 0.3.5 Android identity + Health Connect configuration applied."
+echo "Healthy Me Beta 0.8 Android identity + Health Connect configuration applied."
 
 bash scripts/ui_contract_check.sh

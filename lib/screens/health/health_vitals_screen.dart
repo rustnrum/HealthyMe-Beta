@@ -13,11 +13,18 @@ class HealthVitalsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appStateProvider);
     final h = app.health;
-    final sourceRaw = app.metricSources['Heart rate'];
-    final source = sourceRaw == null
-        ? 'Health Connect recommended'
-        : SourceNameService.friendly(sourceRaw);
-    final freshness = h.freshness['Heart rate'];
+
+    String sourceFor(String metric) {
+      final key = h.resolvedSources[metric];
+      if (key == null || key.isEmpty) return 'No connected source';
+      return h.sourceLabels[key] ?? SourceNameService.friendly(key);
+    }
+
+    String detailFor(String metric) {
+      final fresh = h.freshness[metric];
+      final source = sourceFor(metric);
+      return fresh == null ? source : '$source • ${relativeAge(fresh)}';
+    }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 30),
@@ -31,11 +38,9 @@ class HealthVitalsScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 5),
-        Text(
-          freshness == null
-              ? 'No connected vital data available yet.'
-              : '$source • data ${relativeAge(freshness)}',
-          style: const TextStyle(
+        const Text(
+          'Each vital shows the provider that actually supplied that metric.',
+          style: TextStyle(
             color: HealthPalette.textSecondary,
             fontSize: 13,
           ),
@@ -47,11 +52,13 @@ class HealthVitalsScreen extends ConsumerWidget {
           value: h.restingHeartRate == null
               ? '—'
               : '${h.restingHeartRate!.round()} bpm',
+          source: detailFor('Resting heart rate'),
         ),
         _VitalRow(
           icon: Icons.insights_rounded,
           label: 'Heart-rate variability',
           value: h.hrvMs == null ? '—' : '${h.hrvMs!.round()} ms',
+          source: detailFor('HRV'),
         ),
         _VitalRow(
           icon: Icons.bloodtype_rounded,
@@ -59,6 +66,7 @@ class HealthVitalsScreen extends ConsumerWidget {
           value: h.bloodOxygenPercent == null
               ? '—'
               : '${h.bloodOxygenPercent!.toStringAsFixed(1)}%',
+          source: detailFor('SpO2'),
         ),
         _VitalRow(
           icon: Icons.air_rounded,
@@ -66,6 +74,7 @@ class HealthVitalsScreen extends ConsumerWidget {
           value: h.respiratoryRate == null
               ? '—'
               : '${h.respiratoryRate!.toStringAsFixed(1)} /min',
+          source: detailFor('Respiratory rate'),
         ),
         _VitalRow(
           icon: Icons.favorite_border_rounded,
@@ -73,6 +82,7 @@ class HealthVitalsScreen extends ConsumerWidget {
           value: h.latestHeartRate == null
               ? '—'
               : '${h.latestHeartRate!.round()} bpm',
+          source: detailFor('Heart rate'),
         ),
         const SizedBox(height: 8),
         const Text(
@@ -92,11 +102,13 @@ class _VitalRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+  final String source;
 
   const _VitalRow({
     required this.icon,
     required this.label,
     required this.value,
+    required this.source,
   });
 
   @override
@@ -110,6 +122,7 @@ class _VitalRow extends StatelessWidget {
         border: Border.all(color: HealthPalette.border),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 42,
@@ -122,15 +135,31 @@ class _VitalRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: HealthPalette.textSecondary,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: HealthPalette.textSecondary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  source,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: HealthPalette.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(width: 8),
           Text(
             value,
             style: const TextStyle(

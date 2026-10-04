@@ -9,20 +9,44 @@ import '../state/health_sync_provider.dart';
 import '../widgets/command_card.dart';
 import '../widgets/design_widgets.dart';
 
-class SourcesScreen extends ConsumerWidget {
+class SourcesScreen extends ConsumerStatefulWidget {
   const SourcesScreen({super.key});
 
+  @override
+  ConsumerState<SourcesScreen> createState() => _SourcesScreenState();
+}
+
+class _SourcesScreenState extends ConsumerState<SourcesScreen> {
   static const metrics = [
     'Steps',
     'Sleep',
     'Heart rate',
+    'Resting heart rate',
+    'HRV',
+    'SpO2',
+    'Respiratory rate',
     'Weight',
     'Body fat',
+    'Body water',
+    'Lean body mass',
     'Workouts',
   ];
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final app = ref.read(appStateProvider);
+      final sync = ref.read(healthSyncProvider);
+      if (app.health.authorized && !sync.isLoading) {
+        ref.read(healthSyncProvider.notifier).sync();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final app = ref.watch(appStateProvider);
     final sync = ref.watch(healthSyncProvider);
     final h = app.health;
@@ -84,7 +108,7 @@ class SourcesScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Healthy Me reads what is currently available in Health Connect. Refreshing here does not force a watch or another health app to sync first.',
+                  'Healthy Me rescans Health Connect when this page opens, when the app resumes, every few minutes while open, and when you tap Refresh. A device app still has to write its data into Health Connect first.',
                   style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
@@ -119,7 +143,7 @@ class SourcesScreen extends ConsumerWidget {
           const HmSectionHeader(title: 'Data sources'),
           const SizedBox(height: 6),
           const Text(
-            'One setting per metric. Healthy Me shows only readable app names and only sources that have actually supplied that type of data.',
+            'One source per metric. Automatic uses the freshest provider that actually supplied that metric; Steps uses Health Connect’s aggregate result when Automatic is selected.',
             style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 13,
@@ -135,7 +159,9 @@ class SourcesScreen extends ConsumerWidget {
                   _MetricSourceRow(
                     metric: metrics[i],
                     selectedRaw: app.metricSources[metrics[i]],
+                    resolvedRaw: h.resolvedSources[metrics[i]],
                     sources: h.availableSources[metrics[i]] ?? const [],
+                    sourceLabels: h.sourceLabels,
                     freshness: h.freshness[metrics[i]],
                     onChange: () => _chooseSource(
                       context,
@@ -143,6 +169,7 @@ class SourcesScreen extends ConsumerWidget {
                       metric: metrics[i],
                       selectedRaw: app.metricSources[metrics[i]],
                       sources: h.availableSources[metrics[i]] ?? const [],
+                      sourceLabels: h.sourceLabels,
                       authorized: h.authorized,
                     ),
                   ),
@@ -151,6 +178,41 @@ class SourcesScreen extends ConsumerWidget {
               ],
             ),
           ),
+          if (h.detectedSources.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            const HmSectionHeader(title: 'Detected providers'),
+            const SizedBox(height: 6),
+            const Text(
+              'Providers are identified by their Health Connect data origin. This is diagnostic information so you can see what is actually supplying data.',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 10),
+            CommandCard(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 3),
+              child: Column(
+                children: [
+                  for (var i = 0; i < h.detectedSources.length; i++) ...[
+                    _ProviderRow(
+                      sourceKey: h.detectedSources[i],
+                      label: h.sourceLabels[h.detectedSources[i]] ??
+                          SourceNameService.friendly(h.detectedSources[i]),
+                      metrics: h.availableSources.entries
+                          .where((entry) => entry.value.contains(h.detectedSources[i]))
+                          .map((entry) => entry.key)
+                          .toList(),
+                      lastSeen: h.sourceLastSeen[h.detectedSources[i]],
+                    ),
+                    if (i != h.detectedSources.length - 1)
+                      const Divider(height: 1),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -162,6 +224,7 @@ class SourcesScreen extends ConsumerWidget {
     required String metric,
     required String? selectedRaw,
     required List<String> sources,
+    required Map<String, String> sourceLabels,
     required bool authorized,
   }) async {
     final unique = SourceNameService.uniqueRawByFriendly(sources);
@@ -195,14 +258,16 @@ class SourcesScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               _SourceChoice(
-                title: 'Health Connect recommended',
-                subtitle: 'Use Health Connect’s combined / priority result',
+                title: 'Automatic',
+                subtitle: metric == 'Steps'
+                    ? 'Use Health Connect’s aggregate step result'
+                    : 'Use the freshest provider supplying this metric',
                 selected: selected == 'Auto',
                 onTap: () => Navigator.pop(context, 'Auto'),
               ),
               for (final source in unique)
                 _SourceChoice(
-                  title: SourceNameService.friendly(source),
+                  title: sourceLabels[source] ?? SourceNameService.friendly(source),
                   subtitle: 'Use only this source for $metric',
                   selected: SourceNameService.sameProvider(selected, source),
                   onTap: () => Navigator.pop(context, source),
@@ -234,23 +299,36 @@ class SourcesScreen extends ConsumerWidget {
 class _MetricSourceRow extends StatelessWidget {
   final String metric;
   final String? selectedRaw;
+  final String? resolvedRaw;
   final List<String> sources;
+  final Map<String, String> sourceLabels;
   final DateTime? freshness;
   final VoidCallback onChange;
 
   const _MetricSourceRow({
     required this.metric,
     required this.selectedRaw,
+    required this.resolvedRaw,
     required this.sources,
+    required this.sourceLabels,
     required this.freshness,
     required this.onChange,
   });
 
   @override
   Widget build(BuildContext context) {
+    final resolvedLabel = resolvedRaw == null
+        ? null
+        : (sourceLabels[resolvedRaw!] ?? SourceNameService.friendly(resolvedRaw!));
+    final selectedLabel = selectedRaw == null
+        ? null
+        : (sourceLabels[selectedRaw!] ?? SourceNameService.friendly(selectedRaw!));
     final current = selectedRaw == null
-        ? 'Health Connect recommended'
-        : SourceNameService.friendly(selectedRaw!);
+        ? (resolvedLabel == null ? 'Automatic' : 'Automatic • $resolvedLabel')
+        : (resolvedRaw != null &&
+                !SourceNameService.sameProvider(selectedRaw!, resolvedRaw!))
+            ? '$selectedLabel selected • using $resolvedLabel'
+            : selectedLabel!;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 13),
       child: Row(
@@ -311,8 +389,14 @@ class _MetricSourceRow extends StatelessWidget {
         'Steps' => Icons.directions_walk_rounded,
         'Sleep' => Icons.bedtime_rounded,
         'Heart rate' => Icons.favorite_rounded,
+        'Resting heart rate' => Icons.favorite_border_rounded,
+        'HRV' => Icons.insights_rounded,
+        'SpO2' => Icons.bloodtype_rounded,
+        'Respiratory rate' => Icons.air_rounded,
         'Weight' => Icons.monitor_weight_outlined,
         'Body fat' => Icons.percent_rounded,
+        'Body water' => Icons.water_drop_rounded,
+        'Lean body mass' => Icons.fitness_center_rounded,
         'Workouts' => Icons.fitness_center_rounded,
         _ => Icons.sensors_rounded,
       };
@@ -321,11 +405,95 @@ class _MetricSourceRow extends StatelessWidget {
         'Steps' => AppTheme.cyan,
         'Sleep' => AppTheme.purple,
         'Heart rate' => AppTheme.rose,
+        'Resting heart rate' => AppTheme.rose,
+        'HRV' => AppTheme.purple,
+        'SpO2' => AppTheme.blue,
+        'Respiratory rate' => AppTheme.cyan,
         'Weight' => AppTheme.mint,
         'Body fat' => AppTheme.amber,
+        'Body water' => AppTheme.blue,
+        'Lean body mass' => AppTheme.mint,
         'Workouts' => AppTheme.blue,
         _ => AppTheme.cyan,
       };
+}
+
+
+class _ProviderRow extends StatelessWidget {
+  final String sourceKey;
+  final String label;
+  final List<String> metrics;
+  final DateTime? lastSeen;
+
+  const _ProviderRow({
+    required this.sourceKey,
+    required this.label,
+    required this.metrics,
+    required this.lastSeen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final metricText = metrics.isEmpty ? 'No current metric records' : metrics.join(' • ');
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const HmIconBadge(
+            icon: Icons.sensors_rounded,
+            color: AppTheme.cyan,
+            size: 40,
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  metricText,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12.2,
+                    height: 1.3,
+                  ),
+                ),
+                if (lastSeen != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Last record ${relativeAge(lastSeen)}',
+                    style: const TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 2),
+                Text(
+                  sourceKey,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SourceChoice extends StatelessWidget {
