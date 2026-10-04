@@ -43,15 +43,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Ensure Android SDK 37
-        shell: bash
-        run: |
-          set -euo pipefail
-          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -d "${ANDROID_HOME}/platforms/android-37" ]; then
-            "$SDKMANAGER" "platforms;android-37"
-          fi
-
       - name: Create Android platform shell
         shell: bash
         run: |
