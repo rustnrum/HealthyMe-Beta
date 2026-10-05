@@ -1,4 +1,4 @@
-name: Update and Build Healthy Me Beta v0.9 Source Discovery
+name: Update and Build Healthy Me Beta v0.10 Source Hub
 
 on:
   workflow_dispatch:
@@ -6,7 +6,6 @@ on:
     branches: [main]
     paths:
       - 'HealthyMe-v0.9-SOURCE-DISCOVERY.zip'
-      - '.github/workflows/UPDATE-v0.9-source-discovery.yml'
 
 permissions:
   contents: write
@@ -19,17 +18,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Expand v0.9 source-discovery overlay
+      - name: Expand Healthy Me source overlay
         shell: bash
         run: |
           set -euo pipefail
           ARCHIVE="HealthyMe-v0.9-SOURCE-DISCOVERY.zip"
           test -f "$ARCHIVE"
 
-          rm -rf /tmp/healthy-me-v09
-          mkdir -p /tmp/healthy-me-v09
-          unzip -q -o "$ARCHIVE" -d /tmp/healthy-me-v09
-          cp -a /tmp/healthy-me-v09/. "$GITHUB_WORKSPACE"/
+          rm -rf /tmp/healthy-me-source
+          mkdir -p /tmp/healthy-me-source
+          unzip -q -o "$ARCHIVE" -d /tmp/healthy-me-source
+          cp -a /tmp/healthy-me-source/. "$GITHUB_WORKSPACE"/
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -42,6 +41,26 @@ jobs:
         with:
           channel: stable
           cache: true
+
+      - name: Restore permanent beta signing key
+        shell: bash
+        env:
+          HEALTHY_ME_DEBUG_KEYSTORE_B64: ${{ secrets.HEALTHY_ME_DEBUG_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HEALTHY_ME_DEBUG_KEYSTORE_B64:-}" ]; then
+            echo "Missing repository secret HEALTHY_ME_DEBUG_KEYSTORE_B64"
+            exit 1
+          fi
+
+          mkdir -p "$HOME/.android"
+          printf '%s' "$HEALTHY_ME_DEBUG_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+
+          keytool -list \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey >/dev/null
 
       - name: Create Android platform shell
         shell: bash
@@ -69,10 +88,31 @@ jobs:
       - name: Test
         run: flutter test
 
-      - name: Build Beta v0.9 APK
+      - name: Build Healthy Me APK
         run: flutter build apk --debug
 
-      - name: Commit validated v0.9 source
+      - name: Verify permanent signing certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="build/app/outputs/flutter-apk/app-debug.apk"
+          test -f "$APK"
+
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+
+          OUTPUT="$("$APKSIGNER" verify --print-certs "$APK")"
+          echo "$OUTPUT"
+
+          EXPECTED="7fd269a60dac7cc03e0c07d3142d1e3e4fcf272d7a98f958bbcf033cafc3c068"
+          ACTUAL="$(printf '%s\n' "$OUTPUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1 | tr '[:upper:]' '[:lower:]')"
+
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "Signing certificate mismatch: expected $EXPECTED, got $ACTUAL"
+            exit 1
+          fi
+
+      - name: Commit validated source
         shell: bash
         run: |
           set -euo pipefail
@@ -89,14 +129,14 @@ jobs:
           if git diff --cached --quiet; then
             echo "Nothing to commit."
           else
-            git commit -m "Healthy Me Beta v0.9 source discovery"
+            git commit -m "Healthy Me Beta v0.10 source hub"
             git push origin HEAD:main
           fi
 
-      - name: Upload Beta v0.9 APK
+      - name: Upload Healthy Me APK
         uses: actions/upload-artifact@v4
         with:
-          name: HealthyMe-Beta-v0.9-source-discovery-debug
+          name: HealthyMe-Beta-v0.10-source-hub-debug
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
           retention-days: 30
