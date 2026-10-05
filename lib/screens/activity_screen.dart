@@ -6,10 +6,10 @@ import '../core/theme/app_theme.dart';
 import '../models/models.dart';
 import '../services/source_name_service.dart';
 import '../state/app_state.dart';
-import '../state/health_sync_provider.dart';
-import '../widgets/charts.dart';
 import '../widgets/command_card.dart';
 import '../widgets/design_widgets.dart';
+import '../widgets/step_bar_chart.dart';
+import 'workout_screen.dart';
 
 class ActivityScreen extends ConsumerStatefulWidget {
   const ActivityScreen({super.key});
@@ -169,7 +169,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              SimpleBarChart(
+              StepBarChart(
                 values: chartValues,
                 target: _range == 'Day' ? null : goal.toDouble(),
                 showTarget: _range == 'Week' || _range == 'Month',
@@ -215,18 +215,18 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
         const SizedBox(height: 24),
         HmSectionHeader(
           title: 'Workouts',
-          action: health.authorized ? 'See all' : 'Connect',
-          onAction: health.authorized
-              ? null
-              : () => ref.read(healthSyncProvider.notifier).connectAndSync(),
+          action: 'Open module',
+          onAction: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const WorkoutScreen()),
+          ),
         ),
         const SizedBox(height: 10),
         if (health.workouts.isEmpty)
           const CommandCard(
             child: HmEmptyState(
               icon: Icons.directions_run_rounded,
-              title: 'No workout history yet',
-              detail: 'Connected workout sessions will appear here automatically.',
+              title: 'No connected workout history yet',
+              detail: 'Use the Workout module to plan your own sessions. Connected workout sessions will also appear here automatically.',
             ),
           )
         else
@@ -234,9 +234,9 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 3),
             child: Column(
               children: [
-                for (var i = 0; i < health.workouts.take(4).length; i++) ...[
+                for (var i = 0; i < health.workouts.take(2).length; i++) ...[
                   _WorkoutRow(workout: health.workouts[i]),
-                  if (i != health.workouts.take(4).length - 1)
+                  if (i != health.workouts.take(2).length - 1)
                     const Divider(height: 1),
                 ],
               ],
@@ -246,7 +246,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
         const HmSectionHeader(title: 'Weekly activity', action: 'This week'),
         const SizedBox(height: 10),
         CommandCard(
-          child: SimpleBarChart(
+          child: StepBarChart(
             values: _tail(health.dailySteps30, 7),
             target: goal.toDouble(),
             showTarget: true,
@@ -361,7 +361,6 @@ class _WorkoutRow extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted, size: 20),
         ],
       ),
     );

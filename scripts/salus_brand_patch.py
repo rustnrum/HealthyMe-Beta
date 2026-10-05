@@ -2,8 +2,8 @@ from pathlib import Path
 import re
 import shutil
 
-VERSION_NEW = '0.13.0+17'
-SUPPORTED_OLD = {'0.11.0+15', '0.12.0+16'}
+VERSION_NEW = '0.14.0+18'
+SUPPORTED_OLD = {'0.11.0+15', '0.12.0+16', '0.13.0+17'}
 
 # Preserve package/application id, signing identity, and persisted state keys for in-place upgrade.
 pub = Path('pubspec.yaml')
@@ -30,8 +30,8 @@ for path in Path('lib').rglob('*.dart'):
     text = path.read_text()
     text = text.replace('Healthy Me', 'Salus')
     text = re.sub(
-        r'Beta 0\.(?:11|12)\.0\+(?:15|16) • Salus Source Registry',
-        'Beta 0.13.0+17 • Salus Source Registry',
+        r'Beta 0\.(?:11|12|13)\.0\+(?:15|16|17) • Salus Source Registry',
+        'Beta 0.14.0+18 • Salus Source Registry',
         text,
     )
     path.write_text(text)
@@ -55,4 +55,4 @@ for folder in ('mipmap-mdpi', 'mipmap-hdpi', 'mipmap-xhdpi', 'mipmap-xxhdpi', 'm
     dst_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst_dir / 'ic_launcher.png')
 
-print('Salus v0.13 branding + launcher icon applied.')
+print('Salus v0.14 branding + launcher icon applied.')

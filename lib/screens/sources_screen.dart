@@ -20,7 +20,7 @@ class SourcesScreen extends ConsumerStatefulWidget {
 }
 
 class _SourcesScreenState extends ConsumerState<SourcesScreen> {
-  static const _buildLabel = 'Beta 0.13.0+17 • Salus Source Registry';
+  static const _buildLabel = 'Beta 0.14.0+18 • Salus Source Registry';
 
   static const metrics = [
     'Steps',
