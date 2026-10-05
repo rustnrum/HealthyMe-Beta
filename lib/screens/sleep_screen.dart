@@ -32,10 +32,9 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
         ? 'No connected source'
         : (h.sourceLabels[sleepSourceKey] ??
             SourceNameService.friendly(sleepSourceKey));
-    final stageSourceKey =
-        h.resolvedSources['Sleep Stages'] ?? h.resolvedSources['Sleep'];
+    final stageSourceKey = h.resolvedSources['Sleep Stages'];
     final stageSourceLabel = stageSourceKey == null
-        ? 'No connected source'
+        ? 'No stage data source'
         : (h.sourceLabels[stageSourceKey] ??
             SourceNameService.friendly(stageSourceKey));
     final sleepFreshness = h.freshness['Sleep'];
@@ -91,8 +90,8 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                     const SizedBox(height: 6),
                     Text(
                       'Source: $sleepSourceLabel',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                      softWrap: true,
                       style: const TextStyle(
                         color: AppTheme.purple,
                         fontSize: 12.5,
@@ -156,8 +155,8 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                 const SizedBox(height: 5),
                 Text(
                   'Stages from: $stageSourceLabel',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                  softWrap: true,
                   style: const TextStyle(
                     color: AppTheme.purple,
                     fontSize: 12.5,

@@ -21,14 +21,14 @@ MAIN_ACTIVITY="$(find android/app/src/main/kotlin -name MainActivity.kt -print -
 
 [ -n "$MAIN_ACTIVITY" ] || fail "MainActivity.kt missing"
 
-for required in "Beta 0.14.0+18 • Salus Source Registry" "Health Connect import" "Your data providers" "Metric sources" "records • use only for"; do
+for required in "Beta 0.14.0+19 • Salus Source Registry" "Health Connect import" "Your data providers" "Metric sources" "records • use only for" "Sleep Stages"; do
   grep -q "$required" "$SOURCES" || fail "Sources screen missing: $required"
 done
 for forbidden in "Visible Health Connect apps" "Find compatible sources" "Health Connect aggregate step data"; do
   if grep -q "$forbidden" "$SOURCES"; then fail "obsolete/misleading source UI remains: $forbidden"; fi
 done
 for required in "class HealthOriginRegistryService" "class HealthOriginRegistry" "scanHealthOrigins" "nativeSupported"; do grep -q "$required" "$REGISTRY" || fail "registry service missing: $required"; done
-for required in "HEALTHY_ME_SOURCE_REGISTRY_V011" "providerBuckets" "nativeRegistry" "sourceRecordCounts" "recordCountsFor" "nativeSourceRegistry: nativeRegistry.nativeSupported"; do grep -q "$required" "$HEALTH" || fail "Health Connect registry routing missing: $required"; done
+for required in "HEALTHY_ME_SOURCE_REGISTRY_V011" "providerBuckets" "nativeRegistry" "sourceRecordCounts" "recordCountsFor" "nativeSourceRegistry: nativeRegistry.nativeSupported" "resolvedOrigin('Sleep Stages', sleepStageTypes)" "'Sleep Stages': recordCountsFor('Sleep Stages', sleepStageTypes)"; do grep -q "$required" "$HEALTH" || fail "Health Connect registry routing missing: $required"; done
 if grep -q '^    points = _health.removeDuplicates(points);$' "$HEALTH"; then fail "global cross-provider dedupe still erases DataOrigin attribution"; fi
 grep -q "A manual source choice is authoritative" "$HEALTH" || fail "manual source must not silently fall back"
 if grep -q "getTotalStepsInInterval" "$HEALTH"; then fail "steps must stay provider attributed"; fi
@@ -46,10 +46,22 @@ grep -q "MethodChannel('com.rustnrum.healthyme/source_discovery')" "$BLE" || fai
 grep -q "ring-uart-v1" "$PROFILES" || fail "ring protocol fingerprint missing"
 grep -q "selectable: false" "$HUB" || fail "BLE discovery must not pretend to be a working metric reader"
 if grep -q "flutter_reactive_ble" "$PUBSPEC"; then fail "flutter_reactive_ble must not be reintroduced"; fi
-grep -q '^version: 0.14.0+18$' "$PUBSPEC" || fail "pubspec must identify Salus v0.14"
+grep -q '^version: 0.14.0+19$' "$PUBSPEC" || fail "pubspec must identify Salus build 19"
 grep -q 'android:label="Salus"' android/app/src/main/AndroidManifest.xml || fail "Android app label must be Salus"
 grep -q "title: 'Salus'" lib/app.dart || fail "Flutter app title must be Salus"
-grep -q "SALUS MODULES" lib/widgets/module_menu_button.dart || fail "Salus module switcher missing"
+if grep -q "import 'workout_screen.dart';" lib/screens/activity_screen.dart; then fail "Activity still imports Workout as a detail page"; fi
+grep -q "HealthyMeModule.workout" lib/widgets/module_menu_button.dart || fail "Workout must be a top-level Salus module"
+grep -q "'/workout': (_) => const WorkoutScreen()" lib/app.dart || fail "Workout module route missing"
+grep -q "current: HealthyMeModule.workout" lib/screens/workout_screen.dart || fail "Workout screen must identify itself as the Workout module"
+grep -q "reservedSize: 58" lib/widgets/step_bar_chart.dart || fail "step Y-axis must reserve visible label width"
+grep -q "fontSize: 12.5" lib/widgets/step_bar_chart.dart || fail "step Y-axis labels must meet readability floor"
+grep -q "color: AppTheme.textSecondary" lib/widgets/step_bar_chart.dart || fail "step Y-axis labels must use visible contrast"
+grep -q "fit: BoxFit.scaleDown" lib/widgets/design_widgets.dart || fail "shared narrow text must scale instead of overflow"
+grep -Fq 'Source: $stepSourceLabel' lib/screens/activity_screen.dart || fail "Activity step source label missing"
+grep -q "softWrap: true" lib/screens/activity_screen.dart || fail "Activity source labels must wrap instead of truncate"
+if grep -Fq "import 'workout_screen.dart';" lib/screens/activity_screen.dart; then fail "Activity retains obsolete direct Workout import"; fi
+grep -Fq 'Stages from: $stageSourceLabel' lib/screens/sleep_screen.dart || fail "Sleep Stages source label missing"
+if grep -Fq "h.resolvedSources['Sleep Stages'] ?? h.resolvedSources['Sleep']" lib/screens/sleep_screen.dart; then fail "Sleep Stages must not reuse generic Sleep provenance"; fi
 for folder in mdpi hdpi xhdpi xxhdpi xxxhdpi; do [ -f "android/app/src/main/res/mipmap-${folder}/ic_launcher.png" ] || fail "launcher icon missing for ${folder}"; done
 grep -q "native registry parser preserves package origins and counts" test/health_origin_registry_service_test.dart || fail "source registry tests missing"
-echo "Salus v0.14 source registry + asset-driven visual refresh contract passed."
+echo "Salus build 19 source registry + module + Activity/Sleep contracts passed."

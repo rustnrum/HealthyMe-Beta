@@ -91,13 +91,17 @@ class HmTabs extends StatelessWidget {
                     color: selected == label ? AppTheme.cyan : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
                       color: selected == label ? Colors.white : AppTheme.textSecondary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ),
@@ -145,8 +149,8 @@ class HmMetricCard extends StatelessWidget {
           ],
           Text(
             label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+            maxLines: 3,
+            softWrap: true,
             style: const TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 13,
@@ -154,22 +158,25 @@ class HmMetricCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
             style: const TextStyle(
               color: AppTheme.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
           if (detail != null) ...[
             const SizedBox(height: 3),
             Text(
               detail!,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+              maxLines: 3,
+              softWrap: true,
               style: TextStyle(
                 color: accent,
                 fontSize: 12.5,

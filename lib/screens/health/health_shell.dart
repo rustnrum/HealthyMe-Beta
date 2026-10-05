@@ -47,6 +47,7 @@ class _HealthShellState extends State<HealthShell> {
         actions: [HealthyMeModuleMenuButton(current: HealthyMeModule.health, onSelected: (module) {
           switch (module) {
             case HealthyMeModule.fitness: Navigator.of(context).popUntil((route) => route.isFirst); break;
+            case HealthyMeModule.workout: Navigator.of(context).pushReplacementNamed('/workout'); break;
             case HealthyMeModule.diet: Navigator.of(context).pushReplacementNamed('/diet'); break;
             case HealthyMeModule.health: break;
           }

@@ -77,6 +77,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         case HealthyMeModule.fitness:
           ref.read(navigationProvider.notifier).go(0);
           break;
+        case HealthyMeModule.workout:
+          Navigator.of(context).pushNamed('/workout');
+          break;
         case HealthyMeModule.diet:
           Navigator.of(context).pushNamed('/diet');
           break;
@@ -165,15 +168,19 @@ class _SalusBrandAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
                 SizedBox(height: 7),
-                Text(
-                  'A HEALTHIER TOMORROW\nLIVES IN A MORE AWARE TODAY.',
-                  maxLines: 2,
-                  style: TextStyle(
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'A HEALTHIER TOMORROW\nLIVES IN A MORE AWARE TODAY.',
+                    maxLines: 2,
+                    style: TextStyle(
                     color: Color(0xFFC8A96E),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    letterSpacing: 1.55,
-                    height: 1.35,
+                      letterSpacing: 1.55,
+                      height: 1.35,
+                    ),
                   ),
                 ),
               ],

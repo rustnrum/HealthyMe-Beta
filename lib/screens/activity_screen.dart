@@ -9,7 +9,6 @@ import '../state/app_state.dart';
 import '../widgets/command_card.dart';
 import '../widgets/design_widgets.dart';
 import '../widgets/step_bar_chart.dart';
-import 'workout_screen.dart';
 
 class ActivityScreen extends ConsumerStatefulWidget {
   const ActivityScreen({super.key});
@@ -97,8 +96,8 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                         const SizedBox(height: 5),
                         Text(
                           'Source: $stepSourceLabel',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
+                          softWrap: true,
                           style: const TextStyle(
                             color: AppTheme.cyan,
                             fontSize: 12.5,
@@ -216,9 +215,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
         HmSectionHeader(
           title: 'Workouts',
           action: 'Open module',
-          onAction: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const WorkoutScreen()),
-          ),
+          onAction: () => Navigator.of(context).pushNamed('/workout'),
         ),
         const SizedBox(height: 10),
         if (health.workouts.isEmpty)

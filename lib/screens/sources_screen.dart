@@ -20,11 +20,12 @@ class SourcesScreen extends ConsumerStatefulWidget {
 }
 
 class _SourcesScreenState extends ConsumerState<SourcesScreen> {
-  static const _buildLabel = 'Beta 0.14.0+18 • Salus Source Registry';
+  static const _buildLabel = 'Beta 0.14.0+19 • Salus Source Registry';
 
   static const metrics = [
     'Steps',
     'Sleep',
+    'Sleep Stages',
     'Heart rate',
     'Resting heart rate',
     'HRV',
@@ -569,8 +570,8 @@ class _MetricSourceRow extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   current,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  maxLines: 3,
+                  softWrap: true,
                   style: const TextStyle(
                     color: AppTheme.cyan,
                     fontSize: 12.5,
@@ -601,6 +602,7 @@ class _MetricSourceRow extends StatelessWidget {
   IconData _icon(String metric) => switch (metric) {
         'Steps' => Icons.directions_walk_rounded,
         'Sleep' => Icons.bedtime_rounded,
+        'Sleep Stages' => Icons.bedtime_off_rounded,
         'Heart rate' => Icons.favorite_rounded,
         'Resting heart rate' => Icons.favorite_border_rounded,
         'HRV' => Icons.insights_rounded,
@@ -617,6 +619,7 @@ class _MetricSourceRow extends StatelessWidget {
   Color _color(String metric) => switch (metric) {
         'Steps' => AppTheme.cyan,
         'Sleep' => AppTheme.purple,
+        'Sleep Stages' => AppTheme.purple,
         'Heart rate' => AppTheme.rose,
         'Resting heart rate' => AppTheme.rose,
         'HRV' => AppTheme.purple,
@@ -677,8 +680,8 @@ class _ProviderRow extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   metrics,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
+                  maxLines: 5,
+                  softWrap: true,
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,

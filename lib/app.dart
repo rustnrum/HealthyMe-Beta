@@ -7,6 +7,7 @@ import 'screens/diet/diet_shell.dart';
 import 'screens/health/health_shell.dart';
 import 'screens/home_shell.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/workout_screen.dart';
 import 'state/app_state.dart';
 import 'widgets/morning_checkin_gate.dart';
 
@@ -24,6 +25,7 @@ class HealthyMeApp extends ConsumerWidget {
       routes: {
         '/diet': (_) => const DietShell(),
         '/health': (_) => const HealthShell(),
+        '/workout': (_) => const WorkoutScreen(),
         '/daily-state': (_) => const DailyStateScreen(),
       },
       home: state.profile.completed

@@ -73,7 +73,7 @@ class StepBarChart extends StatelessWidget {
               sideTitles: SideTitles(
                 showTitles: true,
                 interval: axis.interval,
-                reservedSize: 46,
+                reservedSize: 58,
                 getTitlesWidget: (value, meta) {
                   if (value < 0 || value > axis.maxY) {
                     return const SizedBox.shrink();
@@ -85,7 +85,7 @@ class StepBarChart extends StatelessWidget {
                       textAlign: TextAlign.right,
                       style: const TextStyle(
                         color: AppTheme.textMuted,
-                        fontSize: 10.5,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.w700,
                       ),
                     ),

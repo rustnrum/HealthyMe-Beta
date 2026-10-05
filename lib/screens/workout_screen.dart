@@ -9,6 +9,7 @@ import '../state/app_state.dart';
 import '../state/workout_state.dart';
 import '../widgets/command_card.dart';
 import '../widgets/design_widgets.dart';
+import '../widgets/module_menu_button.dart';
 
 class WorkoutScreen extends ConsumerStatefulWidget {
   const WorkoutScreen({super.key});
@@ -25,9 +26,34 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
     final library = ref.watch(workoutStateProvider);
     final health = ref.watch(appStateProvider).health;
 
+    void selectModule(HealthyMeModule module) {
+      switch (module) {
+        case HealthyMeModule.fitness:
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          break;
+        case HealthyMeModule.workout:
+          break;
+        case HealthyMeModule.diet:
+          Navigator.of(context).pushReplacementNamed('/diet');
+          break;
+        case HealthyMeModule.health:
+          Navigator.of(context).pushReplacementNamed('/health');
+          break;
+      }
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(title: const Text('Workouts')),
+      appBar: AppBar(
+        title: const Text('Workout'),
+        actions: [
+          HealthyMeModuleMenuButton(
+            current: HealthyMeModule.workout,
+            onSelected: selectModule,
+          ),
+          const SizedBox(width: 6),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [

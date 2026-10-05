@@ -394,18 +394,26 @@ class HealthConnectService {
       end: now,
     );
 
-    final sleepTypes = <HealthDataType>[
-      HealthDataType.SLEEP_ASLEEP,
+    final sleepStageTypes = <HealthDataType>[
       HealthDataType.SLEEP_AWAKE,
       HealthDataType.SLEEP_REM,
       HealthDataType.SLEEP_LIGHT,
       HealthDataType.SLEEP_DEEP,
     ];
+    final sleepTypes = <HealthDataType>[
+      HealthDataType.SLEEP_ASLEEP,
+      ...sleepStageTypes,
+    ];
 
     final sleepResolved = resolvedOrigin('Sleep', sleepTypes);
+    final sleepStageResolved = resolvedOrigin('Sleep Stages', sleepStageTypes);
     final sleepPoints = points.where((p) {
       if (!sleepTypes.contains(p.type)) return false;
       return sleepResolved != null && originKey(p) == sleepResolved;
+    }).toList();
+    final sleepStagePoints = points.where((p) {
+      if (!sleepStageTypes.contains(p.type)) return false;
+      return sleepStageResolved != null && originKey(p) == sleepStageResolved;
     }).toList();
 
     Map<String, Map<String, int>> sleepByDay = {};
@@ -447,6 +455,32 @@ class HealthConnectService {
       }
     }
 
+    final sleepStagesByDay = <String, Map<String, int>>{};
+    for (final p in sleepStagePoints) {
+      final key = dayKey(p.dateTo);
+      final map = sleepStagesByDay.putIfAbsent(
+        key,
+        () => {'awake': 0, 'rem': 0, 'light': 0, 'deep': 0},
+      );
+      final minutes = max(0, p.dateTo.difference(p.dateFrom).inMinutes);
+      switch (p.type) {
+        case HealthDataType.SLEEP_AWAKE:
+          map['awake'] = (map['awake'] ?? 0) + minutes;
+          break;
+        case HealthDataType.SLEEP_REM:
+          map['rem'] = (map['rem'] ?? 0) + minutes;
+          break;
+        case HealthDataType.SLEEP_LIGHT:
+          map['light'] = (map['light'] ?? 0) + minutes;
+          break;
+        case HealthDataType.SLEEP_DEEP:
+          map['deep'] = (map['deep'] ?? 0) + minutes;
+          break;
+        default:
+          break;
+      }
+    }
+
     int totalFor(Map<String, int>? map) {
       if (map == null) return 0;
       final staged =
@@ -459,6 +493,11 @@ class HealthConnectService {
     final latestSleep = latestSleepKey == null
         ? null
         : sleepByDay[latestSleepKey];
+    final sleepStageKeys = sleepStagesByDay.keys.toList()..sort();
+    final latestSleepStageKey = sleepStageKeys.isEmpty ? null : sleepStageKeys.last;
+    final latestSleepStages = latestSleepStageKey == null
+        ? null
+        : sleepStagesByDay[latestSleepStageKey];
 
     final sleepMinutes7 = <int>[];
     for (var offset = 6; offset >= 0; offset--) {
@@ -579,6 +618,7 @@ class HealthConnectService {
     addFresh('Steps', rawSteps);
     addFresh('Activity', [...calories, ...distance]);
     addFresh('Sleep', sleepPoints);
+    addFresh('Sleep Stages', sleepStagePoints);
     addFresh('Heart rate', heart);
     addFresh('Resting heart rate', resting);
     addFresh('HRV', hrv);
@@ -641,6 +681,7 @@ class HealthConnectService {
     final sourceRecordCounts = <String, Map<String, int>>{
       'Steps': recordCountsFor('Steps', [HealthDataType.STEPS]),
       'Sleep': recordCountsFor('Sleep', sleepTypes),
+      'Sleep Stages': recordCountsFor('Sleep Stages', sleepStageTypes),
       'Heart rate': recordCountsFor('Heart rate', [HealthDataType.HEART_RATE]),
       'Resting heart rate': recordCountsFor(
         'Resting heart rate',
@@ -687,10 +728,10 @@ class HealthConnectService {
       dailySteps30: dailySteps30,
       monthlySteps12: monthlySteps12,
       sleepMinutes: totalFor(latestSleep),
-      sleepAwakeMinutes: latestSleep?['awake'] ?? 0,
-      sleepRemMinutes: latestSleep?['rem'] ?? 0,
-      sleepLightMinutes: latestSleep?['light'] ?? 0,
-      sleepDeepMinutes: latestSleep?['deep'] ?? 0,
+      sleepAwakeMinutes: latestSleepStages?['awake'] ?? 0,
+      sleepRemMinutes: latestSleepStages?['rem'] ?? 0,
+      sleepLightMinutes: latestSleepStages?['light'] ?? 0,
+      sleepDeepMinutes: latestSleepStages?['deep'] ?? 0,
       sleepMinutes7: sleepMinutes7,
       latestHeartRate: heartValues.isEmpty ? null : heartValues.last,
       restingHeartRate: restingValues.isEmpty ? null : restingValues.last,

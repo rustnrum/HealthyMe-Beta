@@ -291,8 +291,8 @@ class SalusSourceItem extends StatelessWidget {
         const SizedBox(height: 5),
         Text(
           label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+          softWrap: true,
           textAlign: TextAlign.center,
           style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12.5, fontWeight: FontWeight.w600),
         ),

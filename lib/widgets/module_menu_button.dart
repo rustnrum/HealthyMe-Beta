@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
 
-enum HealthyMeModule { fitness, diet, health }
+enum HealthyMeModule { fitness, workout, diet, health }
 
 class HealthyMeModuleMenuButton extends StatelessWidget {
   final HealthyMeModule current;
@@ -17,6 +17,8 @@ class HealthyMeModuleMenuButton extends StatelessWidget {
       itemBuilder: (context) => [
         const PopupMenuItem<HealthyMeModule>(enabled: false, child: Text('SALUS MODULES', style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1.8))),
         _item(module: HealthyMeModule.fitness, current: current, icon: Icons.eco_rounded, color: AppTheme.mint, title: 'Main', subtitle: 'Today • Activity • Sleep • Body'),
+        const PopupMenuDivider(),
+        _item(module: HealthyMeModule.workout, current: current, icon: Icons.fitness_center_rounded, color: AppTheme.cyan, title: 'Workout', subtitle: 'Today • Schedule • Templates • History'),
         const PopupMenuDivider(),
         _item(module: HealthyMeModule.diet, current: current, icon: Icons.restaurant_rounded, color: AppTheme.amber, title: 'Diet', subtitle: 'Today • Meals • Plan • Grocery'),
         const PopupMenuDivider(),
