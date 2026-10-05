@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'HealthyMe-v0.9-SOURCE-DISCOVERY.zip'
+      - '.github/workflows/UPDATE-v0.9-source-discovery.yml'
 
 permissions:
   contents: write
@@ -48,6 +49,7 @@ jobs:
           HEALTHY_ME_DEBUG_KEYSTORE_B64: ${{ secrets.HEALTHY_ME_DEBUG_KEYSTORE_B64 }}
         run: |
           set -euo pipefail
+
           if [ -z "${HEALTHY_ME_DEBUG_KEYSTORE_B64:-}" ]; then
             echo "Missing repository secret HEALTHY_ME_DEBUG_KEYSTORE_B64"
             exit 1
@@ -62,10 +64,30 @@ jobs:
             -storepass android \
             -alias androiddebugkey >/dev/null
 
+          KEY_FP="$(
+            keytool -list -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey 2>/dev/null |
+            sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' |
+            head -n 1 |
+            tr -d ':' |
+            tr '[:upper:]' '[:lower:]'
+          )"
+
+          if [ -z "$KEY_FP" ]; then
+            echo "Could not read permanent keystore SHA-256 fingerprint."
+            exit 1
+          fi
+
+          echo "Permanent beta signing certificate SHA-256: $KEY_FP"
+          echo "HEALTHY_ME_KEY_FP=$KEY_FP" >> "$GITHUB_ENV"
+
       - name: Create Android platform shell
         shell: bash
         run: |
           set -euo pipefail
+
           if [ ! -f android/gradlew ]; then
             rm -rf /tmp/healthy_me_android
             flutter create \
@@ -78,6 +100,41 @@ jobs:
           fi
 
           bash scripts/prepare_android.sh
+
+      - name: Force permanent debug signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("android/app/build.gradle.kts")
+          text = path.read_text()
+
+          marker = "HEALTHY_ME_PERMANENT_DEBUG_SIGNING"
+          if marker not in text:
+              needle = "    buildTypes {"
+              if needle not in text:
+                  raise SystemExit("Could not find buildTypes block in android/app/build.gradle.kts")
+
+              block = """    // HEALTHY_ME_PERMANENT_DEBUG_SIGNING
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
+"""
+
+              text = text.replace(needle, block + needle, 1)
+              path.write_text(text)
+          PY
+
+          grep -q "HEALTHY_ME_PERMANENT_DEBUG_SIGNING" android/app/build.gradle.kts
 
       - name: Install dependencies
         run: flutter pub get
@@ -95,6 +152,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           APK="build/app/outputs/flutter-apk/app-debug.apk"
           test -f "$APK"
 
@@ -104,13 +162,34 @@ jobs:
           OUTPUT="$("$APKSIGNER" verify --print-certs "$APK")"
           echo "$OUTPUT"
 
-          EXPECTED="7fd269a60dac7cc03e0c07d3142d1e3e4fcf272d7a98f958bbcf033cafc3c068"
-          ACTUAL="$(printf '%s\n' "$OUTPUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1 | tr '[:upper:]' '[:lower:]')"
+          ACTUAL="$(
+            printf '%s\n' "$OUTPUT" |
+            sed -n -E 's/^.*certificate SHA-256 digest:[[:space:]]*([0-9A-Fa-f]+).*$/\1/p' |
+            head -n 1 |
+            tr '[:upper:]' '[:lower:]'
+          )"
 
-          if [ "$ACTUAL" != "$EXPECTED" ]; then
-            echo "Signing certificate mismatch: expected $EXPECTED, got $ACTUAL"
+          EXPECTED="${HEALTHY_ME_KEY_FP:-}"
+
+          if [ -z "$EXPECTED" ]; then
+            echo "Permanent keystore fingerprint was not carried into this step."
             exit 1
           fi
+
+          if [ -z "$ACTUAL" ]; then
+            echo "Could not parse APK signing certificate fingerprint."
+            exit 1
+          fi
+
+          echo "Expected permanent certificate: $EXPECTED"
+          echo "APK certificate:                $ACTUAL"
+
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "APK is not signed by the permanent beta keystore."
+            exit 1
+          fi
+
+          echo "Permanent beta signing certificate verified."
 
       - name: Commit validated source
         shell: bash
