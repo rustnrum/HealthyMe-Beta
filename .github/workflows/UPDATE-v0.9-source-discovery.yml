@@ -25,7 +25,6 @@ jobs:
           set -euo pipefail
           ARCHIVE="HealthyMe-v0.9-SOURCE-DISCOVERY.zip"
           test -f "$ARCHIVE"
-
           rm -rf /tmp/healthy-me-source
           mkdir -p /tmp/healthy-me-source
           unzip -q -o "$ARCHIVE" -d /tmp/healthy-me-source
@@ -49,7 +48,6 @@ jobs:
           HEALTHY_ME_DEBUG_KEYSTORE_B64: ${{ secrets.HEALTHY_ME_DEBUG_KEYSTORE_B64 }}
         run: |
           set -euo pipefail
-
           if [ -z "${HEALTHY_ME_DEBUG_KEYSTORE_B64:-}" ]; then
             echo "Missing repository secret HEALTHY_ME_DEBUG_KEYSTORE_B64"
             exit 1
@@ -59,82 +57,30 @@ jobs:
           printf '%s' "$HEALTHY_ME_DEBUG_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
           chmod 600 "$HOME/.android/debug.keystore"
 
-          keytool -list \
-            -keystore "$HOME/.android/debug.keystore" \
-            -storepass android \
-            -alias androiddebugkey >/dev/null
+          keytool -list             -keystore "$HOME/.android/debug.keystore"             -storepass android             -alias androiddebugkey >/dev/null
 
-          KEY_FP="$(
-            keytool -list -v \
-              -keystore "$HOME/.android/debug.keystore" \
-              -storepass android \
-              -alias androiddebugkey 2>/dev/null |
+          EXPECTED="$(
+            keytool -list -v               -keystore "$HOME/.android/debug.keystore"               -storepass android               -alias androiddebugkey 2>/dev/null |
             sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' |
             head -n 1 |
             tr -d ':' |
             tr '[:upper:]' '[:lower:]'
           )"
 
-          if [ -z "$KEY_FP" ]; then
-            echo "Could not read permanent keystore SHA-256 fingerprint."
-            exit 1
-          fi
-
-          echo "Permanent beta signing certificate SHA-256: $KEY_FP"
-          echo "HEALTHY_ME_KEY_FP=$KEY_FP" >> "$GITHUB_ENV"
+          test -n "$EXPECTED"
+          echo "HEALTHY_ME_KEY_FP=$EXPECTED" >> "$GITHUB_ENV"
+          echo "Permanent beta signing key restored."
 
       - name: Create Android platform shell
         shell: bash
         run: |
           set -euo pipefail
-
           if [ ! -f android/gradlew ]; then
             rm -rf /tmp/healthy_me_android
-            flutter create \
-              --platforms=android \
-              --org com.rustnrum \
-              --project-name healthy_me \
-              --no-pub \
-              /tmp/healthy_me_android
+            flutter create               --platforms=android               --org com.rustnrum               --project-name healthy_me               --no-pub               /tmp/healthy_me_android
             cp -R /tmp/healthy_me_android/android ./android
           fi
-
           bash scripts/prepare_android.sh
-
-      - name: Force permanent debug signing key
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("android/app/build.gradle.kts")
-          text = path.read_text()
-
-          marker = "HEALTHY_ME_PERMANENT_DEBUG_SIGNING"
-          if marker not in text:
-              needle = "    buildTypes {"
-              if needle not in text:
-                  raise SystemExit("Could not find buildTypes block in android/app/build.gradle.kts")
-
-              block = """    // HEALTHY_ME_PERMANENT_DEBUG_SIGNING
-    signingConfigs {
-        getByName("debug") {
-            storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-        }
-    }
-
-"""
-
-              text = text.replace(needle, block + needle, 1)
-              path.write_text(text)
-          PY
-
-          grep -q "HEALTHY_ME_PERMANENT_DEBUG_SIGNING" android/app/build.gradle.kts
 
       - name: Install dependencies
         run: flutter pub get
@@ -152,7 +98,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           APK="build/app/outputs/flutter-apk/app-debug.apk"
           test -f "$APK"
 
@@ -170,16 +115,8 @@ jobs:
           )"
 
           EXPECTED="${HEALTHY_ME_KEY_FP:-}"
-
-          if [ -z "$EXPECTED" ]; then
-            echo "Permanent keystore fingerprint was not carried into this step."
-            exit 1
-          fi
-
-          if [ -z "$ACTUAL" ]; then
-            echo "Could not parse APK signing certificate fingerprint."
-            exit 1
-          fi
+          test -n "$EXPECTED"
+          test -n "$ACTUAL"
 
           echo "Expected permanent certificate: $EXPECTED"
           echo "APK certificate:                $ACTUAL"
@@ -195,9 +132,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           rm -f HealthyMe-v0.9-SOURCE-DISCOVERY.zip
-
           rm -rf android
           git checkout -- android 2>/dev/null || true
 
