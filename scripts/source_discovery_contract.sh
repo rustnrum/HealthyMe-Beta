@@ -21,7 +21,7 @@ MAIN_ACTIVITY="$(find android/app/src/main/kotlin -name MainActivity.kt -print -
 
 [ -n "$MAIN_ACTIVITY" ] || fail "MainActivity.kt missing"
 
-for required in "Beta 0.12.0+16 • Salus Source Registry" "Health Connect import" "Your data providers" "Metric sources" "records • use only for"; do
+for required in "Beta 0.13.0+17 • Salus Source Registry" "Health Connect import" "Your data providers" "Metric sources" "records • use only for"; do
   grep -q "$required" "$SOURCES" || fail "Sources screen missing: $required"
 done
 for forbidden in "Visible Health Connect apps" "Find compatible sources" "Health Connect aggregate step data"; do
@@ -46,10 +46,10 @@ grep -q "MethodChannel('com.rustnrum.healthyme/source_discovery')" "$BLE" || fai
 grep -q "ring-uart-v1" "$PROFILES" || fail "ring protocol fingerprint missing"
 grep -q "selectable: false" "$HUB" || fail "BLE discovery must not pretend to be a working metric reader"
 if grep -q "flutter_reactive_ble" "$PUBSPEC"; then fail "flutter_reactive_ble must not be reintroduced"; fi
-grep -q '^version: 0.12.0+16$' "$PUBSPEC" || fail "pubspec must identify Salus v0.12"
+grep -q '^version: 0.13.0+17$' "$PUBSPEC" || fail "pubspec must identify Salus v0.13"
 grep -q 'android:label="Salus"' android/app/src/main/AndroidManifest.xml || fail "Android app label must be Salus"
 grep -q "title: 'Salus'" lib/app.dart || fail "Flutter app title must be Salus"
 grep -q "SALUS MODULES" lib/widgets/module_menu_button.dart || fail "Salus module switcher missing"
 for folder in mdpi hdpi xhdpi xxhdpi xxxhdpi; do [ -f "android/app/src/main/res/mipmap-${folder}/ic_launcher.png" ] || fail "launcher icon missing for ${folder}"; done
 grep -q "native registry parser preserves package origins and counts" test/health_origin_registry_service_test.dart || fail "source registry tests missing"
-echo "Salus v0.12 source registry + visual refresh contract passed."
+echo "Salus v0.13 source registry + asset-driven visual refresh contract passed."

@@ -56,6 +56,33 @@ for required in "class SalusPaper" "class SalusSectionTitle" "class SalusMetric"
   grep -q "$required" "$SALUS_WIDGETS_FILE" || fail "Salus shared visual system missing: $required"
 done
 
+
+# The approved visual direction is asset-driven, not a Material-icon approximation.
+for asset in \
+  lib/assets/salus/paper_texture.png \
+  lib/assets/salus/dark_texture.png \
+  lib/assets/salus/branch_gold.png \
+  lib/assets/salus/metric_weight.png \
+  lib/assets/salus/metric_sleep.png \
+  lib/assets/salus/metric_steps.png \
+  lib/assets/salus/metric_recovery.png \
+  lib/assets/salus/tile_body.png \
+  lib/assets/salus/tile_sleep.png \
+  lib/assets/salus/tile_activity.png \
+  lib/assets/salus/tile_notes.png \
+  lib/assets/salus/art_body.png \
+  lib/assets/salus/art_sleep.png \
+  lib/assets/salus/art_activity.png \
+  lib/assets/salus/art_notes.png; do
+  [ -s "$asset" ] || fail "required Salus visual asset missing or empty: $asset"
+done
+
+grep -q "lib/assets/salus/" pubspec.yaml || fail "pubspec must package Salus visual assets"
+grep -q "SalusAssets.metricWeight" "$HOME_FILE" || fail "home must use the approved metric image assets"
+grep -q "SalusAssets.tileBody" "$HOME_FILE" || fail "home must use the approved module tile image assets"
+grep -q "SalusAssets.artSleep" "$HOME_FILE" || fail "home must use the approved decorative line-art assets"
+grep -q "AssetImage(SalusAssets.paperTexture)" "$SALUS_WIDGETS_FILE" || fail "shared Salus paper surface must use the parchment texture asset"
+
 # Existing functional detail screens remain required while their visual refresh can evolve incrementally.
 for required in "Day" "Week" "Month" "Year" "Workouts" "Weekly activity" "Automatic"; do
   grep -q "$required" "$ACTIVITY_FILE" || fail "activity screen missing approved element: $required"
@@ -166,4 +193,4 @@ if violations:
     raise SystemExit(1)
 PY
 
-echo "Salus v0.12 UI contract + readability checks passed."
+echo "Salus v0.13 asset-driven UI contract + readability checks passed."

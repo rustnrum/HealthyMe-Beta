@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/module_menu_button.dart';
+import '../../widgets/salus_widgets.dart';
 import 'diet_home_screen.dart';
 import 'diet_menu_screen.dart';
 import 'diet_planning_screen.dart';
@@ -36,11 +37,15 @@ class _DietShellState extends State<DietShell> {
       data: Theme.of(context).copyWith(scaffoldBackgroundColor: DietPalette.background),
       child: Scaffold(
         appBar: AppBar(
+          flexibleSpace: Container(decoration: const BoxDecoration(image: DecorationImage(image: AssetImage(SalusAssets.leatherTexture), fit: BoxFit.cover, opacity: 0.88))),
           leading: IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.chevron_left_rounded, size: 30)),
-          title: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          title: Row(children: [
+            Opacity(opacity: 0.82, child: Image.asset(SalusAssets.headerBranch, width: 30, height: 44, fit: BoxFit.contain)),
+            const SizedBox(width: 8),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
             const Text('SALUS', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: 2.0)),
             Text('DIET • ${_titles[_index].toUpperCase()}', style: const TextStyle(color: AppTheme.cyan, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 1.5)),
-          ]),
+          ])]),
           actions: [HealthyMeModuleMenuButton(current: HealthyMeModule.diet, onSelected: (module) {
             switch (module) {
               case HealthyMeModule.fitness: Navigator.of(context).popUntil((route) => route.isFirst); break;
@@ -62,7 +67,7 @@ class _DietBottomNav extends StatelessWidget {
   static const _items = [(Icons.today_outlined, 'Today'), (Icons.restaurant_menu_rounded, 'Meals'), (Icons.calendar_month_outlined, 'Plan'), (Icons.shopping_cart_outlined, 'Grocery')];
   @override
   Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(color: AppTheme.backgroundDeep, border: Border(top: BorderSide(color: AppTheme.border, width: 0.8))),
+    decoration: const BoxDecoration(color: AppTheme.backgroundDeep, image: DecorationImage(image: AssetImage(SalusAssets.leatherTexture), fit: BoxFit.cover, opacity: 0.82), border: Border(top: BorderSide(color: AppTheme.border, width: 0.8))),
     padding: EdgeInsets.only(top: 8, bottom: 6 + MediaQuery.paddingOf(context).bottom * 0.45),
     child: Row(children: [for (var i=0;i<_items.length;i++) Expanded(child: InkWell(onTap: () => onChanged(i), child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(mainAxisSize: MainAxisSize.min, children: [
       Icon(_items[i].$1, color: i==index ? AppTheme.cyan : AppTheme.creamText.withValues(alpha: 0.72), size: 22),
@@ -76,9 +81,7 @@ class DietPlaceholderCard extends StatelessWidget {
   final IconData icon; final String title; final String detail; final Color accent;
   const DietPlaceholderCard({super.key, required this.icon, required this.title, required this.detail, this.accent = DietPalette.accent});
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFF8EEDB), Color(0xFFEEDBB8)]), borderRadius: BorderRadius.circular(14), border: Border.all(color: DietPalette.border.withValues(alpha: 0.75))),
+  Widget build(BuildContext context) => SalusPaper(
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Container(width: 48, height: 48, decoration: BoxDecoration(color: accent.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: accent, size: 25)),
       const SizedBox(width: 13), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(color: DietPalette.textPrimary, fontSize: 19, fontWeight: FontWeight.w700)), const SizedBox(height: 5), Text(detail, style: const TextStyle(color: DietPalette.textSecondary, fontSize: 13.5, height: 1.4))]))

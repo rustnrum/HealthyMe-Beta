@@ -22,7 +22,7 @@ class DietHomeScreen extends StatelessWidget {
         const SizedBox(height: 11),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
-          decoration: BoxDecoration(color: const Color(0xFF3C3C22), borderRadius: BorderRadius.circular(14), border: Border.all(color: DietPalette.border)),
+          decoration: BoxDecoration(color: const Color(0xFF2A1B11), image: const DecorationImage(image: AssetImage(SalusAssets.leatherTexture), fit: BoxFit.cover, opacity: 0.82), borderRadius: BorderRadius.circular(14), border: Border.all(color: DietPalette.border)),
           child: const Row(children: [CircleAvatar(radius: 24, backgroundColor: Color(0x335F4A21), child: Icon(Icons.add_a_photo_outlined, color: AppTheme.cyan, size: 25)), SizedBox(width: 13), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Add Food', style: TextStyle(color: AppTheme.creamText, fontSize: 21, fontWeight: FontWeight.w700)), SizedBox(height: 2), Text('Photo, barcode, search, describe or voice', style: TextStyle(color: Color(0xFFD7C7A7), fontSize: 13))])), Icon(Icons.chevron_right_rounded, color: AppTheme.creamText)]),
         ),
         const SizedBox(height: 11),
