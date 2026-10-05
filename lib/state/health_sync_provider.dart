@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
 import '../services/health_connect_service.dart';
+import '../services/source_name_service.dart';
 import 'app_state.dart';
 
 class HealthSyncNotifier extends AsyncNotifier<void> {
@@ -47,10 +48,23 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
 
   Future<void> _sync({bool? historyOverride}) async {
     final app = ref.read(appStateProvider);
+    // HEALTHY_ME_SOURCE_HUB_ROUTE_SANITIZER_V010
+    // Old betas allowed transport pseudo-sources to be saved as metric routes.
+    // Convert those back to Automatic before querying provider-specific data.
+    final routedSources = Map<String, String>.from(app.metricSources);
+    final obsoleteRoutes = routedSources.entries
+        .where((entry) => SourceNameService.isTransportOnly(entry.value))
+        .map((entry) => entry.key)
+        .toList();
+    for (final metric in obsoleteRoutes) {
+      routedSources.remove(metric);
+      ref.read(appStateProvider.notifier).setMetricSource(metric, 'Auto');
+    }
+
     final snapshot = await _service.sync(
       historicalAccess:
           historyOverride ?? app.health.historicalAccess,
-      metricSources: app.metricSources,
+      metricSources: routedSources,
     );
     Map<String, List<String>> mergeSourceLists(
       Map<String, List<String>> oldValues,

@@ -7,6 +7,9 @@ import 'package:permission_handler/permission_handler.dart';
 import '../models/models.dart';
 import 'source_name_service.dart';
 
+// HEALTHY_ME_SOURCE_HUB_V010
+// Health Connect is an import transport. Healthy Me routes metrics by the
+// original record provider exposed by Health Connect DataOrigin metadata.
 class HealthConnectService {
   final Health _health = Health();
 
@@ -134,7 +137,9 @@ class HealthConnectService {
       }
     }
 
-    final sources = sourceLabels.keys.toList()
+    final sources = sourceLabels.keys
+        .where((source) => !SourceNameService.isTransportOnly(source))
+        .toList()
       ..sort((a, b) => (sourceLabels[a] ?? a).compareTo(sourceLabels[b] ?? b));
 
     bool sourceMatches(HealthDataPoint point, String? selectedSource) {
@@ -152,7 +157,12 @@ class HealthConnectService {
       final allowed = types.toSet();
       HealthDataPoint? latest;
       for (final point in points) {
-        if (!allowed.contains(point.type) || originKey(point).isEmpty) continue;
+        final origin = originKey(point);
+        if (!allowed.contains(point.type) ||
+            origin.isEmpty ||
+            SourceNameService.isTransportOnly(origin)) {
+          continue;
+        }
         if (latest == null || point.dateTo.isAfter(latest.dateTo)) {
           latest = point;
         }
@@ -172,16 +182,23 @@ class HealthConnectService {
           ..sort((a, b) => a.dateTo.compareTo(b.dateTo));
         if (matching.isNotEmpty) {
           final key = originKey(matching.last);
-          if (key.isNotEmpty) {
+          if (key.isNotEmpty && !SourceNameService.isTransportOnly(key)) {
             resolvedSources[metric] = key;
             return key;
           }
         }
+
+        // A manual source choice is authoritative. Never silently fall back to
+        // another provider when the selected provider has no records.
+        return null;
       }
 
       final auto = latestOriginForTypes(types);
-      if (auto != null) resolvedSources[metric] = auto;
-      return auto;
+      if (auto != null) {
+        resolvedSources[metric] = auto;
+        return auto;
+      }
+      return null;
     }
 
     List<HealthDataPoint> filtered(
@@ -234,22 +251,18 @@ class HealthConnectService {
     final today = DateTime(now.year, now.month, now.day);
 
     final selectedStepSource = metricSources['Steps'];
-    final allStepPoints = points
-        .where((p) => p.type == HealthDataType.STEPS)
+    final resolvedStepSource = resolvedOrigin(
+      'Steps',
+      [HealthDataType.STEPS],
+    );
+    final rawSteps = points
+        .where(
+          (p) => p.type == HealthDataType.STEPS &&
+              resolvedStepSource != null &&
+              originKey(p) == resolvedStepSource,
+        )
         .toList()
       ..sort((a, b) => a.dateTo.compareTo(b.dateTo));
-    final rawSteps = selectedStepSource != null && selectedStepSource != 'Auto'
-        ? allStepPoints.where((p) => sourceMatches(p, selectedStepSource)).toList()
-        : allStepPoints;
-    if (selectedStepSource != null &&
-        selectedStepSource != 'Auto' &&
-        rawSteps.isNotEmpty) {
-      resolvedSources['Steps'] = originKey(rawSteps.last);
-    } else {
-      const aggregateKey = '__health_connect_steps_aggregate__';
-      sourceLabels[aggregateKey] = 'Health Connect aggregate';
-      resolvedSources['Steps'] = aggregateKey;
-    }
 
     int rawStepTotal(DateTime start, DateTime end) {
       var total = 0.0;
@@ -275,11 +288,9 @@ class HealthConnectService {
     }
 
     Future<int> stepTotal(DateTime start, DateTime end) async {
-      final source = metricSources['Steps'];
-      if (source != null && source != 'Auto') {
-        return rawStepTotal(start, end);
-      }
-      return await _health.getTotalStepsInInterval(start, end) ?? 0;
+      // Healthy Me deliberately totals one provider at a time so the value and
+      // attribution stay aligned. Health Connect remains transport only.
+      return rawStepTotal(start, end);
     }
 
     final stepsToday = await stepTotal(today, now);
@@ -318,18 +329,17 @@ class HealthConnectService {
       }
     }
 
-    // Motion metrics can be written by several apps at once. For Auto steps,
-    // Health Connect's aggregate API resolves step duplication. Distance and
-    // active calories do not have the same aggregate helper in this plugin, so
-    // anchor them to one actual motion origin rather than summing Samsung +
-    // Garmin + phone records together.
+    // Motion metrics can be written by several apps at once. Anchor activity
+    // values to the same provider Healthy Me resolved for Steps so provenance
+    // and totals do not mix multiple apps together.
     final resolvedMotionSource =
         selectedStepSource != null && selectedStepSource != 'Auto'
-            ? resolvedSources['Steps']
-            : latestOriginForTypes([
-                HealthDataType.STEPS,
-                HealthDataType.DISTANCE_DELTA,
-              ]);
+            ? selectedStepSource
+            : resolvedSources['Steps'] ??
+                latestOriginForTypes([
+                  HealthDataType.STEPS,
+                  HealthDataType.DISTANCE_DELTA,
+                ]);
 
     final calories = filteredForSource(
       HealthDataType.ACTIVE_ENERGY_BURNED,
@@ -556,7 +566,10 @@ class HealthConnectService {
       final values = points
           .where((point) => allowed.contains(point.type))
           .map(originKey)
-          .where((source) => source.isNotEmpty)
+          .where(
+            (source) =>
+                source.isNotEmpty && !SourceNameService.isTransportOnly(source),
+          )
           .toSet()
           .toList();
       values.sort(

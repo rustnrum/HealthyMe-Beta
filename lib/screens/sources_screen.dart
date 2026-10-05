@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/formatters.dart';
 import '../core/theme/app_theme.dart';
+import '../models/models.dart';
 import '../services/ble_discovery_service.dart';
-import '../services/native_source_discovery_service.dart';
+import '../services/source_hub_service.dart';
 import '../services/source_name_service.dart';
 import '../state/app_state.dart';
 import '../state/health_sync_provider.dart';
@@ -19,7 +20,7 @@ class SourcesScreen extends ConsumerStatefulWidget {
 }
 
 class _SourcesScreenState extends ConsumerState<SourcesScreen> {
-  static const _buildLabel = 'Beta 0.9.0+13 • Source Discovery';
+  static const _buildLabel = 'Beta 0.10.0+14 • Healthy Me Source Hub';
 
   static const metrics = [
     'Steps',
@@ -36,16 +37,10 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     'Workouts',
   ];
 
-  final _nativeDiscovery = NativeSourceDiscoveryService();
   final _bleDiscovery = BleDiscoveryService();
-
-  HealthDiscoveryStatus? _discoveryStatus;
   List<BleDeviceCandidate> _bleDevices = const [];
   final Map<String, BleDeviceInspection> _bleInspections = {};
   final Set<String> _inspecting = {};
-
-  bool _checkingDiscovery = false;
-  bool _launchingMatchmaking = false;
   bool _scanningBle = false;
   String? _bleError;
 
@@ -54,67 +49,16 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-
       final app = ref.read(appStateProvider);
       final sync = ref.read(healthSyncProvider);
       if (app.health.authorized && !sync.isLoading) {
         await ref.read(healthSyncProvider.notifier).sync();
       }
-
-      if (mounted) {
-        await _refreshSystemDiscovery();
-      }
     });
-  }
-
-  Future<void> _refreshSystemDiscovery() async {
-    if (_checkingDiscovery) return;
-    setState(() => _checkingDiscovery = true);
-
-    try {
-      final status = await _nativeDiscovery.status();
-      if (!mounted) return;
-      setState(() {
-        _discoveryStatus = status;
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _checkingDiscovery = false);
-      }
-    }
-  }
-
-  Future<void> _launchSystemMatchmaking() async {
-    if (_launchingMatchmaking) return;
-    setState(() => _launchingMatchmaking = true);
-
-    try {
-      await _nativeDiscovery.launchMatchmaking();
-      if (!mounted) return;
-
-      final app = ref.read(appStateProvider);
-      if (app.health.authorized) {
-        await ref.read(healthSyncProvider.notifier).sync();
-      }
-
-      if (mounted) {
-        await _refreshSystemDiscovery();
-      }
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Health Connect discovery: $error')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _launchingMatchmaking = false);
-      }
-    }
   }
 
   Future<void> _scanBluetooth() async {
     if (_scanningBle) return;
-
     setState(() {
       _scanningBle = true;
       _bleError = null;
@@ -130,9 +74,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
       if (!mounted) return;
       setState(() => _bleError = error.toString());
     } finally {
-      if (mounted) {
-        setState(() => _scanningBle = false);
-      }
+      if (mounted) setState(() => _scanningBle = false);
     }
   }
 
@@ -147,12 +89,10 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not inspect ${device.name}: $error')),
+        SnackBar(content: Text('Could not identify ${device.name}: $error')),
       );
     } finally {
-      if (mounted) {
-        setState(() => _inspecting.remove(device.id));
-      }
+      if (mounted) setState(() => _inspecting.remove(device.id));
     }
   }
 
@@ -161,6 +101,11 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     final app = ref.watch(appStateProvider);
     final sync = ref.watch(healthSyncProvider);
     final h = app.health;
+    final providerSources = SourceHubService.healthSources(h);
+    final bluetoothSources = SourceHubService.bluetoothSources(
+      devices: _bleDevices,
+      inspections: _bleInspections,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Data Sources')),
@@ -169,22 +114,31 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
         children: [
           _buildIdentityCard(),
           const SizedBox(height: 12),
-          _healthConnectCard(
+          _transportCard(
             authorized: h.authorized,
             lastSync: h.lastSync,
             syncLoading: sync.isLoading,
           ),
-          const SizedBox(height: 12),
-          _systemDiscoveryCard(),
-          const SizedBox(height: 12),
-          _bluetoothDiscoveryCard(),
-          const SizedBox(height: 24),
+          const SizedBox(height: 22),
+          const HmSectionHeader(title: 'Your data providers'),
+          const SizedBox(height: 6),
+          const Text(
+            'Healthy Me identifies the original provider and keeps Health Connect '
+            'in the background as a transport.',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _providerHubCard(providerSources),
+          const SizedBox(height: 22),
           const HmSectionHeader(title: 'Metric sources'),
           const SizedBox(height: 6),
           const Text(
-            'These rows show providers that have actually supplied records. '
-            'Automatic uses the freshest provider for each metric; Steps uses '
-            'Health Connect aggregate data when Automatic is selected.',
+            'Choose the provider Healthy Me should use for each metric. Automatic '
+            'uses the freshest provider that has actually supplied that metric.',
             style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 13,
@@ -201,6 +155,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
                     metric: metrics[i],
                     selectedRaw: app.metricSources[metrics[i]],
                     resolvedRaw: h.resolvedSources[metrics[i]],
+                    // Keep metric-specific availability explicit in this screen.
                     sources: h.availableSources[metrics[i]] ?? const [],
                     sourceLabels: h.sourceLabels,
                     freshness: h.freshness[metrics[i]],
@@ -208,8 +163,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
                       context,
                       metric: metrics[i],
                       selectedRaw: app.metricSources[metrics[i]],
-                      sources: h.availableSources[metrics[i]] ?? const [],
-                      sourceLabels: h.sourceLabels,
+                      health: h,
                       authorized: h.authorized,
                     ),
                   ),
@@ -218,45 +172,21 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
               ],
             ),
           ),
-          if (h.detectedSources.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            const HmSectionHeader(title: 'Record provider diagnostics'),
-            const SizedBox(height: 6),
-            const Text(
-              'These are the data origins Healthy Me can prove have supplied '
-              'readable Health Connect records.',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 13,
-                height: 1.4,
-              ),
+          const SizedBox(height: 22),
+          const HmSectionHeader(title: 'Nearby devices'),
+          const SizedBox(height: 6),
+          const Text(
+            'Bluetooth is used to identify devices and capabilities. A device is '
+            'not selectable as a metric source until Healthy Me can actually read '
+            'that metric from it.',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 13,
+              height: 1.4,
             ),
-            const SizedBox(height: 10),
-            CommandCard(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 3),
-              child: Column(
-                children: [
-                  for (var i = 0; i < h.detectedSources.length; i++) ...[
-                    _ProviderRow(
-                      sourceKey: h.detectedSources[i],
-                      label: h.sourceLabels[h.detectedSources[i]] ??
-                          SourceNameService.friendly(h.detectedSources[i]),
-                      metrics: h.availableSources.entries
-                          .where(
-                            (entry) =>
-                                entry.value.contains(h.detectedSources[i]),
-                          )
-                          .map((entry) => entry.key)
-                          .toList(),
-                      lastSeen: h.sourceLastSeen[h.detectedSources[i]],
-                    ),
-                    if (i != h.detectedSources.length - 1)
-                      const Divider(height: 1),
-                  ],
-                ],
-              ),
-            ),
-          ],
+          ),
+          const SizedBox(height: 10),
+          _bluetoothCard(bluetoothSources),
         ],
       ),
     );
@@ -286,8 +216,8 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'This build includes Health Connect matchmaking plus direct Bluetooth LE '
-                  'scanning and GATT inspection.',
+                  'One source hub routes each metric by the actual provider, not '
+                  'by the transport used to import it.',
                   style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12.5,
@@ -302,261 +232,105 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     );
   }
 
-  Widget _healthConnectCard({
+  Widget _transportCard({
     required bool authorized,
     required DateTime? lastSync,
     required bool syncLoading,
   }) {
     return CommandCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              const HmIconBadge(
-                icon: Icons.health_and_safety_rounded,
-                color: AppTheme.cyan,
-                size: 44,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Health Connect records',
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      lastSync == null
-                          ? 'No refresh yet'
-                          : 'Last refresh ${relativeAge(lastSync)}',
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 12.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              HmStatusPill(
-                text: authorized ? 'Connected' : 'Not connected',
-                color: authorized ? AppTheme.mint : AppTheme.rose,
-              ),
-            ],
+          const HmIconBadge(
+            icon: Icons.sync_alt_rounded,
+            color: AppTheme.cyan,
+            size: 44,
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: syncLoading
-                  ? null
-                  : () async {
-                      if (authorized) {
-                        await ref.read(healthSyncProvider.notifier).sync();
-                      } else {
-                        await ref
-                            .read(healthSyncProvider.notifier)
-                            .connectAndSync();
-                      }
-                      if (mounted) {
-                        await _refreshSystemDiscovery();
-                      }
-                    },
-              icon: Icon(
-                authorized ? Icons.refresh_rounded : Icons.add_link_rounded,
-              ),
-              label: Text(
-                authorized ? 'Refresh Health Connect records' : 'Connect',
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _systemDiscoveryCard() {
-    final status = _discoveryStatus;
-
-    String statusText() {
-      if (_checkingDiscovery) return 'Checking Android source discovery…';
-      if (status == null) return 'Not checked yet';
-      if (!status.matchmakingSupported) {
-        return 'Health Connect matchmaking is not available on this Android build';
-      }
-      if (status.matchmakingPossible) {
-        return 'Compatible sources are available to connect';
-      }
-      return 'No unconnected Health Connect sources found right now';
-    }
-
-    return CommandCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const HmIconBadge(
-                icon: Icons.travel_explore_rounded,
-                color: AppTheme.purple,
-                size: 44,
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Android source discovery',
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Health Connect import',
                   style: TextStyle(
                     color: AppTheme.textPrimary,
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-              ),
-              if (_checkingDiscovery)
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-            ],
-          ),
-          const SizedBox(height: 9),
-          Text(
-            statusText(),
-            style: TextStyle(
-              color: status?.matchmakingPossible == true
-                  ? AppTheme.mint
-                  : AppTheme.textSecondary,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          if (status != null) ...[
-            const SizedBox(height: 5),
-            Text(
-              'Health Connect U extension ${status.healthExtensionVersion} • '
-              'matchmaking ${status.matchmakingSupported ? 'available' : 'not available'}',
-              style: const TextStyle(
-                color: AppTheme.textMuted,
-                fontSize: 12,
-              ),
-            ),
-            if (status.message.isNotEmpty) ...[
-              const SizedBox(height: 3),
-              Text(
-                status.message,
-                style: const TextStyle(
-                  color: AppTheme.textMuted,
-                  fontSize: 12,
-                  height: 1.3,
-                ),
-              ),
-            ],
-          ],
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed:
-                      _checkingDiscovery ? null : _refreshSystemDiscovery,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Recheck'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: status?.matchmakingSupported == true &&
-                          status?.matchmakingPossible == true &&
-                          !_launchingMatchmaking
-                      ? _launchSystemMatchmaking
-                      : null,
-                  icon: const Icon(Icons.add_link_rounded),
-                  label: Text(
-                    _launchingMatchmaking
-                        ? 'Opening…'
-                        : 'Find compatible sources',
+                const SizedBox(height: 3),
+                Text(
+                  lastSync == null
+                      ? 'Transport only • no refresh yet'
+                      : 'Transport only • refreshed ${relativeAge(lastSync)}',
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12.5,
                   ),
                 ),
-              ),
-            ],
-          ),
-          if (status?.visibleApps.isNotEmpty == true) ...[
-            const SizedBox(height: 16),
-            const Text(
-              'Visible Health Connect apps',
-              style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-              ),
+              ],
             ),
-            const SizedBox(height: 6),
-            for (final app in status!.visibleApps)
-              _SimpleDiagnosticLine(
-                title: app.label,
-                detail: app.packageName,
-              ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: syncLoading
+                ? null
+                : () async {
+                    if (authorized) {
+                      await ref.read(healthSyncProvider.notifier).sync();
+                    } else {
+                      await ref
+                          .read(healthSyncProvider.notifier)
+                          .connectAndSync();
+                    }
+                  },
+            child: Text(authorized ? 'Refresh' : 'Connect'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _providerHubCard(List<HealthyDataSource> providers) {
+    if (providers.isEmpty) {
+      return const CommandCard(
+        child: Text(
+          'No provider records found yet. Refresh after your health apps have '
+          'written data to Health Connect.',
+          style: TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 13,
+            height: 1.4,
+          ),
+        ),
+      );
+    }
+
+    return CommandCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      child: Column(
+        children: [
+          for (var i = 0; i < providers.length; i++) ...[
+            _ProviderRow(source: providers[i]),
+            if (i != providers.length - 1) const Divider(height: 1),
           ],
         ],
       ),
     );
   }
 
-  Widget _bluetoothDiscoveryCard() {
+  Widget _bluetoothCard(List<HealthyDataSource> sources) {
     return CommandCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            children: [
-              HmIconBadge(
-                icon: Icons.bluetooth_searching_rounded,
-                color: AppTheme.blue,
-                size: 44,
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Nearby Bluetooth health devices',
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    SizedBox(height: 3),
-                    Text(
-                      'Direct BLE discovery does not depend on Health Connect records.',
-                      style: TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 12.5,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: _scanningBle ? null : _scanBluetooth,
-              icon: const Icon(Icons.radar_rounded),
+              icon: const Icon(Icons.bluetooth_searching_rounded),
               label: Text(
-                _scanningBle ? 'Scanning for 8 seconds…' : 'Scan nearby BLE',
+                _scanningBle ? 'Scanning for 8 seconds…' : 'Scan nearby devices',
               ),
             ),
           ),
@@ -571,11 +345,10 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
               ),
             ),
           ],
-          if (!_scanningBle && _bleDevices.isEmpty && _bleError == null) ...[
+          if (!_scanningBle && sources.isEmpty && _bleError == null) ...[
             const SizedBox(height: 10),
             const Text(
-              'Start a scan while the ring or scale is awake. Scales often '
-              'advertise only while a measurement is being taken.',
+              'Nothing scanned yet. Keep the device awake and nearby, then scan.',
               style: TextStyle(
                 color: AppTheme.textMuted,
                 fontSize: 12.5,
@@ -583,24 +356,25 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
               ),
             ),
           ],
-          if (_bleDevices.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Text(
-              '${_bleDevices.length} nearby BLE device'
-              '${_bleDevices.length == 1 ? '' : 's'} found',
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 8),
-            for (final device in _bleDevices.take(20))
-              _BleDeviceRow(
-                device: device,
-                inspection: _bleInspections[device.id],
-                inspecting: _inspecting.contains(device.id),
-                onInspect: () => _inspectBluetooth(device),
+          if (sources.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            for (final source in sources.take(20))
+              _BleSourceRow(
+                source: source,
+                device: _bleDevices.firstWhere(
+                  (device) => source.id == 'ble:${device.id}',
+                ),
+                inspection: _bleInspections[
+                  source.id.replaceFirst('ble:', '')
+                ],
+                inspecting: _inspecting.contains(
+                  source.id.replaceFirst('ble:', ''),
+                ),
+                onInspect: () => _inspectBluetooth(
+                  _bleDevices.firstWhere(
+                    (device) => source.id == 'ble:${device.id}',
+                  ),
+                ),
               ),
           ],
         ],
@@ -612,23 +386,29 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     BuildContext context, {
     required String metric,
     required String? selectedRaw,
-    required List<String> sources,
-    required Map<String, String> sourceLabels,
+    required HealthSnapshot health,
     required bool authorized,
   }) async {
-    final unique = SourceNameService.uniqueRawByFriendly(sources);
+    final choices = SourceHubService.healthChoicesForMetric(health, metric);
+    final unavailable = SourceHubService.healthSourcesMissingMetric(
+      health,
+      metric,
+    );
     final selected = selectedRaw ?? 'Auto';
 
     final next = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
       backgroundColor: AppTheme.surface,
       builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.78,
+          ),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+            shrinkWrap: true,
             children: [
               Text(
                 '$metric source',
@@ -640,7 +420,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
               ),
               const SizedBox(height: 5),
               const Text(
-                'Choose the provider Healthy Me should use for this metric.',
+                'Healthy Me routes this metric to the provider you choose.',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 13,
@@ -649,33 +429,66 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
               const SizedBox(height: 12),
               _SourceChoice(
                 title: 'Automatic',
-                subtitle: metric == 'Steps'
-                    ? 'Use Health Connect aggregate step data'
-                    : 'Use the freshest provider supplying this metric',
+                subtitle: 'Use the freshest provider with actual $metric data',
                 selected: selected == 'Auto',
                 onTap: () => Navigator.pop(sheetContext, 'Auto'),
               ),
-              for (final source in unique)
+              for (final source in choices)
                 _SourceChoice(
-                  title: sourceLabels[source] ??
-                      SourceNameService.friendly(source),
-                  subtitle: 'Use only this source for $metric',
-                  selected: SourceNameService.sameProvider(selected, source),
-                  onTap: () => Navigator.pop(sheetContext, source),
+                  title: source.label,
+                  subtitle: '${source.transportLabel} • use only for $metric',
+                  selected: SourceNameService.sameProvider(
+                    selected,
+                    source.id,
+                  ),
+                  onTap: () => Navigator.pop(sheetContext, source.id),
                 ),
-              if (unique.isEmpty)
+              if (choices.isEmpty)
                 const Padding(
                   padding: EdgeInsets.only(top: 10),
                   child: Text(
-                    'No provider has supplied this metric yet. Use Android '
-                    'source discovery or BLE scan above to find additional sources.',
+                    'No provider has supplied this metric yet.',
                     style: TextStyle(
                       color: AppTheme.textMuted,
                       fontSize: 12.5,
-                      height: 1.35,
                     ),
                   ),
                 ),
+              if (unavailable.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'Other detected providers',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                for (final source in unavailable)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.block_rounded,
+                          size: 18,
+                          color: AppTheme.textMuted,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${source.label} • no $metric records found',
+                            style: const TextStyle(
+                              color: AppTheme.textMuted,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ],
           ),
         ),
@@ -683,7 +496,6 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     );
 
     if (next == null || !mounted) return;
-
     ref.read(appStateProvider.notifier).setMetricSource(metric, next);
     if (authorized) {
       await ref.read(healthSyncProvider.notifier).sync();
@@ -714,19 +526,23 @@ class _MetricSourceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final resolvedLabel = resolvedRaw == null
         ? null
-        : (sourceLabels[resolvedRaw!] ??
-            SourceNameService.friendly(resolvedRaw!));
+        : sourceLabels[resolvedRaw!] ?? SourceNameService.friendly(resolvedRaw!);
     final selectedLabel = selectedRaw == null
         ? null
-        : (sourceLabels[selectedRaw!] ??
-            SourceNameService.friendly(selectedRaw!));
+        : sourceLabels[selectedRaw!] ?? SourceNameService.friendly(selectedRaw!);
 
-    final current = selectedRaw == null
-        ? (resolvedLabel == null ? 'Automatic' : 'Automatic • $resolvedLabel')
-        : (resolvedRaw != null &&
-                !SourceNameService.sameProvider(selectedRaw!, resolvedRaw!))
-            ? '$selectedLabel selected • using $resolvedLabel'
-            : selectedLabel!;
+    final String current;
+    if (selectedRaw == null) {
+      current = resolvedLabel == null
+          ? 'Automatic • no data yet'
+          : 'Automatic • $resolvedLabel';
+    } else if (resolvedRaw == null) {
+      current = '$selectedLabel • no current $metric data';
+    } else {
+      current = selectedLabel!;
+    }
+
+    final providerCount = SourceNameService.uniqueRawByFriendly(sources).length;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 13),
@@ -761,14 +577,15 @@ class _MetricSourceRow extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                if (freshness != null)
-                  Text(
-                    'Data ${relativeAge(freshness)}',
-                    style: const TextStyle(
-                      color: AppTheme.textMuted,
-                      fontSize: 12,
-                    ),
+                Text(
+                  freshness == null
+                      ? '$providerCount provider${providerCount == 1 ? '' : 's'} available'
+                      : 'Data ${relativeAge(freshness)} • $providerCount provider${providerCount == 1 ? '' : 's'}',
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 12,
                   ),
+                ),
               ],
             ),
           ),
@@ -814,13 +631,81 @@ class _MetricSourceRow extends StatelessWidget {
       };
 }
 
-class _BleDeviceRow extends StatelessWidget {
+class _ProviderRow extends StatelessWidget {
+  final HealthyDataSource source;
+
+  const _ProviderRow({required this.source});
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = source.metrics.isEmpty
+        ? 'No readable metrics yet'
+        : source.metrics.join(' • ');
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 11),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.sensors_rounded, color: AppTheme.mint, size: 21),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  source.label,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  source.transportLabel,
+                  style: const TextStyle(
+                    color: AppTheme.cyan,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  metrics,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (source.lastSeen != null)
+            Text(
+              relativeAge(source.lastSeen!),
+              style: const TextStyle(
+                color: AppTheme.textMuted,
+                fontSize: 12,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BleSourceRow extends StatelessWidget {
+  final HealthyDataSource source;
   final BleDeviceCandidate device;
   final BleDeviceInspection? inspection;
   final bool inspecting;
   final VoidCallback onInspect;
 
-  const _BleDeviceRow({
+  const _BleSourceRow({
+    required this.source,
     required this.device,
     required this.inspection,
     required this.inspecting,
@@ -829,234 +714,141 @@ class _BleDeviceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final capabilities = inspection?.capabilities ?? device.capabilities;
-    final profile = inspection?.protocolProfile ?? device.protocolProfile;
-    final note = inspection?.protocolNote ?? device.protocolNote;
-
+    final capabilities = source.metrics;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(top: 8),
       decoration: BoxDecoration(
         color: AppTheme.surfaceHigh,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppTheme.border),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.bluetooth_rounded,
-                color: AppTheme.blue,
-                size: 22,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: Row(
+              children: [
+                const Icon(Icons.bluetooth_rounded, color: AppTheme.blue),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        source.label,
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      if (source.secondaryLabel != null)
+                        Text(
+                          source.secondaryLabel!,
+                          style: const TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      Text(
+                        inspection == null
+                            ? 'Detected nearby'
+                            : source.note ?? 'Bluetooth services identified',
+                        style: const TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: inspecting ? null : onInspect,
+                  child: Text(
+                    inspecting
+                        ? 'Identifying…'
+                        : inspection == null
+                            ? 'Identify'
+                            : 'Identify again',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (capabilities.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
                 child: Text(
-                  device.name,
+                  capabilities.join(' • '),
                   style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w900,
+                    color: AppTheme.mint,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
-              Text(
-                '${device.rssi} dBm',
-                style: const TextStyle(
+            ),
+          if (inspection != null)
+            ExpansionTile(
+              dense: true,
+              tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+              childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              title: const Text(
+                'Advanced diagnostics',
+                style: TextStyle(
                   color: AppTheme.textMuted,
-                  fontSize: 12,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            device.id,
-            style: const TextStyle(
-              color: AppTheme.textMuted,
-              fontSize: 12,
-            ),
-          ),
-          if (capabilities.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Capabilities: ${capabilities.join(' • ')}',
-              style: const TextStyle(
-                color: AppTheme.mint,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-          if (profile != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Protocol profile: $profile',
-              style: const TextStyle(
-                color: AppTheme.amber,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-          if (note != null && inspection != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              note,
-              style: const TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 12,
-                height: 1.35,
-              ),
-            ),
-          ],
-          if (device.advertisedServices.isNotEmpty) ...[
-            const SizedBox(height: 5),
-            Text(
-              'Advertised services: ${device.advertisedServices.join(', ')}',
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppTheme.textMuted,
-                fontSize: 12,
-                height: 1.3,
-              ),
-            ),
-          ],
-          if (device.manufacturerDataHex.isNotEmpty) ...[
-            const SizedBox(height: 5),
-            Text(
-              'Manufacturer data: ${device.manufacturerDataHex}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppTheme.textMuted,
-                fontSize: 12,
-              ),
-            ),
-          ],
-          if (inspection != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              '${inspection!.services.length} GATT services discovered',
-              style: const TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            for (final service in inspection!.services.take(8))
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  '${service.serviceUuid}\n'
-                  '${service.characteristicDetails.join('\n')}',
-                  style: const TextStyle(
-                    color: AppTheme.textMuted,
-                    fontSize: 12,
-                    height: 1.25,
+              children: [
+                _DiagnosticText('Address', device.id),
+                _DiagnosticText('Signal', '${device.rssi} dBm'),
+                if (device.advertisedServices.isNotEmpty)
+                  _DiagnosticText(
+                    'Advertised services',
+                    device.advertisedServices.join(', '),
                   ),
-                ),
-              ),
-          ],
-          const SizedBox(height: 6),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: inspecting ? null : onInspect,
-              icon: inspecting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.manage_search_rounded),
-              label: Text(
-                inspection == null ? 'Inspect GATT' : 'Inspect again',
-              ),
+                if (device.manufacturerDataHex.isNotEmpty)
+                  _DiagnosticText(
+                    'Manufacturer bytes',
+                    device.manufacturerDataHex,
+                  ),
+                for (final service in inspection!.services)
+                  _DiagnosticText(
+                    service.serviceUuid,
+                    service.characteristicDetails.join('\n'),
+                  ),
+              ],
             ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _ProviderRow extends StatelessWidget {
-  final String sourceKey;
+class _DiagnosticText extends StatelessWidget {
   final String label;
-  final List<String> metrics;
-  final DateTime? lastSeen;
+  final String value;
 
-  const _ProviderRow({
-    required this.sourceKey,
-    required this.label,
-    required this.metrics,
-    required this.lastSeen,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _SimpleDiagnosticLine(
-      title: label,
-      detail: [
-        metrics.isEmpty ? 'No current metric records' : metrics.join(' • '),
-        if (lastSeen != null) 'Last record ${relativeAge(lastSeen)}',
-        sourceKey,
-      ].join('\n'),
-    );
-  }
-}
-
-class _SimpleDiagnosticLine extends StatelessWidget {
-  final String title;
-  final String detail;
-
-  const _SimpleDiagnosticLine({
-    required this.title,
-    required this.detail,
-  });
+  const _DiagnosticText(this.label, this.value);
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.chevron_right_rounded,
+      padding: const EdgeInsets.only(top: 7),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          '$label\n$value',
+          style: const TextStyle(
             color: AppTheme.textMuted,
-            size: 18,
+            fontSize: 12,
+            height: 1.3,
           ),
-          const SizedBox(width: 5),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                if (detail.isNotEmpty)
-                  Text(
-                    detail,
-                    style: const TextStyle(
-                      color: AppTheme.textMuted,
-                      fontSize: 12,
-                      height: 1.3,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1080,26 +872,24 @@ class _SourceChoice extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       onTap: onTap,
+      leading: Icon(
+        selected ? Icons.radio_button_checked : Icons.radio_button_off,
+        color: selected ? AppTheme.cyan : AppTheme.textMuted,
+      ),
       title: Text(
         title,
         style: const TextStyle(
           color: AppTheme.textPrimary,
           fontSize: 14,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w900,
         ),
       ),
       subtitle: Text(
         subtitle,
         style: const TextStyle(
           color: AppTheme.textSecondary,
-          fontSize: 12,
+          fontSize: 12.5,
         ),
-      ),
-      trailing: Icon(
-        selected
-            ? Icons.radio_button_checked_rounded
-            : Icons.radio_button_unchecked_rounded,
-        color: selected ? AppTheme.cyan : AppTheme.textMuted,
       ),
     );
   }

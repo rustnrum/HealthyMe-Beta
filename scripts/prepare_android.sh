@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+python3 scripts/source_hub_patch.py
+
 MANIFEST="android/app/src/main/AndroidManifest.xml"
 
 if [ ! -f "$MANIFEST" ]; then
@@ -806,14 +808,14 @@ path = Path('android/app/src/main/AndroidManifest.xml')
 text = path.read_text()
 text = re.sub(
     r'android:label="[^"]+"',
-    'android:label="Healthy Me Beta 0.9"',
+    'android:label="Healthy Me Beta 0.10"',
     text,
     count=1,
 )
 path.write_text(text)
 PYLABEL
 
-echo "Healthy Me Beta 0.9 runtime Health Connect matchmaking + BLE bridge applied."
+echo "Healthy Me Beta 0.10 Source Hub + native BLE bridge applied."
 
 bash scripts/ui_contract_check.sh
 bash scripts/source_discovery_contract.sh

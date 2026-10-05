@@ -9,9 +9,16 @@ void main() {
     );
   });
 
-  test('normalizes Health Connect package id', () {
+  test('normalizes Android phone-origin package id', () {
     expect(
       SourceNameService.friendly('com.android.healthconnect.phone.j8fd1ebc'),
+      'Your phone',
+    );
+  });
+
+  test('normalizes actual Health Connect package id', () {
+    expect(
+      SourceNameService.friendly('com.google.android.apps.healthdata'),
       'Health Connect',
     );
   });
@@ -59,5 +66,4 @@ void main() {
       isTrue,
     );
   });
-
 }
