@@ -9,7 +9,7 @@ import 'source_name_service.dart';
 import 'health_origin_registry_service.dart';
 
 // HEALTHY_ME_SOURCE_HUB_V010
-// Health Connect is an import transport. Healthy Me routes metrics by the
+// Health Connect is an import transport. Salus routes metrics by the
 // original record provider exposed by Health Connect DataOrigin metadata.
 // HEALTHY_ME_SOURCE_REGISTRY_V011
 class HealthConnectService {
@@ -118,7 +118,7 @@ class HealthConnectService {
       },
     );
     // Never dedupe across providers. Cross-provider dedupe can erase the
-    // very DataOrigin Healthy Me needs for source routing. Dedupe only inside
+    // very DataOrigin Salus needs for source routing. Dedupe only inside
     // each provider bucket.
     final providerBuckets = <String, List<HealthDataPoint>>{};
     for (final point in points) {
@@ -326,7 +326,7 @@ class HealthConnectService {
     }
 
     Future<int> stepTotal(DateTime start, DateTime end) async {
-      // Healthy Me deliberately totals one provider at a time so the value and
+      // Salus deliberately totals one provider at a time so the value and
       // attribution stay aligned. Health Connect remains transport only.
       return rawStepTotal(start, end);
     }
@@ -368,7 +368,7 @@ class HealthConnectService {
     }
 
     // Motion metrics can be written by several apps at once. Anchor activity
-    // values to the same provider Healthy Me resolved for Steps so provenance
+    // values to the same provider Salus resolved for Steps so provenance
     // and totals do not mix multiple apps together.
     final resolvedMotionSource =
         selectedStepSource != null && selectedStepSource != 'Auto'

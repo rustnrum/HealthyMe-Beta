@@ -116,7 +116,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
-                      'Healthy Me',
+                      'Salus',
                       style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900),
                     ),
                   ),
@@ -142,7 +142,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     context,
                     title: 'Start with you',
                     subtitle:
-                        'Healthy Me uses this profile to interpret data instead of making you guess at basic targets.',
+                        'Salus uses this profile to interpret data instead of making you guess at basic targets.',
                     children: [
                       TextField(
                         controller: _name,

@@ -71,7 +71,7 @@ class DailyStateService {
     );
   }
 
-  /// Healthy Me's transparent conversion for blending subjective Daily State
+  /// Salus's transparent conversion for blending subjective Daily State
   /// into the app's existing 0-100 wellness recovery estimate. This is not an
   /// official score from SRSS or any diagnostic instrument.
   static int? recoveryEstimate(DailyStateEntry? entry) {

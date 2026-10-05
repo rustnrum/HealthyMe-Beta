@@ -41,7 +41,7 @@ class RecoveryReport {
   });
 }
 
-/// Healthy Me recovery wellness estimate.
+/// Salus recovery wellness estimate.
 ///
 /// Objective telemetry and the optional Daily State check-in are blended into
 /// a transparent app score. This does not copy a proprietary wearable formula

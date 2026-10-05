@@ -144,7 +144,7 @@ class _DailyStateScreenState extends ConsumerState<DailyStateScreen> {
           ],
           const SizedBox(height: 18),
           const Text(
-            'Daily State is a wellness check-in, not a diagnosis. This beta uses recovery/stress research constructs and a 0–6 response format while commercial instrument wording/licensing is still being resolved. Healthy Me’s combined recovery estimate is its own transparent app calculation, not an official SRSS score.',
+            'Daily State is a wellness check-in, not a diagnosis. This beta uses recovery/stress research constructs and a 0–6 response format while commercial instrument wording/licensing is still being resolved. Salus’s combined recovery estimate is its own transparent app calculation, not an official SRSS score.',
             style: TextStyle(
               color: AppTheme.textMuted,
               fontSize: 11.5,
@@ -379,7 +379,7 @@ class _TodayResult extends ConsumerWidget {
               if (estimate != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'Healthy Me subjective recovery input: $estimate/100',
+                  'Salus subjective recovery input: $estimate/100',
                   style: const TextStyle(
                     color: AppTheme.textMuted,
                     fontSize: 12,

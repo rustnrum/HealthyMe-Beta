@@ -56,7 +56,7 @@ class SleepGuidanceService {
     return const SleepGuidance(
       minimumMinutes: 0,
       label: 'Guidance unavailable',
-      note: 'Healthy Me does not provide a sleep target for children under age 6.',
+      note: 'Salus does not provide a sleep target for children under age 6.',
     );
   }
 }

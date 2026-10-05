@@ -20,7 +20,7 @@ class SourcesScreen extends ConsumerStatefulWidget {
 }
 
 class _SourcesScreenState extends ConsumerState<SourcesScreen> {
-  static const _buildLabel = 'Beta 0.11.0+15 • Healthy Me Source Registry';
+  static const _buildLabel = 'Beta 0.12.0+16 • Salus Source Registry';
 
   static const metrics = [
     'Steps',
@@ -123,7 +123,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
           const HmSectionHeader(title: 'Your data providers'),
           const SizedBox(height: 6),
           const Text(
-            'Healthy Me identifies the original provider and keeps Health Connect '
+            'Salus identifies the original provider and keeps Health Connect '
             'in the background as a transport.',
             style: TextStyle(
               color: AppTheme.textSecondary,
@@ -137,7 +137,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
           const HmSectionHeader(title: 'Metric sources'),
           const SizedBox(height: 6),
           const Text(
-            'Choose the provider Healthy Me should use for each metric. Automatic '
+            'Choose the provider Salus should use for each metric. Automatic '
             'uses the freshest provider that has actually supplied that metric.',
             style: TextStyle(
               color: AppTheme.textSecondary,
@@ -177,7 +177,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
           const SizedBox(height: 6),
           const Text(
             'Bluetooth is used to identify devices and capabilities. A device is '
-            'not selectable as a metric source until Healthy Me can actually read '
+            'not selectable as a metric source until Salus can actually read '
             'that metric from it.',
             style: TextStyle(
               color: AppTheme.textSecondary,
@@ -420,7 +420,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
               ),
               const SizedBox(height: 5),
               const Text(
-                'Healthy Me routes this metric to the provider you choose.',
+                'Salus routes this metric to the provider you choose.',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 13,

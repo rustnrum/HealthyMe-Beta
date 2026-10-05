@@ -89,7 +89,7 @@ class _LabsContent extends ConsumerWidget {
               ),
               const SizedBox(height: 11),
               const Text(
-                'Enter the values exactly as shown on the lab report. Healthy Me stores the raw result, unit, date and source for trends and wellness context; it does not diagnose or automatically label a result high or low.',
+                'Enter the values exactly as shown on the lab report. Salus stores the raw result, unit, date and source for trends and wellness context; it does not diagnose or automatically label a result high or low.',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 13,
@@ -112,7 +112,7 @@ class _LabsContent extends ConsumerWidget {
         const HmSectionHeader(title: 'Common bloodwork'),
         const SizedBox(height: 6),
         const Text(
-          'These are the routine and high-value markers Healthy Me is prepared to track. Only fill in what was actually tested.',
+          'These are the routine and high-value markers Salus is prepared to track. Only fill in what was actually tested.',
           style: TextStyle(
             color: AppTheme.textSecondary,
             fontSize: 13,

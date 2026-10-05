@@ -1,7 +1,7 @@
 name: healthy_me
-description: Healthy Me - a personal body command center.
+description: Salus by Rust N Rum - a personal health journal and body command center.
 publish_to: 'none'
-version: 0.11.0+15
+version: 0.12.0+16
 
 environment:
   sdk: '>=3.12.0 <4.0.0'

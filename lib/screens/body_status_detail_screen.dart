@@ -160,7 +160,7 @@ class BodyStatusDetailScreen extends ConsumerWidget {
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 16),
                     child: Text(
-                      'Healthy Me is still building enough baseline data to call out strong positive signals.',
+                      'Salus is still building enough baseline data to call out strong positive signals.',
                       style: TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 14,
@@ -202,7 +202,7 @@ class BodyStatusDetailScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 14),
           const Text(
-            'Nutrition is not used to lower or raise Body Status until the Diet section has real meal data. Healthy Me will not guess that a meal was missed.',
+            'Nutrition is not used to lower or raise Body Status until the Diet section has real meal data. Salus will not guess that a meal was missed.',
             style: TextStyle(
               color: AppTheme.textMuted,
               fontSize: 12.5,

@@ -119,7 +119,7 @@ class PlanService {
         const PlanItem(
           title: 'Connect body telemetry',
           detail:
-              'Health Connect can give Healthy Me real steps, sleep, heart, workout and body data so the daily report stops relying on gaps.',
+              'Health Connect can give Salus real steps, sleep, heart, workout and body data so the daily report stops relying on gaps.',
           category: 'Data',
         ),
       );

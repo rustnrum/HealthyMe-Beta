@@ -429,7 +429,7 @@ class _BodyScreenState extends ConsumerState<BodyScreen> {
                 const SizedBox(height: 3),
                 Text(
                   bodyFat == null
-                      ? 'Healthy Me does not ask you to manually enter body fat.'
+                      ? 'Salus does not ask you to manually enter body fat.'
                       : 'Device body-fat reading from ${_sourceLabel(app, 'Body fat')}.',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,

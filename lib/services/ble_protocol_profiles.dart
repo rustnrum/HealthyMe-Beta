@@ -56,7 +56,7 @@ class BleProtocolProfiles {
       ],
       note:
           'This service fingerprint has a known request/response protocol. '
-          'Healthy Me may send transport requests to read metrics, but does not '
+          'Salus may send transport requests to read metrics, but does not '
           'write health values or change device settings.',
     ),
   ];

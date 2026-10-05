@@ -252,7 +252,7 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
 
   String _insight(int tonight, int average, int target) {
     if (tonight <= 0) {
-      return 'No sleep data yet. Connect a sleep source through Health Connect and Healthy Me will compare it with your own baseline.';
+      return 'No sleep data yet. Connect a sleep source through Health Connect and Salus will compare it with your own baseline.';
     }
     if (average > 0) {
       final delta = tonight - average;
@@ -260,7 +260,7 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
         return 'You slept less than your recent average. A lighter day and a consistent sleep window may support recovery.';
       }
       if (delta >= 45) {
-        return 'You slept more than your recent average. Healthy Me will keep watching whether that becomes a trend.';
+        return 'You slept more than your recent average. Salus will keep watching whether that becomes a trend.';
       }
     }
     if (target > 0 && tonight < target) {

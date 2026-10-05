@@ -76,7 +76,7 @@ class PlanScreen extends ConsumerWidget {
             ),
           const SizedBox(height: 6),
           const Text(
-            'Healthy Me provides wellness suggestions, not diagnosis or treatment. Medical symptoms and abnormal results belong with a qualified clinician.',
+            'Salus provides wellness suggestions, not diagnosis or treatment. Medical symptoms and abnormal results belong with a qualified clinician.',
             style: TextStyle(
               color: AppTheme.textMuted,
               fontSize: 13,

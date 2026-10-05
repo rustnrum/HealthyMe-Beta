@@ -12,17 +12,15 @@ import 'widgets/morning_checkin_gate.dart';
 
 class HealthyMeApp extends ConsumerWidget {
   const HealthyMeApp({super.key});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(appStateProvider);
-
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Healthy Me',
+      title: 'Salus',
       theme: AppTheme.dark,
       darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.dark,
+      themeMode: ThemeMode.light,
       routes: {
         '/diet': (_) => const DietShell(),
         '/health': (_) => const HealthShell(),

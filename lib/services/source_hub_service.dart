@@ -155,7 +155,7 @@ class SourceHubService {
           transport: SourceTransport.directBluetooth,
           metrics: capabilities,
           // Discovery/inspection is not the same as a data reader. Keep direct
-          // devices out of metric routing until Healthy Me can decode them.
+          // devices out of metric routing until Salus can decode them.
           selectable: false,
           secondaryLabel:
               identifiedAsRing && rawName.isNotEmpty ? rawName : null,

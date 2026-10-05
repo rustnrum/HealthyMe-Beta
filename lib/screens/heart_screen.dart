@@ -122,7 +122,7 @@ class HeartScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'Healthy Me compares available cardiovascular signals with your own recent pattern. It does not diagnose heart conditions.',
+            'Salus compares available cardiovascular signals with your own recent pattern. It does not diagnose heart conditions.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
