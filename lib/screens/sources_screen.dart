@@ -20,7 +20,7 @@ class SourcesScreen extends ConsumerStatefulWidget {
 }
 
 class _SourcesScreenState extends ConsumerState<SourcesScreen> {
-  static const _buildLabel = 'Beta 0.10.0+14 • Healthy Me Source Hub';
+  static const _buildLabel = 'Beta 0.11.0+15 • Healthy Me Source Registry';
 
   static const metrics = [
     'Steps',
@@ -436,7 +436,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
               for (final source in choices)
                 _SourceChoice(
                   title: source.label,
-                  subtitle: '${source.transportLabel} • use only for $metric',
+                  subtitle: '${source.transportLabel} • ${source.recordsFor(metric)} records • use only for $metric',
                   selected: SourceNameService.sameProvider(
                     selected,
                     source.id,
@@ -640,7 +640,12 @@ class _ProviderRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final metrics = source.metrics.isEmpty
         ? 'No readable metrics yet'
-        : source.metrics.join(' • ');
+        : source.metrics
+            .map((metric) {
+              final count = source.recordsFor(metric);
+              return count > 0 ? '$metric ($count)' : metric;
+            })
+            .join(' • ');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 11),
       child: Row(

@@ -126,7 +126,7 @@ class MainActivity : FlutterFragmentActivity() {
     companion object {
         private const val CHANNEL = "com.rustnrum.healthyme/source_discovery"
         private const val MATCHMAKING_REQUEST_CODE = 9041
-        private const val HEALTH_CONNECT_SERVICE_NAME = "health_connect"
+        private const val HEALTH_CONNECT_SERVICE_NAME = "healthconnect"
         private const val MATCHMAKING_EXTENSION_VERSION = 21
         private const val DEFAULT_SCAN_MS = 8000L
         private const val GATT_TIMEOUT_MS = 12000L
@@ -808,7 +808,7 @@ path = Path('android/app/src/main/AndroidManifest.xml')
 text = path.read_text()
 text = re.sub(
     r'android:label="[^"]+"',
-    'android:label="Healthy Me Beta 0.10"',
+    'android:label="Healthy Me Beta 0.11"',
     text,
     count=1,
 )

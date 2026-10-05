@@ -12,6 +12,7 @@ class HealthyDataSource {
   final String label;
   final SourceTransport transport;
   final List<String> metrics;
+  final Map<String, int> recordCounts;
   final bool selectable;
   final DateTime? lastSeen;
   final String? secondaryLabel;
@@ -22,6 +23,7 @@ class HealthyDataSource {
     required this.label,
     required this.transport,
     required this.metrics,
+    this.recordCounts = const {},
     required this.selectable,
     this.lastSeen,
     this.secondaryLabel,
@@ -29,6 +31,9 @@ class HealthyDataSource {
   });
 
   bool provides(String metric) => metrics.contains(metric);
+  int recordsFor(String metric) => recordCounts[metric] ?? 0;
+  int get totalRecords =>
+      recordCounts.values.fold<int>(0, (sum, value) => sum + value);
 
   String get transportLabel => switch (transport) {
         SourceTransport.healthConnect => 'via Health Connect',
@@ -38,10 +43,26 @@ class HealthyDataSource {
 
 class SourceHubService {
   static List<HealthyDataSource> healthSources(HealthSnapshot health) {
-    final ids = <String>{
+    final rawIds = <String>{
       ...health.detectedSources,
       for (final values in health.availableSources.values) ...values,
     }..removeWhere(SourceNameService.isTransportOnly);
+
+    // Prefer package-origin keys discovered by the native registry, then add
+    // any remaining aliases. This prevents one provider appearing twice as a
+    // package id and a display name.
+    final ids = <String>[];
+    final preferred = <String>[
+      for (final counts in health.sourceRecordCounts.values) ...counts.keys,
+      ...rawIds,
+    ];
+    for (final raw in preferred) {
+      if (raw.isEmpty || SourceNameService.isTransportOnly(raw)) continue;
+      if (ids.any((existing) => SourceNameService.sameProvider(existing, raw))) {
+        continue;
+      }
+      ids.add(raw);
+    }
 
     final result = <HealthyDataSource>[];
     for (final id in ids) {
@@ -56,12 +77,22 @@ class SourceHubService {
           .toList()
         ..sort();
 
+      final recordCounts = <String, int>{};
+      for (final entry in health.sourceRecordCounts.entries) {
+        for (final sourceEntry in entry.value.entries) {
+          if (SourceNameService.sameProvider(sourceEntry.key, id)) {
+            recordCounts[entry.key] = sourceEntry.value;
+          }
+        }
+      }
+
       result.add(
         HealthyDataSource(
           id: id,
           label: health.sourceLabels[id] ?? SourceNameService.friendly(id),
           transport: SourceTransport.healthConnect,
           metrics: metrics,
+          recordCounts: recordCounts,
           selectable: metrics.isNotEmpty,
           lastSeen: health.sourceLastSeen[id],
         ),

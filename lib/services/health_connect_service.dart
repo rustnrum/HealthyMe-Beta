@@ -6,12 +6,16 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../models/models.dart';
 import 'source_name_service.dart';
+import 'health_origin_registry_service.dart';
 
 // HEALTHY_ME_SOURCE_HUB_V010
 // Health Connect is an import transport. Healthy Me routes metrics by the
 // original record provider exposed by Health Connect DataOrigin metadata.
+// HEALTHY_ME_SOURCE_REGISTRY_V011
 class HealthConnectService {
   final Health _health = Health();
+  final HealthOriginRegistryService _originRegistry =
+      HealthOriginRegistryService();
 
   static const List<HealthDataType> _types = [
     HealthDataType.STEPS,
@@ -113,7 +117,25 @@ class HealthConnectService {
         HealthDataType.BLOOD_OXYGEN: HealthDataUnit.PERCENT,
       },
     );
-    points = _health.removeDuplicates(points);
+    // Never dedupe across providers. Cross-provider dedupe can erase the
+    // very DataOrigin Healthy Me needs for source routing. Dedupe only inside
+    // each provider bucket.
+    final providerBuckets = <String, List<HealthDataPoint>>{};
+    for (final point in points) {
+      final sourceId = point.sourceId.trim();
+      final sourceName = point.sourceName.trim();
+      final providerKey = sourceId.isNotEmpty ? sourceId : sourceName;
+      providerBuckets.putIfAbsent(providerKey, () => <HealthDataPoint>[]).add(point);
+    }
+    points = [
+      for (final bucket in providerBuckets.values)
+        ..._health.removeDuplicates(bucket),
+    ];
+
+    final nativeRegistry = await _originRegistry.scan(
+      startTime: queryStart,
+      endTime: now,
+    );
 
     String originKey(HealthDataPoint point) => SourceNameService.key(
           sourceId: point.sourceId,
@@ -134,6 +156,22 @@ class HealthConnectService {
       final previous = sourceLastSeen[key];
       if (previous == null || point.dateTo.isAfter(previous)) {
         sourceLastSeen[key] = point.dateTo;
+      }
+    }
+
+    // Native Android Health Connect scans the underlying Record.metadata
+    // DataOrigin package name. This registry is independent from Flutter's
+    // cross-provider dedupe behavior and is the source of truth for discovery.
+    for (final stat in nativeRegistry.allStats()) {
+      final key = stat.packageName;
+      if (key.isEmpty || SourceNameService.isTransportOnly(key)) continue;
+      sourceLabels[key] = stat.label.isEmpty
+          ? SourceNameService.friendly(key)
+          : SourceNameService.friendly(stat.label);
+      final seen = stat.lastSeen;
+      final previous = sourceLastSeen[key];
+      if (seen != null && (previous == null || seen.isAfter(previous))) {
+        sourceLastSeen[key] = seen;
       }
     }
 
@@ -561,17 +599,38 @@ class HealthConnectService {
       return null;
     }
 
-    List<String> originsFor(Iterable<HealthDataType> types) {
+    Map<String, int> recordCountsFor(
+      String metric,
+      Iterable<HealthDataType> types,
+    ) {
+      final counts = <String, int>{};
+      final native = nativeRegistry.metrics[metric];
+      if (native != null) {
+        for (final entry in native.entries) {
+          final source = entry.key;
+          if (source.isEmpty || SourceNameService.isTransportOnly(source)) continue;
+          counts[source] = entry.value.recordCount;
+        }
+      }
+
       final allowed = types.toSet();
-      final values = points
-          .where((point) => allowed.contains(point.type))
-          .map(originKey)
-          .where(
-            (source) =>
-                source.isNotEmpty && !SourceNameService.isTransportOnly(source),
-          )
-          .toSet()
-          .toList();
+      for (final point in points) {
+        if (!allowed.contains(point.type)) continue;
+        final source = originKey(point);
+        if (source.isEmpty || SourceNameService.isTransportOnly(source)) continue;
+        // Native count wins when present; plugin raw points provide fallback on
+        // Android versions where the platform registry is unavailable.
+        if (native != null &&
+            native.keys.any((key) => SourceNameService.sameProvider(key, source))) {
+          continue;
+        }
+        counts[source] = (counts[source] ?? 0) + 1;
+      }
+      return counts;
+    }
+
+    List<String> sourcesFromCounts(Map<String, int> counts) {
+      final values = counts.keys.toList();
       values.sort(
         (a, b) => (sourceLabels[a] ?? SourceNameService.friendly(a))
             .compareTo(sourceLabels[b] ?? SourceNameService.friendly(b)),
@@ -579,19 +638,42 @@ class HealthConnectService {
       return values;
     }
 
+    final sourceRecordCounts = <String, Map<String, int>>{
+      'Steps': recordCountsFor('Steps', [HealthDataType.STEPS]),
+      'Sleep': recordCountsFor('Sleep', sleepTypes),
+      'Heart rate': recordCountsFor('Heart rate', [HealthDataType.HEART_RATE]),
+      'Resting heart rate': recordCountsFor(
+        'Resting heart rate',
+        [HealthDataType.RESTING_HEART_RATE],
+      ),
+      'HRV': recordCountsFor(
+        'HRV',
+        [HealthDataType.HEART_RATE_VARIABILITY_RMSSD],
+      ),
+      'Respiratory rate': recordCountsFor(
+        'Respiratory rate',
+        [HealthDataType.RESPIRATORY_RATE],
+      ),
+      'SpO2': recordCountsFor('SpO2', [HealthDataType.BLOOD_OXYGEN]),
+      'Weight': recordCountsFor('Weight', [HealthDataType.WEIGHT]),
+      'Body fat': recordCountsFor(
+        'Body fat',
+        [HealthDataType.BODY_FAT_PERCENTAGE],
+      ),
+      'Body water': recordCountsFor(
+        'Body water',
+        [HealthDataType.BODY_WATER_MASS],
+      ),
+      'Lean body mass': recordCountsFor(
+        'Lean body mass',
+        [HealthDataType.LEAN_BODY_MASS],
+      ),
+      'Workouts': recordCountsFor('Workouts', [HealthDataType.WORKOUT]),
+    };
+
     final availableSources = <String, List<String>>{
-      'Steps': originsFor([HealthDataType.STEPS]),
-      'Sleep': originsFor(sleepTypes),
-      'Heart rate': originsFor([HealthDataType.HEART_RATE]),
-      'Resting heart rate': originsFor([HealthDataType.RESTING_HEART_RATE]),
-      'HRV': originsFor([HealthDataType.HEART_RATE_VARIABILITY_RMSSD]),
-      'Respiratory rate': originsFor([HealthDataType.RESPIRATORY_RATE]),
-      'SpO2': originsFor([HealthDataType.BLOOD_OXYGEN]),
-      'Weight': originsFor([HealthDataType.WEIGHT]),
-      'Body fat': originsFor([HealthDataType.BODY_FAT_PERCENTAGE]),
-      'Body water': originsFor([HealthDataType.BODY_WATER_MASS]),
-      'Lean body mass': originsFor([HealthDataType.LEAN_BODY_MASS]),
-      'Workouts': originsFor([HealthDataType.WORKOUT]),
+      for (final entry in sourceRecordCounts.entries)
+        entry.key: sourcesFromCounts(entry.value),
     };
 
     return HealthSnapshot(
@@ -636,6 +718,8 @@ class HealthConnectService {
       resolvedSources: resolvedSources,
       sourceLastSeen: sourceLastSeen,
       freshness: freshness,
+      sourceRecordCounts: sourceRecordCounts,
+      nativeSourceRegistry: nativeRegistry.nativeSupported,
     );
   }
 

@@ -242,6 +242,8 @@ class HealthSnapshot {
   final Map<String, String> resolvedSources;
   final Map<String, DateTime> sourceLastSeen;
   final Map<String, DateTime> freshness;
+  final Map<String, Map<String, int>> sourceRecordCounts;
+  final bool nativeSourceRegistry;
 
   const HealthSnapshot({
     this.authorized = false,
@@ -284,6 +286,8 @@ class HealthSnapshot {
     this.resolvedSources = const {},
     this.sourceLastSeen = const {},
     this.freshness = const {},
+    this.sourceRecordCounts = const {},
+    this.nativeSourceRegistry = false,
   });
 
   HealthSnapshot copyWith({
@@ -328,6 +332,8 @@ class HealthSnapshot {
     Map<String, String>? resolvedSources,
     Map<String, DateTime>? sourceLastSeen,
     Map<String, DateTime>? freshness,
+    Map<String, Map<String, int>>? sourceRecordCounts,
+    bool? nativeSourceRegistry,
   }) {
     return HealthSnapshot(
       authorized: authorized ?? this.authorized,
@@ -371,6 +377,9 @@ class HealthSnapshot {
       resolvedSources: resolvedSources ?? this.resolvedSources,
       sourceLastSeen: sourceLastSeen ?? this.sourceLastSeen,
       freshness: freshness ?? this.freshness,
+      sourceRecordCounts: sourceRecordCounts ?? this.sourceRecordCounts,
+      nativeSourceRegistry:
+          nativeSourceRegistry ?? this.nativeSourceRegistry,
     );
   }
 
@@ -419,6 +428,8 @@ class HealthSnapshot {
         'freshness': freshness.map(
           (key, value) => MapEntry(key, value.toIso8601String()),
         ),
+        'sourceRecordCounts': sourceRecordCounts,
+        'nativeSourceRegistry': nativeSourceRegistry,
       };
 
   factory HealthSnapshot.fromJson(Map<String, dynamic> json) {
@@ -442,6 +453,8 @@ class HealthSnapshot {
         json['resolvedSources'] as Map<String, dynamic>? ?? const {};
     final rawSourceLastSeen =
         json['sourceLastSeen'] as Map<String, dynamic>? ?? const {};
+    final rawSourceRecordCounts =
+        json['sourceRecordCounts'] as Map<String, dynamic>? ?? const {};
 
     return HealthSnapshot(
       authorized: json['authorized'] == true,
@@ -526,6 +539,16 @@ class HealthSnapshot {
           DateTime.tryParse(value.toString()) ?? DateTime.now(),
         ),
       ),
+      sourceRecordCounts: rawSourceRecordCounts.map(
+        (metric, value) => MapEntry(
+          metric,
+          (value as Map<String, dynamic>? ?? const {}).map(
+            (source, count) =>
+                MapEntry(source, (count as num?)?.toInt() ?? 0),
+          ),
+        ),
+      ),
+      nativeSourceRegistry: json['nativeSourceRegistry'] == true,
     );
   }
 }

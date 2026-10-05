@@ -66,21 +66,6 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
           historyOverride ?? app.health.historicalAccess,
       metricSources: routedSources,
     );
-    Map<String, List<String>> mergeSourceLists(
-      Map<String, List<String>> oldValues,
-      Map<String, List<String>> newValues,
-    ) {
-      final result = <String, List<String>>{};
-      for (final key in {...oldValues.keys, ...newValues.keys}) {
-        final merged = <String>{
-          ...?oldValues[key],
-          ...?newValues[key],
-        }.toList();
-        result[key] = merged;
-      }
-      return result;
-    }
-
     final previous = app.health;
     final lastSeen = <String, DateTime>{...previous.sourceLastSeen};
     for (final entry in snapshot.sourceLastSeen.entries) {
@@ -95,10 +80,7 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
         ...previous.detectedSources,
         ...snapshot.detectedSources,
       }.toList(),
-      availableSources: mergeSourceLists(
-        previous.availableSources,
-        snapshot.availableSources,
-      ),
+      availableSources: snapshot.availableSources,
       sourceLabels: {
         ...previous.sourceLabels,
         ...snapshot.sourceLabels,
