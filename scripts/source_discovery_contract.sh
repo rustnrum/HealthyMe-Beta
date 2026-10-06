@@ -3,7 +3,9 @@ set -euo pipefail
 
 # prepare_android.sh writes MainActivity immediately before calling this contract.
 python3 scripts/native_source_registry_patch.py
+python3 scripts/direct_device_native_patch.py
 python3 scripts/salus_brand_patch.py
+python3 scripts/direct_device_patch.py
 
 fail() { echo "SOURCE REGISTRY CONTRACT FAILURE: $1" >&2; exit 1; }
 
@@ -25,7 +27,7 @@ MAIN_ACTIVITY="$(find android/app/src/main/kotlin -name MainActivity.kt -print -
 
 [ -n "$MAIN_ACTIVITY" ] || fail "MainActivity.kt missing"
 
-for required in "Beta 0.14.0+22 • Salus Source Registry" "Health Connect import" "Your data providers" "Metric sources" "records • use only for" "Sleep Stages"; do
+for required in "Beta 0.14.0+23 • Salus Source Registry" "Health Connect import" "Your data providers" "Metric sources" "records • use only for" "Sleep Stages"; do
   grep -q "$required" "$SOURCES" || fail "Sources screen missing: $required"
 done
 for forbidden in "Visible Health Connect apps" "Find compatible sources" "Health Connect aggregate step data"; do
@@ -50,7 +52,7 @@ grep -q "MethodChannel('com.rustnrum.healthyme/source_discovery')" "$BLE" || fai
 grep -q "ring-uart-v1" "$PROFILES" || fail "ring protocol fingerprint missing"
 grep -q "selectable: false" "$HUB" || fail "BLE discovery must not pretend to be a working metric reader"
 if grep -q "flutter_reactive_ble" "$PUBSPEC"; then fail "flutter_reactive_ble must not be reintroduced"; fi
-grep -q '^version: 0.14.0+22$' "$PUBSPEC" || fail "pubspec must identify Salus build 22"
+grep -q '^version: 0.14.0+23$' "$PUBSPEC" || fail "pubspec must identify Salus build 23"
 grep -q 'android:label="Salus"' android/app/src/main/AndroidManifest.xml || fail "Android app label must be Salus"
 grep -q "title: 'Salus'" lib/app.dart || fail "Flutter app title must be Salus"
 if grep -q "import 'workout_screen.dart';" lib/screens/activity_screen.dart; then fail "Activity still imports Workout as a detail page"; fi
@@ -79,7 +81,7 @@ for asset in \
   [ -s "$asset" ] || fail "clean Salus asset missing: $asset"
 done
 
-# Build 22 retains the clean Sleep/Steps assets and compact date strip from build 21.
+# Build 23 retains the clean Sleep/Steps assets and compact date strip from build 21.
 for asset in \
   lib/assets/salus/metric_sleep.png \
   lib/assets/salus/metric_steps.png; do
@@ -121,7 +123,7 @@ if grep -q "SalusAssets.calloutSameMe" "$HOME"; then fail "date strip still incl
 grep -q "EdgeInsets.fromLTRB(12, 8, 12, 24)" "$HOME" || fail "Home date strip top padding not compacted"
 grep -q "const Divider(height: 4, thickness: 0.8)" "$HOME" || fail "Home date divider not compacted"
 
-# Build 22 Home architecture: Today shortcuts + dynamic overnight signals; no redundant module/source stack.
+# Build 23 retains the focused Home architecture from build 22.
 for forbidden in "Connected to a clearer you" "SalusModuleRow(" "SalusAssets.calloutSameMe"; do
   if grep -Fq "$forbidden" "$HOME"; then fail "redundant Home content remains: $forbidden"; fi
 done
@@ -134,6 +136,18 @@ grep -q "'/recovery': (_) => const RecoveryDetailScreen()" lib/app.dart || fail 
 for required in "class OvernightSignalsCard" "HRV" "Respiration" "Resting heart rate" "Off baseline"; do grep -q "$required" "$OVERNIGHT" || fail "overnight signals missing: $required"; done
 for required in "class TrendsScreen" "HRV" "Respiration" "Resting heart rate" "Sleep" "Steps" "Weight" "CustomPainter"; do grep -q "$required" "$TRENDS" || fail "Trends screen missing: $required"; done
 
+
+# Build 23 direct-device hub: broad BLE pairing/inspection without pretending every protocol is decoded.
+DIRECT_STORE="lib/services/direct_device_store.dart"
+grep -q '"pairBle" ->' "$MAIN_ACTIVITY" || fail "native direct-device pair method missing"
+grep -q 'SALUS_DIRECT_DEVICE_PAIRING_V023' "$MAIN_ACTIVITY" || fail "native direct-device pairing marker missing"
+grep -q 'createBond()' "$MAIN_ACTIVITY" || fail "Android bond attempt missing"
+grep -q 'bondStateLabel' "$MAIN_ACTIVITY" || fail "bond-state diagnostics missing"
+for required in "pairBle" "BlePairResult" "bondState" "protocolId" "deviceKind"; do grep -q "$required" "$BLE" || fail "BLE direct-device model missing: $required"; done
+for required in "ring-uart-v1" "huami-zepp-family" "no1-f1-family" "garmin-family" "fitcloud-family" "moyoung-dafit-family" "cpap-family" "0000181d-0000-1000-8000-00805f9b34fb" "0000181b-0000-1000-8000-00805f9b34fb"; do grep -q "$required" "$PROFILES" || fail "direct protocol/service profile missing: $required"; done
+for required in "class DirectDeviceStore" "salus_direct_devices_v1" "SavedDirectDevice"; do grep -q "$required" "$DIRECT_STORE" || fail "direct-device persistence missing: $required"; done
+for required in "Pair direct devices" "Saved direct devices" "Use with Salus" "_useWithSalus" "DirectDeviceStore"; do grep -q "$required" "$SOURCES" || fail "Sources direct-device UI missing: $required"; done
+
 for folder in mdpi hdpi xhdpi xxhdpi xxxhdpi; do [ -f "android/app/src/main/res/mipmap-${folder}/ic_launcher.png" ] || fail "launcher icon missing for ${folder}"; done
 grep -q "native registry parser preserves package origins and counts" test/health_origin_registry_service_test.dart || fail "source registry tests missing"
-echo "Salus build 22 source registry + focused Home + Trends contract passed."
+echo "Salus build 23 source registry + direct-device pairing contract passed."

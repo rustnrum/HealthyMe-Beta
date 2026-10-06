@@ -3,12 +3,12 @@ import re
 import shutil
 import struct
 
-VERSION_NEW = '0.14.0+22'
-SUPPORTED_OLD = {'0.14.0+20', '0.14.0+21'}
+VERSION_NEW = '0.14.0+23'
+SUPPORTED_OLD = {'0.14.0+20', '0.14.0+21', '0.14.0+22'}
 
 
 def fail(message: str) -> None:
-    raise SystemExit(f'Salus build 22 home insights patch: {message}')
+    raise SystemExit(f'Salus build 23 direct-device hub patch: {message}')
 
 
 def require(path_name: str, needle: str, label: str) -> None:
@@ -67,8 +67,8 @@ pub.write_text(text)
 for path in Path('lib').rglob('*.dart'):
     text = path.read_text()
     text = re.sub(
-        r'Beta 0\.14\.0\+(?:20|21|22) • Salus Source Registry',
-        'Beta 0.14.0+22 • Salus Source Registry',
+        r'Beta 0\.14\.0\+(?:20|21|22|23) • Salus Source Registry',
+        'Beta 0.14.0+23 • Salus Source Registry',
         text,
     )
     path.write_text(text)
@@ -379,4 +379,4 @@ for folder in ('mipmap-mdpi', 'mipmap-hdpi', 'mipmap-xhdpi', 'mipmap-xxhdpi', 'm
     dst_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst_dir / 'ic_launcher.png')
 
-print('Salus build 22 focused Home, overnight signals, and Trends page applied.')
+print('Salus build 23 direct-device hub base UI applied.')

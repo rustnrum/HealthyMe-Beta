@@ -5,6 +5,7 @@ import '../core/formatters.dart';
 import '../core/theme/app_theme.dart';
 import '../models/models.dart';
 import '../services/ble_discovery_service.dart';
+import '../services/direct_device_store.dart';
 import '../services/source_hub_service.dart';
 import '../services/source_name_service.dart';
 import '../state/app_state.dart';
@@ -20,7 +21,7 @@ class SourcesScreen extends ConsumerStatefulWidget {
 }
 
 class _SourcesScreenState extends ConsumerState<SourcesScreen> {
-  static const _buildLabel = 'Beta 0.14.0+22 • Salus Source Registry';
+  static const _buildLabel = 'Beta 0.14.0+23 • Salus Source Registry';
 
   static const metrics = [
     'Steps',
@@ -39,15 +40,19 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
   ];
 
   final _bleDiscovery = BleDiscoveryService();
+  final _directDeviceStore = DirectDeviceStore();
   List<BleDeviceCandidate> _bleDevices = const [];
+  List<SavedDirectDevice> _savedDirectDevices = const [];
   final Map<String, BleDeviceInspection> _bleInspections = {};
   final Set<String> _inspecting = {};
+  final Set<String> _pairing = {};
   bool _scanningBle = false;
   String? _bleError;
 
   @override
   void initState() {
     super.initState();
+    _loadSavedDirectDevices();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final app = ref.read(appStateProvider);
@@ -56,6 +61,56 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
         await ref.read(healthSyncProvider.notifier).sync();
       }
     });
+  }
+
+  Future<void> _loadSavedDirectDevices() async {
+    final devices = await _directDeviceStore.load();
+    if (!mounted) return;
+    setState(() => _savedDirectDevices = devices);
+  }
+
+  Future<void> _useWithSalus(BleDeviceCandidate device) async {
+    if (_pairing.contains(device.id)) return;
+    setState(() => _pairing.add(device.id));
+
+    try {
+      final pair = await _bleDiscovery.pair(device);
+      BleDeviceInspection? inspection = _bleInspections[device.id];
+      try {
+        final resolvedInspection =
+            inspection ?? await _bleDiscovery.inspect(device);
+        inspection = resolvedInspection;
+        if (mounted) {
+          setState(() => _bleInspections[device.id] = resolvedInspection);
+        }
+      } catch (_) {
+        // Some devices expose services only after protocol-specific
+        // authentication. Saving the device still lets Salus retry later.
+      }
+
+      await _directDeviceStore.save(
+        device: device,
+        inspection: inspection,
+        pair: pair,
+      );
+      await _loadSavedDirectDevices();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(pair.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save ${device.name}: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _pairing.remove(device.id));
+    }
+  }
+
+  Future<void> _removeSavedDirectDevice(String id) async {
+    await _directDeviceStore.remove(id);
+    await _loadSavedDirectDevices();
   }
 
   Future<void> _scanBluetooth() async {
@@ -174,18 +229,23 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
             ),
           ),
           const SizedBox(height: 22),
-          const HmSectionHeader(title: 'Nearby devices'),
+          const HmSectionHeader(title: 'Pair direct devices'),
           const SizedBox(height: 6),
           const Text(
-            'Bluetooth is used to identify devices and capabilities. A device is '
-            'not selectable as a metric source until Salus can actually read '
-            'that metric from it.',
+            'Salus can scan, inspect, pair and remember Bluetooth health devices '
+            'without their vendor app. Known protocol families and standard BLE '
+            'health services are identified automatically; metric readers are '
+            'enabled only when Salus can actually decode that device.',
             style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 13,
               height: 1.4,
             ),
           ),
+          if (_savedDirectDevices.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _savedDirectDevicesCard(),
+          ],
           const SizedBox(height: 10),
           _bluetoothCard(bluetoothSources),
         ],
@@ -320,6 +380,38 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     );
   }
 
+  Widget _savedDirectDevicesCard() {
+    return CommandCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(0, 8, 0, 3),
+            child: Text(
+              'Saved direct devices',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          for (var i = 0; i < _savedDirectDevices.length; i++) ...[
+            _SavedDirectDeviceRow(
+              device: _savedDirectDevices[i],
+              onRemove: () => _removeSavedDirectDevice(
+                _savedDirectDevices[i].id,
+              ),
+            ),
+            if (i != _savedDirectDevices.length - 1)
+              const Divider(height: 1),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _bluetoothCard(List<HealthyDataSource> sources) {
     return CommandCard(
       child: Column(
@@ -372,6 +464,17 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
                   source.id.replaceFirst('ble:', ''),
                 ),
                 onInspect: () => _inspectBluetooth(
+                  _bleDevices.firstWhere(
+                    (device) => source.id == 'ble:${device.id}',
+                  ),
+                ),
+                saved: _savedDirectDevices.any(
+                  (saved) => saved.id == source.id.replaceFirst('ble:', ''),
+                ),
+                pairing: _pairing.contains(
+                  source.id.replaceFirst('ble:', ''),
+                ),
+                onUse: () => _useWithSalus(
                   _bleDevices.firstWhere(
                     (device) => source.id == 'ble:${device.id}',
                   ),
@@ -705,38 +808,115 @@ class _ProviderRow extends StatelessWidget {
   }
 }
 
+class _SavedDirectDeviceRow extends StatelessWidget {
+  final SavedDirectDevice device;
+  final VoidCallback onRemove;
+
+  const _SavedDirectDeviceRow({
+    required this.device,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(_deviceIcon(device.deviceKind), color: AppTheme.mint, size: 24),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  device.name,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${device.deviceKind} • ${device.bonded ? 'Android bonded' : 'Direct GATT'}',
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                if (device.protocolLabel != null)
+                  Text(
+                    device.protocolLabel!,
+                    style: const TextStyle(
+                      color: AppTheme.cyan,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                if (device.capabilities.isNotEmpty)
+                  Text(
+                    device.capabilities.join(' • '),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          TextButton(onPressed: onRemove, child: const Text('Remove')),
+        ],
+      ),
+    );
+  }
+}
+
 class _BleSourceRow extends StatelessWidget {
   final HealthyDataSource source;
   final BleDeviceCandidate device;
   final BleDeviceInspection? inspection;
   final bool inspecting;
+  final bool saved;
+  final bool pairing;
   final VoidCallback onInspect;
+  final VoidCallback onUse;
 
   const _BleSourceRow({
     required this.source,
     required this.device,
     required this.inspection,
     required this.inspecting,
+    required this.saved,
+    required this.pairing,
     required this.onInspect,
+    required this.onUse,
   });
 
   @override
   Widget build(BuildContext context) {
     final capabilities = source.metrics;
+    final protocol = inspection?.protocolProfile ?? device.protocolProfile;
+    final kind = inspection?.deviceKind ?? device.deviceKind;
     return Container(
       margin: const EdgeInsets.only(top: 8),
       decoration: BoxDecoration(
         color: AppTheme.surfaceHigh,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.border),
+        border: Border.all(color: saved ? AppTheme.mint : AppTheme.border),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.bluetooth_rounded, color: AppTheme.blue),
+                Icon(_deviceIcon(kind), color: saved ? AppTheme.mint : AppTheme.blue),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Column(
@@ -750,17 +930,17 @@ class _BleSourceRow extends StatelessWidget {
                           fontWeight: FontWeight.w900,
                         ),
                       ),
-                      if (source.secondaryLabel != null)
-                        Text(
-                          source.secondaryLabel!,
-                          style: const TextStyle(
-                            color: AppTheme.textMuted,
-                            fontSize: 12,
-                          ),
+                      Text(
+                        protocol == null ? kind : '$kind • $protocol',
+                        style: const TextStyle(
+                          color: AppTheme.cyan,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
                         ),
+                      ),
                       Text(
                         inspection == null
-                            ? 'Detected nearby'
+                            ? 'Detected nearby • Android ${device.bondState}'
                             : source.note ?? 'Bluetooth services identified',
                         style: const TextStyle(
                           color: AppTheme.textSecondary,
@@ -770,6 +950,27 @@ class _BleSourceRow extends StatelessWidget {
                     ],
                   ),
                 ),
+              ],
+            ),
+          ),
+          if (capabilities.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Text(
+                'Detected/potential: ${capabilities.join(' • ')}',
+                style: const TextStyle(
+                  color: AppTheme.mint,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
                 TextButton(
                   onPressed: inspecting ? null : onInspect,
                   child: Text(
@@ -780,24 +981,20 @@ class _BleSourceRow extends StatelessWidget {
                             : 'Identify again',
                   ),
                 ),
+                FilledButton.tonalIcon(
+                  onPressed: saved || pairing ? null : onUse,
+                  icon: Icon(saved ? Icons.check_rounded : Icons.link_rounded, size: 18),
+                  label: Text(
+                    saved
+                        ? 'Saved to Salus'
+                        : pairing
+                            ? 'Pairing…'
+                            : 'Use with Salus',
+                  ),
+                ),
               ],
             ),
           ),
-          if (capabilities.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  capabilities.join(' • '),
-                  style: const TextStyle(
-                    color: AppTheme.mint,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
           if (inspection != null)
             ExpansionTile(
               dense: true,
@@ -813,7 +1010,10 @@ class _BleSourceRow extends StatelessWidget {
               ),
               children: [
                 _DiagnosticText('Address', device.id),
+                _DiagnosticText('Device class', kind),
+                _DiagnosticText('Android bond', device.bondState),
                 _DiagnosticText('Signal', '${device.rssi} dBm'),
+                if (protocol != null) _DiagnosticText('Protocol family', protocol),
                 if (device.advertisedServices.isNotEmpty)
                   _DiagnosticText(
                     'Advertised services',
@@ -835,6 +1035,16 @@ class _BleSourceRow extends StatelessWidget {
       ),
     );
   }
+}
+
+IconData _deviceIcon(String kind) {
+  final value = kind.toLowerCase();
+  if (value.contains('ring')) return Icons.circle_outlined;
+  if (value.contains('scale')) return Icons.monitor_weight_outlined;
+  if (value.contains('cpap') || value.contains('respiratory')) return Icons.air_rounded;
+  if (value.contains('watch') || value.contains('band')) return Icons.watch_outlined;
+  if (value.contains('blood pressure')) return Icons.favorite_border_rounded;
+  return Icons.bluetooth_rounded;
 }
 
 class _DiagnosticText extends StatelessWidget {

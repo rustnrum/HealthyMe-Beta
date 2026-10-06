@@ -12,8 +12,11 @@ class BleDeviceCandidate {
   final List<String> advertisedServices;
   final List<String> capabilities;
   final String? protocolProfile;
+  final String? protocolId;
   final String? protocolNote;
+  final String deviceKind;
   final String manufacturerDataHex;
+  final String bondState;
 
   const BleDeviceCandidate({
     required this.id,
@@ -22,8 +25,11 @@ class BleDeviceCandidate {
     required this.advertisedServices,
     required this.capabilities,
     required this.protocolProfile,
+    this.protocolId,
     required this.protocolNote,
+    this.deviceKind = 'Health device',
     required this.manufacturerDataHex,
+    this.bondState = 'unknown',
   });
 
   bool get hasKnownCapabilities =>
@@ -44,13 +50,31 @@ class BleDeviceInspection {
   final List<BleServiceInspection> services;
   final List<String> capabilities;
   final String? protocolProfile;
+  final String? protocolId;
   final String? protocolNote;
+  final String deviceKind;
 
   const BleDeviceInspection({
     required this.services,
     required this.capabilities,
     required this.protocolProfile,
+    this.protocolId,
     required this.protocolNote,
+    this.deviceKind = 'Health device',
+  });
+}
+
+class BlePairResult {
+  final bool usable;
+  final bool bonded;
+  final String state;
+  final String message;
+
+  const BlePairResult({
+    required this.usable,
+    required this.bonded,
+    required this.state,
+    required this.message,
   });
 }
 
@@ -72,7 +96,7 @@ class BleDiscoveryService {
     if (scan != PermissionStatus.granted ||
         connect != PermissionStatus.granted) {
       throw StateError(
-        'Bluetooth scan/connect permission is required to discover nearby health devices.',
+        'Bluetooth scan/connect permission is required to use nearby health devices.',
       );
     }
   }
@@ -135,13 +159,40 @@ class BleDiscoveryService {
 
       final report = BleProtocolProfiles.analyze(
         services.map((service) => service.serviceUuid),
+        name: device.name,
       );
 
       return BleDeviceInspection(
         services: services,
         capabilities: report.allCapabilities,
         protocolProfile: report.protocolProfile?.label,
+        protocolId: report.protocolProfile?.id,
         protocolNote: report.protocolProfile?.note,
+        deviceKind: report.deviceKind,
+      );
+    } on PlatformException catch (error) {
+      throw StateError(error.message ?? error.code);
+    }
+  }
+
+  Future<BlePairResult> pair(BleDeviceCandidate device) async {
+    if (!Platform.isAndroid) {
+      throw StateError('Direct Bluetooth pairing is only available on Android.');
+    }
+    await _requestPermissions();
+
+    try {
+      final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        'pairBle',
+        <String, dynamic>{'deviceId': device.id},
+      );
+      final map = raw ?? const <dynamic, dynamic>{};
+      return BlePairResult(
+        usable: map['usable'] != false,
+        bonded: map['bonded'] == true,
+        state: map['state']?.toString() ?? 'unknown',
+        message: map['message']?.toString() ??
+            'Device is available for direct Salus communication.',
       );
     } on PlatformException catch (error) {
       throw StateError(error.message ?? error.code);
@@ -153,19 +204,22 @@ class BleDiscoveryService {
         (raw['advertisedServices'] as List<dynamic>? ?? const <dynamic>[])
             .map((value) => value.toString())
             .toList();
-    final report = BleProtocolProfiles.analyze(services);
-
     final rawName = raw['name']?.toString().trim() ?? '';
+    final name = rawName.isEmpty ? 'Unnamed BLE device' : rawName;
+    final report = BleProtocolProfiles.analyze(services, name: name);
 
     return BleDeviceCandidate(
       id: raw['id']?.toString() ?? '',
-      name: rawName.isEmpty ? 'Unnamed BLE device' : rawName,
+      name: name,
       rssi: (raw['rssi'] as num?)?.toInt() ?? -127,
       advertisedServices: services,
       capabilities: report.allCapabilities,
       protocolProfile: report.protocolProfile?.label,
+      protocolId: report.protocolProfile?.id,
       protocolNote: report.protocolProfile?.note,
+      deviceKind: report.deviceKind,
       manufacturerDataHex: raw['manufacturerDataHex']?.toString() ?? '',
+      bondState: raw['bondState']?.toString() ?? 'unknown',
     );
   }
 }
