@@ -1,7 +1,7 @@
 name: healthy_me
 description: Salus by Rust N Rum - a personal health journal and body command center.
 publish_to: 'none'
-version: 0.14.0+25
+version: 0.14.0+26
 environment:
   sdk: '>=3.12.0 <4.0.0'
 

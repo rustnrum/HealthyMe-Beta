@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
 import '../services/health_connect_service.dart';
+import '../services/direct_metric_service.dart';
 import '../services/source_name_service.dart';
 import 'app_state.dart';
 
@@ -61,32 +62,66 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
       ref.read(appStateProvider.notifier).setMetricSource(metric, 'Auto');
     }
 
-    final snapshot = await _service.sync(
+    // Drop a manual Health Connect route that is no longer one of the current
+    // providers for that metric. Direct BLE routes are retained because their
+    // samples live in Salus rather than Health Connect.
+    final stalePreviousRoutes = routedSources.entries.where((entry) {
+      if (entry.value.startsWith('ble:')) return false;
+      final choices = app.health.availableSources[entry.key] ?? const <String>[];
+      return choices.isNotEmpty &&
+          !choices.any(
+            (source) => SourceNameService.sameProvider(source, entry.value),
+          );
+    }).map((entry) => entry.key).toList();
+    for (final metric in stalePreviousRoutes) {
+      routedSources.remove(metric);
+      ref.read(appStateProvider.notifier).setMetricSource(metric, 'Auto');
+    }
+
+    var snapshot = await _service.sync(
       historicalAccess:
           historyOverride ?? app.health.historicalAccess,
       metricSources: routedSources,
     );
-    final previous = app.health;
-    final lastSeen = <String, DateTime>{...previous.sourceLastSeen};
-    for (final entry in snapshot.sourceLastSeen.entries) {
-      final old = lastSeen[entry.key];
-      if (old == null || entry.value.isAfter(old)) {
-        lastSeen[entry.key] = entry.value;
+    // SALUS_BUILD26_CURRENT_SOURCE_STATE
+    // The old implementation unioned every provider ever seen into the next
+    // snapshot. That is why removed QRing/Garmin app origins never disappeared.
+    final directMetricService = DirectMetricService();
+    final directSamples = await directMetricService.loadSamples();
+    var merged = directMetricService.mergeIntoSnapshot(
+      snapshot,
+      metricSources: routedSources,
+      samples: directSamples,
+    );
+
+    // If a provider vanished during this refresh, switch that metric back to
+    // Automatic immediately and refresh once more so the visible value is not
+    // left blank behind an obsolete manual route.
+    final staleAfterRefresh = routedSources.entries.where((entry) {
+      if (entry.value.startsWith('ble:')) return false;
+      final choices = merged.availableSources[entry.key] ?? const <String>[];
+      return !choices.any(
+        (source) => SourceNameService.sameProvider(source, entry.value),
+      );
+    }).map((entry) => entry.key).toList();
+
+    if (staleAfterRefresh.isNotEmpty) {
+      for (final metric in staleAfterRefresh) {
+        routedSources.remove(metric);
+        ref.read(appStateProvider.notifier).setMetricSource(metric, 'Auto');
       }
+      snapshot = await _service.sync(
+        historicalAccess:
+            historyOverride ?? app.health.historicalAccess,
+        metricSources: routedSources,
+      );
+      merged = directMetricService.mergeIntoSnapshot(
+        snapshot,
+        metricSources: routedSources,
+        samples: directSamples,
+      );
     }
 
-    final merged = snapshot.copyWith(
-      detectedSources: <String>{
-        ...previous.detectedSources,
-        ...snapshot.detectedSources,
-      }.toList(),
-      availableSources: snapshot.availableSources,
-      sourceLabels: {
-        ...previous.sourceLabels,
-        ...snapshot.sourceLabels,
-      },
-      sourceLastSeen: lastSeen,
-    );
     ref.read(appStateProvider.notifier).setHealthSnapshot(merged);
   }
 

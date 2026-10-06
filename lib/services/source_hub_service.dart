@@ -86,15 +86,28 @@ class SourceHubService {
         }
       }
 
+      // SALUS_BUILD26_ACTIVE_SOURCES
+      // Do not keep historical provider names around after they have stopped
+      // supplying readable records. Direct BLE sources are distinguished from
+      // Health Connect origins by their stable ble: source id.
+      if (metrics.isEmpty &&
+          recordCounts.values.every((count) => count <= 0)) {
+        continue;
+      }
+      final direct = id.startsWith('ble:');
+
       result.add(
         HealthyDataSource(
           id: id,
           label: health.sourceLabels[id] ?? SourceNameService.friendly(id),
-          transport: SourceTransport.healthConnect,
+          transport: direct
+              ? SourceTransport.directBluetooth
+              : SourceTransport.healthConnect,
           metrics: metrics,
           recordCounts: recordCounts,
           selectable: metrics.isNotEmpty,
           lastSeen: health.sourceLastSeen[id],
+          note: direct ? 'Read directly from the paired device' : null,
         ),
       );
     }

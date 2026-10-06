@@ -919,11 +919,11 @@ class SalusDeviceTypeCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(child: Image.asset(asset, width: 86, height: 76, fit: BoxFit.contain, filterQuality: FilterQuality.high)),
+          Center(child: Image.asset(asset, width: 82, height: 66, fit: BoxFit.contain, filterQuality: FilterQuality.high)),
           const SizedBox(height: 5),
           Text(title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 3),
-          Text(subtitle, maxLines: 2, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12.5, height: 1.25)),
+          Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12, height: 1.18)),
         ],
       ),
     );

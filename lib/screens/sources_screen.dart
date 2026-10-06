@@ -6,6 +6,7 @@ import '../core/theme/app_theme.dart';
 import '../models/models.dart';
 import '../services/ble_discovery_service.dart';
 import '../services/direct_device_store.dart';
+import '../services/direct_metric_service.dart';
 import '../services/source_hub_service.dart';
 import '../services/source_name_service.dart';
 import '../state/app_state.dart';
@@ -40,6 +41,9 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
 
   final _bleDiscovery = BleDiscoveryService();
   final _directDeviceStore = DirectDeviceStore();
+  final _directMetricService = DirectMetricService();
+  final Set<String> _readingDirect = {};
+  final Map<String, String> _directReadSummary = {};
   List<BleDeviceCandidate> _bleDevices = const [];
   List<SavedDirectDevice> _savedDirectDevices = const [];
   final Map<String, BleDeviceInspection> _bleInspections = {};
@@ -93,9 +97,13 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
         pair: pair,
       );
       await _loadSavedDirectDevices();
+      final directRead = await _readDirectMetrics(
+        device,
+        showSnackBar: false,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(pair.message)),
+        SnackBar(content: Text(directRead?.message ?? pair.message)),
       );
     } catch (error) {
       if (!mounted) return;
@@ -110,6 +118,47 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
   Future<void> _removeSavedDirectDevice(String id) async {
     await _directDeviceStore.remove(id);
     await _loadSavedDirectDevices();
+  }
+
+  Future<DirectMetricReadResult?> _readDirectMetrics(
+    BleDeviceCandidate device, {
+    bool showSnackBar = true,
+  }) async {
+    if (_readingDirect.contains(device.id)) return null;
+    setState(() => _readingDirect.add(device.id));
+
+    try {
+      final result = await _directMetricService.readAndStore(device);
+      final samples = await _directMetricService.loadSamples();
+      final app = ref.read(appStateProvider);
+      final merged = _directMetricService.mergeIntoSnapshot(
+        app.health,
+        metricSources: app.metricSources,
+        samples: samples,
+      );
+      ref.read(appStateProvider.notifier).setHealthSnapshot(merged);
+
+      if (!mounted) return result;
+      setState(() => _directReadSummary[device.id] = result.summary);
+      if (showSnackBar) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.message)),
+        );
+      }
+      return result;
+    } catch (error) {
+      if (!mounted) return null;
+      final message = 'Could not read ${device.name}: $error';
+      setState(() => _directReadSummary[device.id] = message);
+      if (showSnackBar) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      }
+      return null;
+    } finally {
+      if (mounted) setState(() => _readingDirect.remove(device.id));
+    }
   }
 
   Future<void> _scanBluetooth() async {
@@ -183,7 +232,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
           ),
           const SizedBox(height: 12),
           SizedBox(
-            height: 154,
+            height: 170,
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: const [
@@ -534,6 +583,17 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
                   source.id.replaceFirst('ble:', ''),
                 ),
                 onUse: () => _useWithSalus(
+                  _bleDevices.firstWhere(
+                    (device) => source.id == 'ble:${device.id}',
+                  ),
+                ),
+                reading: _readingDirect.contains(
+                  source.id.replaceFirst('ble:', ''),
+                ),
+                readSummary: _directReadSummary[
+                  source.id.replaceFirst('ble:', '')
+                ],
+                onRead: () => _readDirectMetrics(
                   _bleDevices.firstWhere(
                     (device) => source.id == 'ble:${device.id}',
                   ),
@@ -899,7 +959,7 @@ class _SavedDirectDeviceRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${device.deviceKind} • ${device.bonded ? 'Android bonded' : 'Direct GATT'}',
+                  '${device.deviceKind} • ${device.bonded ? 'Android paired' : 'Direct GATT saved'}',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,
@@ -941,8 +1001,11 @@ class _BleSourceRow extends StatelessWidget {
   final bool inspecting;
   final bool saved;
   final bool pairing;
+  final bool reading;
+  final String? readSummary;
   final VoidCallback onInspect;
   final VoidCallback onUse;
+  final VoidCallback onRead;
 
   const _BleSourceRow({
     required this.source,
@@ -951,8 +1014,11 @@ class _BleSourceRow extends StatelessWidget {
     required this.inspecting,
     required this.saved,
     required this.pairing,
+    required this.reading,
+    required this.readSummary,
     required this.onInspect,
     required this.onUse,
+    required this.onRead,
   });
 
   @override
@@ -960,23 +1026,30 @@ class _BleSourceRow extends StatelessWidget {
     final capabilities = source.metrics;
     final protocol = inspection?.protocolProfile ?? device.protocolProfile;
     final kind = inspection?.deviceKind ?? device.deviceKind;
+
     return Container(
       margin: const EdgeInsets.only(top: 8),
       decoration: BoxDecoration(
         color: AppTheme.surfaceHigh,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: saved ? AppTheme.mint : AppTheme.border),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: saved ? AppTheme.mint : AppTheme.border,
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-            child: Row(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(_deviceIcon(kind), color: saved ? AppTheme.mint : AppTheme.blue),
-                const SizedBox(width: 9),
+                Icon(
+                  _deviceIcon(kind),
+                  color: saved ? AppTheme.mint : AppTheme.blue,
+                  size: 25,
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -985,22 +1058,28 @@ class _BleSourceRow extends StatelessWidget {
                         source.label,
                         style: const TextStyle(
                           color: AppTheme.textPrimary,
-                          fontSize: 14,
+                          fontSize: 15,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
                         protocol == null ? kind : '$kind • $protocol',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: AppTheme.cyan,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
-                        inspection == null
-                            ? 'Detected nearby • Android ${device.bondState}'
-                            : source.note ?? 'Bluetooth services identified',
+                        saved
+                            ? 'Paired with Salus • ${device.bondState}'
+                            : inspection == null
+                                ? 'Detected nearby • ${device.bondState}'
+                                : source.note ?? 'Bluetooth services identified',
                         style: const TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 12,
@@ -1011,26 +1090,38 @@ class _BleSourceRow extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          if (capabilities.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Text(
+            if (capabilities.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
                 'Detected/potential: ${capabilities.join(' • ')}',
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: AppTheme.mint,
                   fontSize: 12.5,
                   fontWeight: FontWeight.w800,
                 ),
               ),
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 4,
+            ],
+            if (readSummary != null) ...[
+              const SizedBox(height: 7),
+              Text(
+                readSummary!,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                  height: 1.3,
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
               children: [
-                TextButton(
+                OutlinedButton(
                   onPressed: inspecting ? null : onInspect,
                   child: Text(
                     inspecting
@@ -1040,57 +1131,59 @@ class _BleSourceRow extends StatelessWidget {
                             : 'Identify again',
                   ),
                 ),
-                FilledButton.tonalIcon(
-                  onPressed: saved || pairing ? null : onUse,
-                  icon: Icon(saved ? Icons.check_rounded : Icons.link_rounded, size: 18),
-                  label: Text(
-                    saved
-                        ? 'Connected'
-                        : pairing
-                            ? 'Connecting…'
-                            : 'Connect',
+                if (!saved)
+                  FilledButton.tonalIcon(
+                    onPressed: pairing ? null : onUse,
+                    icon: const Icon(Icons.link_rounded, size: 18),
+                    label: Text(pairing ? 'Pairing…' : 'Pair'),
+                  )
+                else
+                  FilledButton.tonalIcon(
+                    onPressed: reading ? null : onRead,
+                    icon: const Icon(Icons.sensors_rounded, size: 18),
+                    label: Text(reading ? 'Reading…' : 'Read data'),
                   ),
-                ),
               ],
             ),
-          ),
-          if (inspection != null)
-            ExpansionTile(
-              dense: true,
-              tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-              childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              title: const Text(
-                'Advanced diagnostics',
-                style: TextStyle(
-                  color: AppTheme.textMuted,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w800,
+            if (inspection != null)
+              ExpansionTile(
+                dense: true,
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 4),
+                title: const Text(
+                  'Advanced diagnostics',
+                  style: TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
+                children: [
+                  _DiagnosticText('Address', device.id),
+                  _DiagnosticText('Device class', kind),
+                  _DiagnosticText('Android bond', device.bondState),
+                  _DiagnosticText('Signal', '${device.rssi} dBm'),
+                  if (protocol != null)
+                    _DiagnosticText('Protocol family', protocol),
+                  if (device.advertisedServices.isNotEmpty)
+                    _DiagnosticText(
+                      'Advertised services',
+                      device.advertisedServices.join(', '),
+                    ),
+                  if (device.manufacturerDataHex.isNotEmpty)
+                    _DiagnosticText(
+                      'Manufacturer bytes',
+                      device.manufacturerDataHex,
+                    ),
+                  for (final service in inspection!.services)
+                    _DiagnosticText(
+                      service.serviceUuid,
+                      service.characteristicDetails.join('\n'),
+                    ),
+                ],
               ),
-              children: [
-                _DiagnosticText('Address', device.id),
-                _DiagnosticText('Device class', kind),
-                _DiagnosticText('Android bond', device.bondState),
-                _DiagnosticText('Signal', '${device.rssi} dBm'),
-                if (protocol != null) _DiagnosticText('Protocol family', protocol),
-                if (device.advertisedServices.isNotEmpty)
-                  _DiagnosticText(
-                    'Advertised services',
-                    device.advertisedServices.join(', '),
-                  ),
-                if (device.manufacturerDataHex.isNotEmpty)
-                  _DiagnosticText(
-                    'Manufacturer bytes',
-                    device.manufacturerDataHex,
-                  ),
-                for (final service in inspection!.services)
-                  _DiagnosticText(
-                    service.serviceUuid,
-                    service.characteristicDetails.join('\n'),
-                  ),
-              ],
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

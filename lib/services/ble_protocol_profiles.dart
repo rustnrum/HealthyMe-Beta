@@ -118,6 +118,7 @@ class BleProtocolProfiles {
         'venu',
         'instinct',
         'vivoactive',
+        'vívoactive',
         'vivosmart',
       ],
       capabilities: [
