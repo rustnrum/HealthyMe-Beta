@@ -32,6 +32,8 @@ HEALTH_HOME_FILE="lib/screens/health/health_home_screen.dart"
 HEALTH_VITALS_FILE="lib/screens/health/health_vitals_screen.dart"
 MODULE_MENU_FILE="lib/widgets/module_menu_button.dart"
 SALUS_WIDGETS_FILE="lib/widgets/salus_widgets.dart"
+OVERNIGHT_FILE="lib/widgets/overnight_signals_card.dart"
+TRENDS_FILE="lib/screens/trends_screen.dart"
 
 # Main module shell remains the same functional navigation, but branded Salus.
 for required in "'Home'" "'Activity'" "'Sleep'" "'Body'" "'More'" "'Salus'"; do
@@ -44,9 +46,14 @@ for forbidden in "Beta 0.2" "Healthy Me"; do
   fi
 done
 
-# Approved Salus parchment home layout replaces the old mountain/status-card design.
-for required in "SalusPaper" "Today" "At a glance" "Sources" "Connected to a clearer you" "Check-in"; do
+# Home is intentionally focused: Today shortcuts + dynamic overnight signals + quick actions.
+for required in "SalusPaper" "Today" "At a glance" "OvernightSignalsCard" "Check-in"; do
   grep -q "$required" "$HOME_FILE" || fail "Salus home screen missing approved element: $required"
+done
+for forbidden in "Connected to a clearer you" "SalusAssets.calloutSameMe" "SalusModuleRow("; do
+  if grep -Fq "$forbidden" "$HOME_FILE"; then
+    fail "redundant Home content remains: $forbidden"
+  fi
 done
 if grep -q "hero_mountains.jpg" "$HOME_FILE"; then
   fail "old mountain hero must not remain in Salus home"
@@ -56,8 +63,7 @@ for required in "class SalusPaper" "class SalusSectionTitle" "class SalusMetric"
   grep -q "$required" "$SALUS_WIDGETS_FILE" || fail "Salus shared visual system missing: $required"
 done
 
-
-# The approved visual direction is asset-driven, not a Material-icon approximation.
+# The approved visual direction remains asset-driven.
 for asset in \
   lib/assets/salus/paper_texture.png \
   lib/assets/salus/dark_texture.png \
@@ -79,9 +85,19 @@ done
 
 grep -q "lib/assets/salus/" pubspec.yaml || fail "pubspec must package Salus visual assets"
 grep -q "SalusAssets.metricWeight" "$HOME_FILE" || fail "home must use the approved metric image assets"
-grep -q "SalusAssets.tileBody" "$HOME_FILE" || fail "home must use the approved module tile image assets"
-grep -q "SalusAssets.artSleep" "$HOME_FILE" || fail "home must use the approved decorative line-art assets"
+grep -q "onTap: () => ref.read(navigationProvider.notifier).go(3)" "$HOME_FILE" || fail "Weight metric must open Body details"
+grep -q "onTap: () => ref.read(navigationProvider.notifier).go(2)" "$HOME_FILE" || fail "Sleep metric must open Sleep details"
+grep -q "onTap: () => ref.read(navigationProvider.notifier).go(1)" "$HOME_FILE" || fail "Steps metric must open Activity details"
+grep -q "pushNamed('/recovery')" "$HOME_FILE" || fail "Recovery metric must open Recovery details"
+grep -q "OvernightSignalsCard" "$HOME_FILE" || fail "Home must surface dynamic overnight signals"
 grep -q "AssetImage(SalusAssets.paperTexture)" "$SALUS_WIDGETS_FILE" || fail "shared Salus paper surface must use the parchment texture asset"
+for required in "class OvernightSignalsCard" "HRV" "Respiration" "Resting heart rate" "Off baseline"; do
+  grep -q "$required" "$OVERNIGHT_FILE" || fail "overnight signals missing: $required"
+done
+for required in "class TrendsScreen" "HRV" "Respiration" "Resting heart rate" "Sleep" "Steps" "Weight" "CustomPainter"; do
+  grep -q "$required" "$TRENDS_FILE" || fail "Trends screen missing: $required"
+done
+grep -q "pushNamed('/trends')" "$HOME_FILE" || fail "Home Trends action must open the Trends page"
 
 # Existing functional detail screens remain required while their visual refresh can evolve incrementally.
 for required in "Day" "Week" "Month" "Year" "Workouts" "Weekly activity" "Automatic"; do
@@ -99,8 +115,8 @@ for required in "Data Sources" "Your Plan" "Health"; do
   grep -q "$required" "$MORE_FILE" || fail "More screen missing approved element: $required"
 done
 
-# The three top-level Salus modules must stay distinct.
-for required in "SALUS MODULES" "Main" "Diet" "Health" "Today • Meals • Plan • Grocery" "Overview • Vitals • Labs"; do
+# Top-level Salus modules stay distinct.
+for required in "SALUS MODULES" "Main" "Workout" "Diet" "Health" "Today • Schedule • Templates • History" "Today • Meals • Plan • Grocery" "Overview • Vitals • Labs"; do
   grep -q "$required" "$MODULE_MENU_FILE" || fail "Salus module launcher missing: $required"
 done
 
@@ -119,7 +135,7 @@ for required in "A broader picture" "Current Vitals" "Bloodwork" "Health Context
 done
 grep -q "Current signals" "$HEALTH_VITALS_FILE" || fail "Vitals screen missing Salus section language"
 
-# Source-routing and lab rules remain intact.
+# Source-routing and lab rules remain intact; source management lives under More, not Home.
 grep -q "Automatic" "$SOURCES_FILE" || fail "source selection must have one clear automatic default"
 grep -q "Change" "$SOURCES_FILE" || fail "source selection must expose one clear change action"
 grep -q "availableSources" "$SOURCES_FILE" || fail "source options must be metric-specific"
@@ -169,6 +185,8 @@ files = [
     'lib/screens/labs_screen.dart',
     'lib/screens/body_status_detail_screen.dart',
     'lib/screens/recovery_detail_screen.dart',
+    'lib/screens/trends_screen.dart',
+    'lib/widgets/overnight_signals_card.dart',
     'lib/widgets/sleep_window_dial.dart',
     'lib/widgets/module_menu_button.dart',
     'lib/widgets/salus_widgets.dart',
@@ -193,4 +211,4 @@ if violations:
     raise SystemExit(1)
 PY
 
-echo "Salus v0.13 asset-driven UI contract + readability checks passed."
+echo "Salus build 22 focused Home + Trends UI contract passed."

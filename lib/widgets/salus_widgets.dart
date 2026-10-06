@@ -128,6 +128,7 @@ class SalusMetric extends StatelessWidget {
   final String value;
   final String label;
   final Color tint;
+  final VoidCallback? onTap;
   const SalusMetric({
     super.key,
     this.icon,
@@ -135,55 +136,72 @@ class SalusMetric extends StatelessWidget {
     required this.value,
     required this.label,
     this.tint = AppTheme.mint,
+    this.onTap,
   }) : assert(icon != null || asset != null);
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (asset != null)
-          SizedBox(
-            width: 52,
-            height: 52,
-            child: Image.asset(
-              asset!,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.high,
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (asset != null)
+            SizedBox(
+              width: 52,
+              height: 52,
+              child: Image.asset(
+                asset!,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.high,
+              ),
+            )
+          else
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: tint.withValues(alpha: 0.16)),
+              child: Icon(icon, color: tint, size: 25),
             ),
-          )
-        else
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: tint.withValues(alpha: 0.16)),
-            child: Icon(icon, color: tint, size: 25),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
-        const SizedBox(height: 8),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            value,
-            maxLines: 1,
+          const SizedBox(height: 2),
+          Text(
+            label.toUpperCase(),
+            textAlign: TextAlign.center,
             style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 20,
+              color: AppTheme.textMuted,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
+              letterSpacing: 1.45,
             ),
           ),
+        ],
+      ),
+    );
+    if (onTap == null) return content;
+    return Semantics(
+      button: true,
+      label: 'Open $label details',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: content,
         ),
-        const SizedBox(height: 2),
-        Text(
-          label.toUpperCase(),
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: AppTheme.textMuted,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.45,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
