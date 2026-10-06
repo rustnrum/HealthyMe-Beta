@@ -8,6 +8,8 @@ python3 scripts/salus_brand_patch.py
 fail() { echo "SOURCE REGISTRY CONTRACT FAILURE: $1" >&2; exit 1; }
 
 SOURCES="lib/screens/sources_screen.dart"
+HOME="lib/screens/home_screen.dart"
+WIDGETS="lib/widgets/salus_widgets.dart"
 HUB="lib/services/source_hub_service.dart"
 HEALTH="lib/services/health_connect_service.dart"
 REGISTRY="lib/services/health_origin_registry_service.dart"
@@ -21,7 +23,7 @@ MAIN_ACTIVITY="$(find android/app/src/main/kotlin -name MainActivity.kt -print -
 
 [ -n "$MAIN_ACTIVITY" ] || fail "MainActivity.kt missing"
 
-for required in "Beta 0.14.0+19 • Salus Source Registry" "Health Connect import" "Your data providers" "Metric sources" "records • use only for" "Sleep Stages"; do
+for required in "Beta 0.14.0+20 • Salus Source Registry" "Health Connect import" "Your data providers" "Metric sources" "records • use only for" "Sleep Stages"; do
   grep -q "$required" "$SOURCES" || fail "Sources screen missing: $required"
 done
 for forbidden in "Visible Health Connect apps" "Find compatible sources" "Health Connect aggregate step data"; do
@@ -46,7 +48,7 @@ grep -q "MethodChannel('com.rustnrum.healthyme/source_discovery')" "$BLE" || fai
 grep -q "ring-uart-v1" "$PROFILES" || fail "ring protocol fingerprint missing"
 grep -q "selectable: false" "$HUB" || fail "BLE discovery must not pretend to be a working metric reader"
 if grep -q "flutter_reactive_ble" "$PUBSPEC"; then fail "flutter_reactive_ble must not be reintroduced"; fi
-grep -q '^version: 0.14.0+19$' "$PUBSPEC" || fail "pubspec must identify Salus build 19"
+grep -q '^version: 0.14.0+20$' "$PUBSPEC" || fail "pubspec must identify Salus build 20"
 grep -q 'android:label="Salus"' android/app/src/main/AndroidManifest.xml || fail "Android app label must be Salus"
 grep -q "title: 'Salus'" lib/app.dart || fail "Flutter app title must be Salus"
 if grep -q "import 'workout_screen.dart';" lib/screens/activity_screen.dart; then fail "Activity still imports Workout as a detail page"; fi
@@ -62,6 +64,46 @@ grep -q "softWrap: true" lib/screens/activity_screen.dart || fail "Activity sour
 if grep -Fq "import 'workout_screen.dart';" lib/screens/activity_screen.dart; then fail "Activity retains obsolete direct Workout import"; fi
 grep -Fq 'Stages from: $stageSourceLabel' lib/screens/sleep_screen.dart || fail "Sleep Stages source label missing"
 if grep -Fq "h.resolvedSources['Sleep Stages'] ?? h.resolvedSources['Sleep']" lib/screens/sleep_screen.dart; then fail "Sleep Stages must not reuse generic Sleep provenance"; fi
+
+# Build 20 asset integrity and rendering contract.
+for asset in \
+  lib/assets/salus/metric_recovery.png \
+  lib/assets/salus/source_watch.png \
+  lib/assets/salus/source_ring.png \
+  lib/assets/salus/source_scale.png \
+  lib/assets/salus/source_phone.png \
+  lib/assets/salus/source_health.png \
+  lib/assets/salus/source_labs.png; do
+  [ -s "$asset" ] || fail "clean Salus asset missing: $asset"
+done
+python3 - <<'PY'
+from pathlib import Path
+import struct
+assets = [
+    'lib/assets/salus/metric_recovery.png',
+    'lib/assets/salus/source_watch.png',
+    'lib/assets/salus/source_ring.png',
+    'lib/assets/salus/source_scale.png',
+    'lib/assets/salus/source_phone.png',
+    'lib/assets/salus/source_health.png',
+    'lib/assets/salus/source_labs.png',
+]
+for name in assets:
+    data = Path(name).read_bytes()
+    if data[:8] != b'\x89PNG\r\n\x1a\n':
+        raise SystemExit(f'SOURCE REGISTRY CONTRACT FAILURE: not a PNG: {name}')
+    width, height = struct.unpack('>II', data[16:24])
+    if width < 256 or height < 256:
+        raise SystemExit(f'SOURCE REGISTRY CONTRACT FAILURE: low-resolution asset {name}: {width}x{height}')
+PY
+grep -q "sourcePhone" "$WIDGETS" || fail "phone source asset constant missing"
+grep -q "sourceHealth" "$WIDGETS" || fail "health-app source asset constant missing"
+grep -q "filterQuality: FilterQuality.high" "$WIDGETS" || fail "high-quality PNG rendering missing"
+grep -q "opacity: 0.94" "$WIDGETS" || fail "decorative line art remains overly faded"
+if grep -q "ClipOval(" "$WIDGETS"; then fail "metric PNGs must not be circular-cropped"; fi
+grep -q "value.contains('samsung')" "$HOME" || fail "Samsung Health source-art mapping missing"
+grep -q "value.contains('phone')" "$HOME" || fail "phone source-art mapping missing"
+
 for folder in mdpi hdpi xhdpi xxhdpi xxxhdpi; do [ -f "android/app/src/main/res/mipmap-${folder}/ic_launcher.png" ] || fail "launcher icon missing for ${folder}"; done
 grep -q "native registry parser preserves package origins and counts" test/health_origin_registry_service_test.dart || fail "source registry tests missing"
-echo "Salus build 19 source registry + module + Activity/Sleep contracts passed."
+echo "Salus build 20 source registry + clean asset contract passed."

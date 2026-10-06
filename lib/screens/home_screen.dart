@@ -35,8 +35,19 @@ class HomeScreen extends ConsumerWidget {
 
   String _sourceAsset(String label) {
     final value = label.toLowerCase();
-    if (value.contains('ring') || value.contains('qring')) return SalusAssets.sourceRing;
-    if (value.contains('scale') || value.contains('imoni')) return SalusAssets.sourceScale;
+    if (value.contains('ring') || value.contains('qring')) {
+      return SalusAssets.sourceRing;
+    }
+    if (value.contains('scale') || value.contains('imoni')) {
+      return SalusAssets.sourceScale;
+    }
+    if (value.contains('lab')) return SalusAssets.sourceLabs;
+    if (value.contains('samsung') || value.contains('health')) {
+      return SalusAssets.sourceHealth;
+    }
+    if (value.contains('phone') || value.contains('android')) {
+      return SalusAssets.sourcePhone;
+    }
     return SalusAssets.sourceWatch;
   }
 

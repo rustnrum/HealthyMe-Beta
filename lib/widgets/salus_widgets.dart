@@ -21,6 +21,8 @@ class SalusAssets {
   static const String sourceWatch = '$root/source_watch.png';
   static const String sourceRing = '$root/source_ring.png';
   static const String sourceScale = '$root/source_scale.png';
+  static const String sourcePhone = '$root/source_phone.png';
+  static const String sourceHealth = '$root/source_health.png';
   static const String sourceLabs = '$root/source_labs.png';
   static const String botanicalSprig = '$root/botanical_sprig.png';
   static const String calloutAllInOne = '$root/callout_all_in_one.png';
@@ -141,8 +143,14 @@ class SalusMetric extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (asset != null)
-          ClipOval(
-            child: Image.asset(asset!, width: 52, height: 52, fit: BoxFit.cover),
+          SizedBox(
+            width: 52,
+            height: 52,
+            child: Image.asset(
+              asset!,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+            ),
           )
         else
           Container(
@@ -214,7 +222,7 @@ class SalusModuleRow extends StatelessWidget {
               if (tileAsset != null)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
-                  child: Image.asset(tileAsset!, width: 58, height: 58, fit: BoxFit.cover),
+                  child: Image.asset(tileAsset!, width: 58, height: 58, fit: BoxFit.contain, filterQuality: FilterQuality.high),
                 )
               else
                 Container(
@@ -255,8 +263,14 @@ class SalusModuleRow extends StatelessWidget {
               if (showArt) ...[
                 const SizedBox(width: 5),
                 Opacity(
-                  opacity: 0.78,
-                  child: Image.asset(artAsset!, width: 92, height: 64, fit: BoxFit.contain),
+                  opacity: 0.94,
+                  child: Image.asset(
+                    artAsset!,
+                    width: 92,
+                    height: 64,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
+                  ),
                 ),
               ],
               const SizedBox(width: 2),
@@ -287,7 +301,7 @@ class SalusSourceItem extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(width: 34, height: 34, child: Image.asset(asset, fit: BoxFit.contain)),
+        SizedBox(width: 34, height: 34, child: Image.asset(asset, fit: BoxFit.contain, filterQuality: FilterQuality.high)),
         const SizedBox(height: 5),
         Text(
           label,
