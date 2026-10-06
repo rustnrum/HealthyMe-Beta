@@ -1,21 +1,23 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../core/theme/app_theme.dart';
 import '../state/app_state.dart';
 import '../state/health_sync_provider.dart';
 import '../state/navigation_provider.dart';
+import '../widgets/module_menu_button.dart';
 import 'activity_screen.dart';
 import 'body_screen.dart';
 import 'home_screen.dart';
 import 'more_screen.dart';
 import 'profile_screen.dart';
 import 'sleep_screen.dart';
-import '../widgets/module_menu_button.dart';
-import '../widgets/salus_widgets.dart';
 
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
+
   @override
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
@@ -69,7 +71,13 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     final index = ref.watch(navigationProvider);
-    const screens = [HomeScreen(), ActivityScreen(), SleepScreen(), BodyScreen(), MoreScreen()];
+    const screens = [
+      HomeScreen(),
+      ActivityScreen(),
+      SleepScreen(),
+      BodyScreen(),
+      MoreScreen(),
+    ];
     const titles = ['Salus', 'Activity', 'Sleep', 'Body', 'More'];
 
     void selectModule(HealthyMeModule module) {
@@ -93,7 +101,10 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       appBar: index == 0
           ? _SalusBrandAppBar(
               onModuleSelected: selectModule,
-              onProfile: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
+              onCoach: () => Navigator.of(context).pushNamed('/coach'),
+              onProfile: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              ),
             )
           : AppBar(
               leading: IconButton(
@@ -102,101 +113,152 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                 icon: const Icon(Icons.chevron_left_rounded, size: 30),
               ),
               title: Text(titles[index]),
-              actions: [HealthyMeModuleMenuButton(current: HealthyMeModule.fitness, onSelected: selectModule)],
+              actions: [
+                HealthyMeModuleMenuButton(
+                  current: HealthyMeModule.fitness,
+                  onSelected: selectModule,
+                ),
+                const SizedBox(width: 8),
+              ],
             ),
-      body: SafeArea(top: false, child: IndexedStack(index: index, children: screens)),
-      bottomNavigationBar: _SalusBottomNav(index: index, onChanged: ref.read(navigationProvider.notifier).go),
+      body: SafeArea(top: false, bottom: false, child: IndexedStack(index: index, children: screens)),
+      bottomNavigationBar: _SalusBottomNav(
+        index: index,
+        onChanged: ref.read(navigationProvider.notifier).go,
+      ),
     );
   }
 }
 
 class _SalusBrandAppBar extends StatelessWidget implements PreferredSizeWidget {
   final ValueChanged<HealthyMeModule> onModuleSelected;
+  final VoidCallback onCoach;
   final VoidCallback onProfile;
-  const _SalusBrandAppBar({required this.onModuleSelected, required this.onProfile});
+
+  const _SalusBrandAppBar({
+    required this.onModuleSelected,
+    required this.onCoach,
+    required this.onProfile,
+  });
 
   @override
-  Size get preferredSize => const Size.fromHeight(116);
+  Size get preferredSize => const Size.fromHeight(76);
 
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      toolbarHeight: 116,
+      toolbarHeight: 76,
       automaticallyImplyLeading: false,
-      titleSpacing: 10,
-      backgroundColor: AppTheme.backgroundDeep,
-      flexibleSpace: Container(
-        decoration: const BoxDecoration(
-          color: AppTheme.backgroundDeep,
-          image: DecorationImage(
-            image: AssetImage(SalusAssets.leatherTexture),
-            fit: BoxFit.cover,
-            opacity: 0.9,
-          ),
-        ),
-      ),
-      title: Row(
+      titleSpacing: 18,
+      title: const Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Opacity(
-            opacity: 0.92,
-            child: Image.asset(SalusAssets.headerBranch, width: 48, height: 88, fit: BoxFit.contain),
-          ),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'SALUS',
-                  style: TextStyle(
-                    color: AppTheme.creamText,
-                    fontSize: 31,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.7,
-                    height: 0.95,
-                  ),
-                ),
-                SizedBox(height: 6),
-                Text(
-                  'by RUST N RUM',
-                  style: TextStyle(
-                    color: AppTheme.cyan,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 2.0,
-                  ),
-                ),
-                SizedBox(height: 7),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'A HEALTHIER TOMORROW\nLIVES IN A MORE AWARE TODAY.',
-                    maxLines: 2,
-                    style: TextStyle(
-                    color: Color(0xFFC8A96E),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                      letterSpacing: 1.55,
-                      height: 1.35,
-                    ),
-                  ),
-                ),
-              ],
+          _BrandSpark(),
+          SizedBox(width: 10),
+          Text(
+            'S a l u s',
+            style: TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 22,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 3.0,
             ),
           ),
         ],
       ),
       actions: [
-        HealthyMeModuleMenuButton(current: HealthyMeModule.fitness, onSelected: onModuleSelected),
-        IconButton(
-          tooltip: 'Profile',
-          onPressed: onProfile,
-          icon: const Icon(Icons.account_circle_outlined, size: 25, color: AppTheme.cyan),
+        _RoundAction(
+          tooltip: 'Salus modules',
+          child: HealthyMeModuleMenuButton(
+            current: HealthyMeModule.fitness,
+            onSelected: onModuleSelected,
+          ),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 6),
+        _RoundAction(
+          tooltip: 'Salus AI',
+          onTap: onCoach,
+          icon: Icons.auto_awesome_rounded,
+        ),
+        const SizedBox(width: 6),
+        _RoundAction(
+          tooltip: 'Profile',
+          onTap: onProfile,
+          icon: Icons.person_outline_rounded,
+        ),
+        const SizedBox(width: 14),
       ],
+    );
+  }
+}
+
+class _BrandSpark extends StatelessWidget {
+  const _BrandSpark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 30,
+      height: 30,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [AppTheme.cyan.withValues(alpha: 0.30), Colors.transparent],
+        ),
+      ),
+      child: const Icon(Icons.auto_awesome_rounded, color: AppTheme.cyan, size: 18),
+    );
+  }
+}
+
+class _RoundAction extends StatelessWidget {
+  final String tooltip;
+  final VoidCallback? onTap;
+  final IconData? icon;
+  final Widget? child;
+
+  const _RoundAction({
+    required this.tooltip,
+    this.onTap,
+    this.icon,
+    this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (child != null) {
+      return Tooltip(
+        message: tooltip,
+        child: Container(
+          width: 46,
+          height: 46,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppTheme.surface.withValues(alpha: 0.72),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: child,
+        ),
+      );
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppTheme.surface.withValues(alpha: 0.72),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: Icon(icon, color: AppTheme.textPrimary, size: 21),
+        ),
+      ),
     );
   }
 }
@@ -204,66 +266,75 @@ class _SalusBrandAppBar extends StatelessWidget implements PreferredSizeWidget {
 class _SalusBottomNav extends StatelessWidget {
   final int index;
   final ValueChanged<int> onChanged;
+
   const _SalusBottomNav({required this.index, required this.onChanged});
 
   static const _items = [
-    (Icons.home_outlined, 'Home'),
-    (Icons.directions_walk_rounded, 'Activity'),
-    (Icons.bedtime_outlined, 'Sleep'),
-    (Icons.monitor_weight_outlined, 'Body'),
+    (Icons.home_rounded, 'Home'),
+    (Icons.insights_rounded, 'Activity'),
+    (Icons.bedtime_rounded, 'Sleep'),
+    (Icons.monitor_weight_rounded, 'Body'),
     (Icons.more_horiz_rounded, 'More'),
   ];
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppTheme.backgroundDeep,
-        image: DecorationImage(image: AssetImage(SalusAssets.leatherTexture), fit: BoxFit.cover, opacity: 0.82),
-        border: Border(top: BorderSide(color: AppTheme.border, width: 0.8)),
-      ),
-      padding: EdgeInsets.only(top: 8, bottom: 6 + MediaQuery.paddingOf(context).bottom * 0.45),
-      child: Row(
-        children: [
-          for (var i = 0; i < _items.length; i++)
-            Expanded(
-              child: InkWell(
-                onTap: () => onChanged(i),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _items[i].$1,
-                        color: i == index ? AppTheme.cyan : AppTheme.creamText.withValues(alpha: 0.72),
-                        size: 22,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _items[i].$2,
-                        style: TextStyle(
-                          color: i == index ? AppTheme.cyan : AppTheme.creamText.withValues(alpha: 0.72),
-                          fontSize: 12,
-                          fontWeight: i == index ? FontWeight.w700 : FontWeight.w500,
+    return SafeArea(
+      minimum: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(6, 8, 6, 7),
+        decoration: BoxDecoration(
+          color: const Color(0xF20A1117),
+          borderRadius: BorderRadius.circular(34),
+          border: Border.all(color: AppTheme.border.withValues(alpha: 0.9)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.38),
+              blurRadius: 28,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            for (var i = 0; i < _items.length; i++)
+              Expanded(
+                child: InkWell(
+                  onTap: () => onChanged(i),
+                  borderRadius: BorderRadius.circular(24),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _items[i].$1,
+                          color: i == index ? AppTheme.textPrimary : AppTheme.textMuted,
+                          size: 22,
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 160),
-                        width: i == index ? 22 : 4,
-                        height: 2,
-                        decoration: BoxDecoration(
-                          color: i == index ? AppTheme.cyan : Colors.transparent,
-                          borderRadius: BorderRadius.circular(99),
+                        const SizedBox(height: 4),
+                        Text(
+                          _items[i].$2,
+                          style: TextStyle(
+                            color: i == index ? AppTheme.textPrimary : AppTheme.textMuted,
+                            fontSize: 12,
+                            fontWeight: i == index ? FontWeight.w700 : FontWeight.w500,
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 160),
+                          width: i == index ? 7 : 0,
+                          height: i == index ? 7 : 0,
+                          decoration: const BoxDecoration(shape: BoxShape.circle, color: AppTheme.cyan),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

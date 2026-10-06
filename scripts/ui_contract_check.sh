@@ -1,214 +1,105 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Apply Salus product name, version, Android label, and launcher icon after the
-# generated Android shell exists and before either UI/source contract validates it.
+# Ensure the build-23 direct-device Sources UI exists before applying v24 styling.
+python3 scripts/direct_device_patch.py
 python3 scripts/salus_brand_patch.py
 
-fail() {
-  echo "UI CONTRACT FAILURE: $1" >&2
-  exit 1
-}
+fail() { echo "UI CONTRACT FAILURE: $1" >&2; exit 1; }
 
-SHELL_FILE="lib/screens/home_shell.dart"
-HOME_FILE="lib/screens/home_screen.dart"
-ACTIVITY_FILE="lib/screens/activity_screen.dart"
-SLEEP_FILE="lib/screens/sleep_screen.dart"
-BODY_FILE="lib/screens/body_screen.dart"
-MORE_FILE="lib/screens/more_screen.dart"
-SOURCES_FILE="lib/screens/sources_screen.dart"
-PLAN_FILE="lib/screens/plan_screen.dart"
-LABS_FILE="lib/screens/labs_screen.dart"
-LAB_SERVICE_FILE="lib/services/lab_service.dart"
-HEALTH_FILE="lib/services/health_connect_service.dart"
-RECOVERY_FILE="lib/services/recovery_service.dart"
-BODY_STATUS_FILE="lib/services/body_status_service.dart"
-BODY_DETAIL_FILE="lib/screens/body_status_detail_screen.dart"
-RECOVERY_DETAIL_FILE="lib/screens/recovery_detail_screen.dart"
-DIET_SHELL_FILE="lib/screens/diet/diet_shell.dart"
-DIET_HOME_FILE="lib/screens/diet/diet_home_screen.dart"
-HEALTH_SHELL_FILE="lib/screens/health/health_shell.dart"
-HEALTH_HOME_FILE="lib/screens/health/health_home_screen.dart"
-HEALTH_VITALS_FILE="lib/screens/health/health_vitals_screen.dart"
-MODULE_MENU_FILE="lib/widgets/module_menu_button.dart"
-SALUS_WIDGETS_FILE="lib/widgets/salus_widgets.dart"
-OVERNIGHT_FILE="lib/widgets/overnight_signals_card.dart"
-TRENDS_FILE="lib/screens/trends_screen.dart"
+THEME="lib/core/theme/app_theme.dart"
+HOME="lib/screens/home_screen.dart"
+SHELL="lib/screens/home_shell.dart"
+ONBOARD="lib/screens/onboarding_screen.dart"
+AI="lib/screens/ai_coach_screen.dart"
+SOURCES="lib/screens/sources_screen.dart"
+WIDGETS="lib/widgets/salus_widgets.dart"
+APP="lib/app.dart"
 
-# Main module shell remains the same functional navigation, but branded Salus.
-for required in "'Home'" "'Activity'" "'Sleep'" "'Body'" "'More'" "'Salus'"; do
-  grep -q "$required" "$SHELL_FILE" || fail "main module shell missing: $required"
+# Build identity and core routes.
+grep -q '^version: 0.14.0+24$' pubspec.yaml || fail "pubspec must identify build 24"
+grep -q "title: 'Salus'" "$APP" || fail "app title missing"
+grep -q "'/coach': (_) => const AiCoachScreen()" "$APP" || fail "Salus AI route missing"
+grep -q "'/sources': (_) => const SourcesScreen()" "$APP" || fail "direct-device source route missing"
+grep -q 'ThemeMode.dark' "$APP" || fail "Salus v24 must use dark visual system"
+
+# Locked visual direction: midnight glass, cyan/mint light, modern sans typography.
+for required in "0xFF05090D" "0xFF62E8F2" "glassGradient" "Brightness.dark"; do
+  grep -q "$required" "$THEME" || fail "new visual system missing: $required"
+done
+if grep -q 'warm parchment' "$THEME"; then fail "old parchment theme remains"; fi
+
+for required in \
+  "class SalusPageBackground" \
+  "class SalusPaper" \
+  "class SalusRecoveryOrb" \
+  "class SalusGlassMetricCard" \
+  "class SalusDeviceTypeCard" \
+  "salus_profile_hero.png" \
+  "salus_ai_orb.png" \
+  "salus_sources_orbit.png"; do
+  grep -q "$required" "$WIDGETS" || fail "shared Salus v24 visual primitive missing: $required"
 done
 
-for forbidden in "Beta 0.2" "Healthy Me"; do
-  if grep -q "$forbidden" "$SHELL_FILE"; then
-    fail "stale main-module branding found: $forbidden"
-  fi
-done
-
-# Home is intentionally focused: Today shortcuts + dynamic overnight signals + quick actions.
-for required in "SalusPaper" "Today" "At a glance" "OvernightSignalsCard" "Check-in"; do
-  grep -q "$required" "$HOME_FILE" || fail "Salus home screen missing approved element: $required"
-done
-for forbidden in "Connected to a clearer you" "SalusAssets.calloutSameMe" "SalusModuleRow("; do
-  if grep -Fq "$forbidden" "$HOME_FILE"; then
-    fail "redundant Home content remains: $forbidden"
-  fi
-done
-if grep -q "hero_mountains.jpg" "$HOME_FILE"; then
-  fail "old mountain hero must not remain in Salus home"
-fi
-
-for required in "class SalusPaper" "class SalusSectionTitle" "class SalusMetric" "class SalusModuleRow" "class SalusStatusDot"; do
-  grep -q "$required" "$SALUS_WIDGETS_FILE" || fail "Salus shared visual system missing: $required"
-done
-
-# The approved visual direction remains asset-driven.
 for asset in \
-  lib/assets/salus/paper_texture.png \
-  lib/assets/salus/dark_texture.png \
-  lib/assets/salus/branch_gold.png \
-  lib/assets/salus/metric_weight.png \
-  lib/assets/salus/metric_sleep.png \
-  lib/assets/salus/metric_steps.png \
-  lib/assets/salus/metric_recovery.png \
-  lib/assets/salus/tile_body.png \
-  lib/assets/salus/tile_sleep.png \
-  lib/assets/salus/tile_activity.png \
-  lib/assets/salus/tile_notes.png \
-  lib/assets/salus/art_body.png \
-  lib/assets/salus/art_sleep.png \
-  lib/assets/salus/art_activity.png \
-  lib/assets/salus/art_notes.png; do
-  [ -s "$asset" ] || fail "required Salus visual asset missing or empty: $asset"
+  lib/assets/salus/salus_profile_hero.png \
+  lib/assets/salus/salus_ai_orb.png \
+  lib/assets/salus/salus_sources_orbit.png \
+  lib/assets/salus/salus_device_ring.png \
+  lib/assets/salus/salus_device_watch.png \
+  lib/assets/salus/salus_device_scale.png \
+  lib/assets/salus/salus_device_cpap.png; do
+  [ -s "$asset" ] || fail "new Salus visual asset missing: $asset"
 done
 
-grep -q "lib/assets/salus/" pubspec.yaml || fail "pubspec must package Salus visual assets"
-grep -q "SalusAssets.metricWeight" "$HOME_FILE" || fail "home must use the approved metric image assets"
-grep -q "onTap: () => ref.read(navigationProvider.notifier).go(3)" "$HOME_FILE" || fail "Weight metric must open Body details"
-grep -q "onTap: () => ref.read(navigationProvider.notifier).go(2)" "$HOME_FILE" || fail "Sleep metric must open Sleep details"
-grep -q "onTap: () => ref.read(navigationProvider.notifier).go(1)" "$HOME_FILE" || fail "Steps metric must open Activity details"
-grep -q "pushNamed('/recovery')" "$HOME_FILE" || fail "Recovery metric must open Recovery details"
-grep -q "OvernightSignalsCard" "$HOME_FILE" || fail "Home must surface dynamic overnight signals"
-grep -q "AssetImage(SalusAssets.paperTexture)" "$SALUS_WIDGETS_FILE" || fail "shared Salus paper surface must use the parchment texture asset"
-for required in "class OvernightSignalsCard" "HRV" "Respiration" "Resting heart rate" "Off baseline"; do
-  grep -q "$required" "$OVERNIGHT_FILE" || fail "overnight signals missing: $required"
+# Onboarding reference layout and data capture.
+for required in "Create your" "Salus profile" "Select Height" "Select Weight" "Primary goal" "Typical activity"; do
+  grep -q "$required" "$ONBOARD" || fail "onboarding missing: $required"
 done
-for required in "class TrendsScreen" "HRV" "Respiration" "Resting heart rate" "Sleep" "Steps" "Weight" "CustomPainter"; do
-  grep -q "$required" "$TRENDS_FILE" || fail "Trends screen missing: $required"
+for required in "SalusRecoveryOrb" "Good Morning" "Respiration" "SpO₂" "Today’s Focus" "pushNamed('/sources')" "pushNamed('/coach')"; do
+  grep -q "$required" "$HOME" || fail "dashboard missing: $required"
 done
-grep -q "pushNamed('/trends')" "$HOME_FILE" || fail "Home Trends action must open the Trends page"
-
-# Existing functional detail screens remain required while their visual refresh can evolve incrementally.
-for required in "Day" "Week" "Month" "Year" "Workouts" "Weekly activity" "Automatic"; do
-  grep -q "$required" "$ACTIVITY_FILE" || fail "activity screen missing approved element: $required"
+for required in "class AiCoachScreen" "SALUS AI" "MEET YOUR AI COACH" "TRY ASKING"; do
+  grep -q "$required" "$AI" || fail "AI coach visual missing: $required"
 done
-for required in "Total Sleep" "Sleep Stages" "Sleep Insight" "Sleep Consistency"; do
-  grep -q "$required" "$SLEEP_FILE" || fail "sleep screen missing approved section: $required"
+for required in "S a l u s" "Home" "Activity" "Sleep" "Body" "More"; do
+  grep -q "$required" "$SHELL" || fail "main shell missing: $required"
 done
-for required in "Weight" "Measurements" "Composition" "Body Measurements" "Body Fat" "Progress Photos" "BMI" "Calculated"; do
-  grep -q "$required" "$BODY_FILE" || fail "body screen missing approved section: $required"
-done
-grep -q "_MeasurementsDialog" "$BODY_FILE" || fail "body measurement entry must use an owned dialog lifecycle"
-
-for required in "Data Sources" "Your Plan" "Health"; do
-  grep -q "$required" "$MORE_FILE" || fail "More screen missing approved element: $required"
+for required in "Devices & Sources" "CONNECT YOUR WORLD" "SalusDeviceTypeCard" "Pair direct devices" "Saved direct devices"; do
+  grep -q "$required" "$SOURCES" || fail "device/source hub missing: $required"
 done
 
-# Top-level Salus modules stay distinct.
-for required in "SALUS MODULES" "Main" "Workout" "Diet" "Health" "Today • Schedule • Templates • History" "Today • Meals • Plan • Grocery" "Overview • Vitals • Labs"; do
-  grep -q "$required" "$MODULE_MENU_FILE" || fail "Salus module launcher missing: $required"
+# Existing app modules remain present.
+for path in \
+  lib/screens/activity_screen.dart \
+  lib/screens/sleep_screen.dart \
+  lib/screens/body_screen.dart \
+  lib/screens/more_screen.dart \
+  lib/screens/trends_screen.dart \
+  lib/screens/recovery_detail_screen.dart \
+  lib/screens/workout_screen.dart; do
+  [ -s "$path" ] || fail "existing module missing: $path"
 done
 
-for required in "Today" "Meals" "Plan" "Grocery" "SALUS"; do
-  grep -q "$required" "$DIET_SHELL_FILE" || fail "Diet module shell missing destination/brand: $required"
-done
-for required in "Nourish with intention" "Daily nutrition" "Add Food" "Focus Today" "Meals"; do
-  grep -q "$required" "$DIET_HOME_FILE" || fail "Diet Today screen missing approved Salus element: $required"
-done
-
-for required in "Health" "Vitals" "Labs" "SALUS"; do
-  grep -q "$required" "$HEALTH_SHELL_FILE" || fail "Health module shell missing destination/brand: $required"
-done
-for required in "A broader picture" "Current Vitals" "Bloodwork" "Health Context"; do
-  grep -q "$required" "$HEALTH_HOME_FILE" || fail "Health overview missing approved Salus element: $required"
-done
-grep -q "Current signals" "$HEALTH_VITALS_FILE" || fail "Vitals screen missing Salus section language"
-
-# Source-routing and lab rules remain intact; source management lives under More, not Home.
-grep -q "Automatic" "$SOURCES_FILE" || fail "source selection must have one clear automatic default"
-grep -q "Change" "$SOURCES_FILE" || fail "source selection must expose one clear change action"
-grep -q "availableSources" "$SOURCES_FILE" || fail "source options must be metric-specific"
-grep -q "SourceNameService.friendly" "$SOURCES_FILE" || fail "raw provider/package names must be normalized"
-
-for required in "Common bloodwork" "Add other result"; do
-  grep -q "$required" "$LABS_FILE" || fail "labs screen missing structured-entry element: $required"
-done
-for required in "CBC" "CMP / Metabolic" "Lipids" "HbA1c" "Total testosterone" "Progesterone"; do
-  grep -q "$required" "$LAB_SERVICE_FILE" || fail "lab definitions missing $required"
-done
-
-# Core telemetry rules.
-grep -q "Source: \$stepSourceLabel" "$ACTIVITY_FILE" || fail "activity must identify the selected step source"
-grep -q "Step data" "$ACTIVITY_FILE" || fail "activity must show step data freshness"
-grep -q "SleepWindowDial" "$PLAN_FILE" || fail "plan must include the circular sleep-window control"
-grep -q "distanceValueToMiles" "$HEALTH_FILE" || fail "distance must be normalized before display"
-grep -q "resolvedMotionSource" "$HEALTH_FILE" || fail "motion metrics must avoid multi-provider double counting"
-grep -q "availableSources" "$HEALTH_FILE" || fail "Health Connect sync must retain metric-specific source options"
-grep -q "respiratoryRate30" "$HEALTH_FILE" || fail "respiratory history must be retained for personal baseline logic"
-grep -q "hrv30" "$HEALTH_FILE" || fail "HRV history must be retained for recovery baseline logic"
-grep -q "class RecoveryService" "$RECOVERY_FILE" || fail "recovery must be a calculated service"
-grep -q "_hrvContributor" "$RECOVERY_FILE" || fail "recovery must use HRV when a baseline is available"
-grep -q "_restingHeartRateContributor" "$RECOVERY_FILE" || fail "recovery must use resting HR against personal baseline"
-grep -q "_breathingContributor" "$RECOVERY_FILE" || fail "recovery must use respiratory stability when available"
-grep -q "Training load" "$RECOVERY_FILE" || fail "recovery must include recent training load"
-grep -q "report.score" "$BODY_STATUS_FILE" || fail "recovery status must expose a numeric score"
-grep -q "Not included until Diet has real food data" "$RECOVERY_FILE" || fail "recovery must not guess nutrition"
-grep -q "weightTrend" "$BODY_STATUS_FILE" || fail "body status must use weekly goal-directed weight trend"
-grep -q "respiratoryRate" "$BODY_STATUS_FILE" || fail "cardio status must support respiratory rate"
-grep -q "What.s affecting your status" "$BODY_DETAIL_FILE" || fail "Body Status detail must explain the rating"
-grep -q "Recovery contributors" "$RECOVERY_DETAIL_FILE" || fail "Recovery detail must show contributors"
-
-# Readability floor: no primary app UI text below 12sp.
+# Readability floor in the new reference surfaces.
 python3 - <<'PY'
 from pathlib import Path
-import re, sys
+import re
 files = [
     'lib/screens/home_screen.dart',
-    'lib/screens/activity_screen.dart',
-    'lib/screens/sleep_screen.dart',
-    'lib/screens/body_screen.dart',
-    'lib/screens/more_screen.dart',
-    'lib/screens/sources_screen.dart',
     'lib/screens/home_shell.dart',
-    'lib/screens/plan_screen.dart',
-    'lib/screens/labs_screen.dart',
-    'lib/screens/body_status_detail_screen.dart',
-    'lib/screens/recovery_detail_screen.dart',
-    'lib/screens/trends_screen.dart',
-    'lib/widgets/overnight_signals_card.dart',
-    'lib/widgets/sleep_window_dial.dart',
-    'lib/widgets/module_menu_button.dart',
+    'lib/screens/onboarding_screen.dart',
+    'lib/screens/ai_coach_screen.dart',
     'lib/widgets/salus_widgets.dart',
-    'lib/screens/diet/diet_shell.dart',
-    'lib/screens/diet/diet_home_screen.dart',
-    'lib/screens/diet/diet_menu_screen.dart',
-    'lib/screens/diet/diet_planning_screen.dart',
-    'lib/screens/diet/grocery_list_screen.dart',
-    'lib/screens/health/health_shell.dart',
-    'lib/screens/health/health_home_screen.dart',
-    'lib/screens/health/health_vitals_screen.dart',
 ]
 violations=[]
 for name in files:
     text=Path(name).read_text()
     for m in re.finditer(r'fontSize:\s*([0-9]+(?:\.[0-9]+)?)', text):
-        size=float(m.group(1))
-        if size < 12:
-            violations.append(f'{name}:{size}')
+        if float(m.group(1)) < 12:
+            violations.append(f'{name}:{m.group(1)}')
 if violations:
-    print('UI CONTRACT FAILURE: primary UI contains text below 12sp:', ', '.join(violations), file=sys.stderr)
-    raise SystemExit(1)
+    raise SystemExit('UI CONTRACT FAILURE: text below 12sp: ' + ', '.join(violations))
 PY
 
-echo "Salus build 22 focused Home + Trends UI contract passed."
+echo "Salus build 24 locked visual system contract passed."

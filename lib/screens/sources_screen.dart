@@ -12,6 +12,7 @@ import '../state/app_state.dart';
 import '../state/health_sync_provider.dart';
 import '../widgets/command_card.dart';
 import '../widgets/design_widgets.dart';
+import '../widgets/salus_widgets.dart';
 
 class SourcesScreen extends ConsumerStatefulWidget {
   const SourcesScreen({super.key});
@@ -21,8 +22,6 @@ class SourcesScreen extends ConsumerStatefulWidget {
 }
 
 class _SourcesScreenState extends ConsumerState<SourcesScreen> {
-  static const _buildLabel = 'Beta 0.14.0+23 • Salus Source Registry';
-
   static const metrics = [
     'Steps',
     'Sleep',
@@ -164,7 +163,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Data Sources')),
+      appBar: AppBar(title: const Text('Devices & Sources')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 30),
         children: [
@@ -229,6 +228,39 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
             ),
           ),
           const SizedBox(height: 22),
+          SizedBox(
+            height: 154,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: const [
+                SalusDeviceTypeCard(
+                  asset: SalusAssets.deviceRing,
+                  title: 'Ring',
+                  subtitle: 'Sleep • HRV • SpO₂',
+                  highlighted: true,
+                ),
+                SizedBox(width: 10),
+                SalusDeviceTypeCard(
+                  asset: SalusAssets.deviceWatch,
+                  title: 'Watch',
+                  subtitle: 'Activity • HR • Workouts',
+                ),
+                SizedBox(width: 10),
+                SalusDeviceTypeCard(
+                  asset: SalusAssets.deviceScale,
+                  title: 'Scale',
+                  subtitle: 'Weight • Body composition',
+                ),
+                SizedBox(width: 10),
+                SalusDeviceTypeCard(
+                  asset: SalusAssets.deviceCpap,
+                  title: 'CPAP',
+                  subtitle: 'Sleep • Therapy data',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
           const HmSectionHeader(title: 'Pair direct devices'),
           const SizedBox(height: 6),
           const Text(
@@ -255,40 +287,69 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
 
   Widget _buildIdentityCard() {
     return CommandCard(
-      child: const Row(
-        children: [
-          HmIconBadge(
-            icon: Icons.hub_rounded,
-            color: AppTheme.mint,
-            size: 44,
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _buildLabel,
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                  ),
+      padding: const EdgeInsets.fromLTRB(18, 18, 14, 18),
+      child: SizedBox(
+        height: 150,
+        child: Stack(
+          children: [
+            Positioned(
+              right: -14,
+              top: -24,
+              width: 170,
+              height: 170,
+              child: Opacity(
+                opacity: 0.88,
+                child: Image.asset(
+                  SalusAssets.sourcesOrbit,
+                  fit: BoxFit.cover,
+                  filterQuality: FilterQuality.high,
                 ),
-                SizedBox(height: 4),
-                Text(
-                  'One source hub routes each metric by the actual provider, not '
-                  'by the transport used to import it.',
-                  style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 12.5,
-                    height: 1.35,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+            const Positioned(
+              left: 0,
+              top: 5,
+              child: Text(
+                'CONNECT YOUR WORLD',
+                style: TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2.5,
+                ),
+              ),
+            ),
+            const Positioned(
+              left: 0,
+              top: 34,
+              right: 115,
+              child: Text(
+                'Devices &\nSources',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 31,
+                  height: 1.0,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.9,
+                ),
+              ),
+            ),
+            const Positioned(
+              left: 0,
+              bottom: 2,
+              right: 105,
+              child: Text(
+                'Pair direct hardware or use Health Connect when it gives Salus the metric you need.',
+                maxLines: 3,
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12.5,
+                  height: 1.3,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

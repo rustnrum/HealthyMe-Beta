@@ -22,19 +22,25 @@ class CommandCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = borderRadius ?? BorderRadius.circular(18);
+    final radius = borderRadius ?? BorderRadius.circular(22);
     final content = AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       padding: padding,
       decoration: BoxDecoration(
-        color: color ?? AppTheme.surface,
+        color: color,
+        gradient: color == null ? AppTheme.glassGradient : null,
         borderRadius: radius,
-        border: border ?? Border.all(color: AppTheme.border),
+        border: border ?? Border.all(color: AppTheme.border.withValues(alpha: 0.9)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.16),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: AppTheme.cyan.withValues(alpha: 0.035),
+            blurRadius: 28,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.24),
+            blurRadius: 20,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -42,10 +48,13 @@ class CommandCard extends StatelessWidget {
     );
 
     if (onTap == null) return content;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: radius,
-      child: content,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: radius,
+        child: content,
+      ),
     );
   }
 }
