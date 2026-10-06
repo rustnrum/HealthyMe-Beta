@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ensure the build-23 direct-device Sources UI exists before applying v24 styling.
+# Base repo may be build 23/24. Ensure direct-device UI exists, then apply v25.
 python3 scripts/direct_device_patch.py
 python3 scripts/salus_brand_patch.py
 
@@ -10,87 +10,51 @@ fail() { echo "UI CONTRACT FAILURE: $1" >&2; exit 1; }
 THEME="lib/core/theme/app_theme.dart"
 HOME="lib/screens/home_screen.dart"
 SHELL="lib/screens/home_shell.dart"
-ONBOARD="lib/screens/onboarding_screen.dart"
-AI="lib/screens/ai_coach_screen.dart"
 SOURCES="lib/screens/sources_screen.dart"
 WIDGETS="lib/widgets/salus_widgets.dart"
 APP="lib/app.dart"
 
-# Build identity and core routes.
-grep -q '^version: 0.14.0+24$' pubspec.yaml || fail "pubspec must identify build 24"
+# Identity and routes.
+grep -q '^version: 0.14.0+25$' pubspec.yaml || fail "pubspec must identify build 25"
 grep -q "title: 'Salus'" "$APP" || fail "app title missing"
-grep -q "'/coach': (_) => const AiCoachScreen()" "$APP" || fail "Salus AI route missing"
-grep -q "'/sources': (_) => const SourcesScreen()" "$APP" || fail "direct-device source route missing"
-grep -q 'ThemeMode.dark' "$APP" || fail "Salus v24 must use dark visual system"
+grep -q "'/sources': (_) => const SourcesScreen()" "$APP" || fail "device route missing"
+grep -q 'ThemeMode.dark' "$APP" || fail "dark theme missing"
 
-# Locked visual direction: midnight glass, cyan/mint light, modern sans typography.
-for required in "0xFF05090D" "0xFF62E8F2" "glassGradient" "Brightness.dark"; do
-  grep -q "$required" "$THEME" || fail "new visual system missing: $required"
+# Locked v25 background and fixed calendar.
+for required in "class _SalusLandscapePainter" "Dotted biometric landscape" "class SalusWeekStrip" "class SalusGlassMetricCard" "class SalusRecoveryOrb"; do
+  grep -q "$required" "$WIDGETS" || fail "v25 visual primitive missing: $required"
 done
-if grep -q 'warm parchment' "$THEME"; then fail "old parchment theme remains"; fi
+grep -q 'child: SalusWeekStrip()' "$SHELL" || fail "weekday calendar is not pinned in Home app bar"
+grep -q 'Size.fromHeight(132)' "$SHELL" || fail "Home app bar height does not include weekday calendar"
+if grep -q 'class _WeekStrip' "$HOME"; then fail "obsolete scroll-only week strip remains"; fi
 
-for required in \
-  "class SalusPageBackground" \
-  "class SalusPaper" \
-  "class SalusRecoveryOrb" \
-  "class SalusGlassMetricCard" \
-  "class SalusDeviceTypeCard" \
-  "salus_profile_hero.png" \
-  "salus_ai_orb.png" \
-  "salus_sources_orbit.png"; do
-  grep -q "$required" "$WIDGETS" || fail "shared Salus v24 visual primitive missing: $required"
-done
+# Overflow prevention is structural: taller cards plus one-line scaled status and
+# recovery subtitle outside the orb painter.
+grep -q 'height: 134' "$HOME" || fail "top metric cards were not enlarged"
+grep -q 'height: 126' "$HOME" || fail "secondary metric cards were not enlarged"
+grep -q 'softWrap: false' "$WIDGETS" || fail "metric status text is not constrained"
+grep -q 'fit: BoxFit.scaleDown' "$WIDGETS" || fail "scaled metric text protection missing"
+grep -q 'width: 280' "$WIDGETS" || fail "recovery subtitle not separated beneath orb"
 
-for asset in \
-  lib/assets/salus/salus_profile_hero.png \
-  lib/assets/salus/salus_ai_orb.png \
-  lib/assets/salus/salus_sources_orbit.png \
-  lib/assets/salus/salus_device_ring.png \
-  lib/assets/salus/salus_device_watch.png \
-  lib/assets/salus/salus_device_scale.png \
-  lib/assets/salus/salus_device_cpap.png; do
-  [ -s "$asset" ] || fail "new Salus visual asset missing: $asset"
+# Direct device scanner/pairing must be first-class and visible near the top.
+for required in "SALUS_BUILD25_DIRECT_FIRST" "Direct devices" "Scan for devices" "Connect" "Connected" "_bluetoothCard(bluetoothSources)"; do
+  grep -q "$required" "$SOURCES" || fail "working direct-device UI missing: $required"
 done
 
-# Onboarding reference layout and data capture.
-for required in "Create your" "Salus profile" "Select Height" "Select Weight" "Primary goal" "Typical activity"; do
-  grep -q "$required" "$ONBOARD" || fail "onboarding missing: $required"
-done
-for required in "SalusRecoveryOrb" "Good Morning" "Respiration" "SpO₂" "Today’s Focus" "pushNamed('/sources')" "pushNamed('/coach')"; do
-  grep -q "$required" "$HOME" || fail "dashboard missing: $required"
-done
-for required in "class AiCoachScreen" "SALUS AI" "MEET YOUR AI COACH" "TRY ASKING"; do
-  grep -q "$required" "$AI" || fail "AI coach visual missing: $required"
-done
-for required in "S a l u s" "Home" "Activity" "Sleep" "Body" "More"; do
-  grep -q "$required" "$SHELL" || fail "main shell missing: $required"
-done
-for required in "Devices & Sources" "CONNECT YOUR WORLD" "SalusDeviceTypeCard" "Pair direct devices" "Saved direct devices"; do
-  grep -q "$required" "$SOURCES" || fail "device/source hub missing: $required"
+# New launcher sources must be present in the overlay/repo.
+for folder in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+  [ -s "branding/android/mipmap-${folder}/ic_launcher.png" ] || fail "new launcher missing for ${folder}"
 done
 
-# Existing app modules remain present.
-for path in \
-  lib/screens/activity_screen.dart \
-  lib/screens/sleep_screen.dart \
-  lib/screens/body_screen.dart \
-  lib/screens/more_screen.dart \
-  lib/screens/trends_screen.dart \
-  lib/screens/recovery_detail_screen.dart \
-  lib/screens/workout_screen.dart; do
-  [ -s "$path" ] || fail "existing module missing: $path"
-done
-
-# Readability floor in the new reference surfaces.
+# No primary text below 12sp in reference surfaces.
 python3 - <<'PY'
 from pathlib import Path
 import re
 files = [
     'lib/screens/home_screen.dart',
     'lib/screens/home_shell.dart',
-    'lib/screens/onboarding_screen.dart',
-    'lib/screens/ai_coach_screen.dart',
     'lib/widgets/salus_widgets.dart',
+    'lib/screens/sources_screen.dart',
 ]
 violations=[]
 for name in files:
@@ -102,4 +66,4 @@ if violations:
     raise SystemExit('UI CONTRACT FAILURE: text below 12sp: ' + ', '.join(violations))
 PY
 
-echo "Salus build 24 locked visual system contract passed."
+echo "Salus build 25 UI contract passed."

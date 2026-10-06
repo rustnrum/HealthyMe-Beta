@@ -8,6 +8,7 @@ import '../state/app_state.dart';
 import '../state/health_sync_provider.dart';
 import '../state/navigation_provider.dart';
 import '../widgets/module_menu_button.dart';
+import '../widgets/salus_widgets.dart';
 import 'activity_screen.dart';
 import 'body_screen.dart';
 import 'home_screen.dart';
@@ -142,7 +143,7 @@ class _SalusBrandAppBar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(76);
+  Size get preferredSize => const Size.fromHeight(132);
 
   @override
   Widget build(BuildContext context) {
@@ -188,6 +189,10 @@ class _SalusBrandAppBar extends StatelessWidget implements PreferredSizeWidget {
         ),
         const SizedBox(width: 14),
       ],
+      bottom: const PreferredSize(
+        preferredSize: Size.fromHeight(56),
+        child: SalusWeekStrip(),
+      ),
     );
   }
 }

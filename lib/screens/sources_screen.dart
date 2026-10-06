@@ -168,7 +168,59 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 30),
         children: [
           _buildIdentityCard(),
+          // SALUS_BUILD25_DIRECT_FIRST — direct_device_patch compatibility: Use with Salus
+          const SizedBox(height: 18),
+          const HmSectionHeader(title: 'Direct devices'),
+          const SizedBox(height: 6),
+          const Text(
+            'Put your ring, watch, scale or respiratory device in pairing mode, then scan. '
+            'Salus will show the real Bluetooth devices it can see and let you connect them directly.',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
           const SizedBox(height: 12),
+          SizedBox(
+            height: 154,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: const [
+                SalusDeviceTypeCard(
+                  asset: SalusAssets.deviceRing,
+                  title: 'Ring',
+                  subtitle: 'Sleep • HRV • SpO₂',
+                  highlighted: true,
+                ),
+                SizedBox(width: 10),
+                SalusDeviceTypeCard(
+                  asset: SalusAssets.deviceWatch,
+                  title: 'Watch',
+                  subtitle: 'Activity • HR • Workouts',
+                ),
+                SizedBox(width: 10),
+                SalusDeviceTypeCard(
+                  asset: SalusAssets.deviceScale,
+                  title: 'Scale',
+                  subtitle: 'Weight • Body composition',
+                ),
+                SizedBox(width: 10),
+                SalusDeviceTypeCard(
+                  asset: SalusAssets.deviceCpap,
+                  title: 'CPAP',
+                  subtitle: 'Sleep • Therapy data',
+                ),
+              ],
+            ),
+          ),
+          if (_savedDirectDevices.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _savedDirectDevicesCard(),
+          ],
+          const SizedBox(height: 12),
+          _bluetoothCard(bluetoothSources),
+          const SizedBox(height: 24),
           _transportCard(
             authorized: h.authorized,
             lastSync: h.lastSync,
@@ -210,7 +262,6 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
                     metric: metrics[i],
                     selectedRaw: app.metricSources[metrics[i]],
                     resolvedRaw: h.resolvedSources[metrics[i]],
-                    // Keep metric-specific availability explicit in this screen.
                     sources: h.availableSources[metrics[i]] ?? const [],
                     sourceLabels: h.sourceLabels,
                     freshness: h.freshness[metrics[i]],
@@ -227,59 +278,6 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 22),
-          SizedBox(
-            height: 154,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: const [
-                SalusDeviceTypeCard(
-                  asset: SalusAssets.deviceRing,
-                  title: 'Ring',
-                  subtitle: 'Sleep • HRV • SpO₂',
-                  highlighted: true,
-                ),
-                SizedBox(width: 10),
-                SalusDeviceTypeCard(
-                  asset: SalusAssets.deviceWatch,
-                  title: 'Watch',
-                  subtitle: 'Activity • HR • Workouts',
-                ),
-                SizedBox(width: 10),
-                SalusDeviceTypeCard(
-                  asset: SalusAssets.deviceScale,
-                  title: 'Scale',
-                  subtitle: 'Weight • Body composition',
-                ),
-                SizedBox(width: 10),
-                SalusDeviceTypeCard(
-                  asset: SalusAssets.deviceCpap,
-                  title: 'CPAP',
-                  subtitle: 'Sleep • Therapy data',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 22),
-          const HmSectionHeader(title: 'Pair direct devices'),
-          const SizedBox(height: 6),
-          const Text(
-            'Salus can scan, inspect, pair and remember Bluetooth health devices '
-            'without their vendor app. Known protocol families and standard BLE '
-            'health services are identified automatically; metric readers are '
-            'enabled only when Salus can actually decode that device.',
-            style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 13,
-              height: 1.4,
-            ),
-          ),
-          if (_savedDirectDevices.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _savedDirectDevicesCard(),
-          ],
-          const SizedBox(height: 10),
-          _bluetoothCard(bluetoothSources),
         ],
       ),
     );
@@ -484,7 +482,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
               onPressed: _scanningBle ? null : _scanBluetooth,
               icon: const Icon(Icons.bluetooth_searching_rounded),
               label: Text(
-                _scanningBle ? 'Scanning for 8 seconds…' : 'Scan nearby devices',
+                _scanningBle ? 'Scanning for 8 seconds…' : 'Scan for devices',
               ),
             ),
           ),
@@ -1047,10 +1045,10 @@ class _BleSourceRow extends StatelessWidget {
                   icon: Icon(saved ? Icons.check_rounded : Icons.link_rounded, size: 18),
                   label: Text(
                     saved
-                        ? 'Saved to Salus'
+                        ? 'Connected'
                         : pairing
-                            ? 'Pairing…'
-                            : 'Use with Salus',
+                            ? 'Connecting…'
+                            : 'Connect',
                   ),
                 ),
               ],

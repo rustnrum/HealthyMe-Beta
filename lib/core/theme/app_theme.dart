@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Salus visual system v24 — deep midnight glass with electric cyan/mint light.
+  // Salus visual system v25 — deep midnight glass with electric cyan/mint light.
   static const Color background = Color(0xFF05090D);
   static const Color backgroundDeep = Color(0xFF03070A);
   static const Color surface = Color(0xFF0A1218);

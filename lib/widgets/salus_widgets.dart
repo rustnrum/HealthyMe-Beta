@@ -35,7 +35,7 @@ class SalusAssets {
   static const String calloutSmallSteps = '$root/callout_small_steps.png';
   static const String calloutSameMe = '$root/callout_same_me.png';
 
-  // Salus v24 visual reference assets.
+  // Salus v25 visual reference assets.
   static const String profileHero = '$root/salus_profile_hero.png';
   static const String aiOrb = '$root/salus_ai_orb.png';
   static const String sourcesOrbit = '$root/salus_sources_orbit.png';
@@ -58,6 +58,11 @@ class SalusPageBackground extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
+          const Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(painter: _SalusLandscapePainter()),
+            ),
+          ),
           Positioned(
             top: -170,
             right: -120,
@@ -99,6 +104,214 @@ class SalusPageBackground extends StatelessWidget {
           ),
           if (art != null) art!,
           child,
+        ],
+      ),
+    );
+  }
+}
+
+class _SalusLandscapePainter extends CustomPainter {
+  const _SalusLandscapePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final glow = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          AppTheme.blue.withValues(alpha: 0.16),
+          AppTheme.cyan.withValues(alpha: 0.055),
+          Colors.transparent,
+        ],
+      ).createShader(
+        Rect.fromCircle(
+          center: Offset(size.width * 0.52, size.height * 0.38),
+          radius: size.width * 0.74,
+        ),
+      );
+    canvas.drawRect(Offset.zero & size, glow);
+
+    final mountainBack = Path()
+      ..moveTo(0, size.height * 0.34)
+      ..lineTo(size.width * 0.12, size.height * 0.29)
+      ..lineTo(size.width * 0.22, size.height * 0.33)
+      ..lineTo(size.width * 0.37, size.height * 0.24)
+      ..lineTo(size.width * 0.49, size.height * 0.31)
+      ..lineTo(size.width * 0.66, size.height * 0.21)
+      ..lineTo(size.width * 0.78, size.height * 0.29)
+      ..lineTo(size.width * 0.92, size.height * 0.23)
+      ..lineTo(size.width, size.height * 0.28)
+      ..lineTo(size.width, size.height * 0.48)
+      ..lineTo(0, size.height * 0.48)
+      ..close();
+    canvas.drawPath(
+      mountainBack,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF0D2332).withValues(alpha: 0.82),
+            const Color(0xFF07121B).withValues(alpha: 0.28),
+          ],
+        ).createShader(Offset.zero & size),
+    );
+
+    final ridge = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..color = AppTheme.blue.withValues(alpha: 0.18);
+    final ridgePath = Path()
+      ..moveTo(0, size.height * 0.34)
+      ..lineTo(size.width * 0.12, size.height * 0.29)
+      ..lineTo(size.width * 0.22, size.height * 0.33)
+      ..lineTo(size.width * 0.37, size.height * 0.24)
+      ..lineTo(size.width * 0.49, size.height * 0.31)
+      ..lineTo(size.width * 0.66, size.height * 0.21)
+      ..lineTo(size.width * 0.78, size.height * 0.29)
+      ..lineTo(size.width * 0.92, size.height * 0.23)
+      ..lineTo(size.width, size.height * 0.28);
+    canvas.drawPath(ridgePath, ridge);
+
+    // Dotted biometric landscape inspired by the locked Salus reference.
+    final dot = Paint();
+    final baseY = size.height * 0.47;
+    final xStep = math.max(9.0, size.width / 44).toDouble();
+    for (var layer = 0; layer < 6; layer++) {
+      final phase = layer * 0.72;
+      final amplitude = 16.0 + layer * 8.0;
+      final yOffset = layer * 24.0;
+      final alpha = 0.32 - layer * 0.035;
+      for (double x = -8; x <= size.width + 8; x += xStep) {
+        final wave = math.sin((x / size.width) * math.pi * 3.1 + phase);
+        final wave2 = math.sin((x / size.width) * math.pi * 6.4 - phase) * 0.34;
+        final y = baseY + yOffset + (wave + wave2) * amplitude;
+        final centerBias = (1.0 - ((x - size.width / 2).abs() / (size.width / 2)).clamp(0.0, 1.0)).toDouble();
+        dot.color = AppTheme.cyan.withValues(alpha: alpha * (0.62 + centerBias * 0.38));
+        canvas.drawCircle(Offset(x, y), 1.25 + centerBias * 0.65, dot);
+      }
+    }
+
+    // Fine glow line across the front wave.
+    final wavePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..color = AppTheme.cyan.withValues(alpha: 0.22);
+    final wavePath = Path();
+    for (double x = 0; x <= size.width; x += 4) {
+      final y = baseY + 10 + math.sin((x / size.width) * math.pi * 3.0) * 28;
+      if (x == 0) {
+        wavePath.moveTo(x, y);
+      } else {
+        wavePath.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(wavePath, wavePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SalusLandscapePainter oldDelegate) => false;
+}
+
+class SalusWeekStrip extends StatelessWidget {
+  const SalusWeekStrip({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday - 1));
+    const dayNames = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const monthNames = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.fromLTRB(18, 3, 18, 6),
+      decoration: BoxDecoration(
+        color: AppTheme.backgroundDeep.withValues(alpha: 0.90),
+        border: Border(
+          top: BorderSide(color: AppTheme.border.withValues(alpha: 0.52)),
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 74,
+            child: Text(
+              '${monthNames[now.month - 1]} ${now.day}',
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Row(
+              children: [
+                for (var i = 0; i < 7; i++)
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final day = start.add(Duration(days: i));
+                        final selected = day.year == now.year &&
+                            day.month == now.month &&
+                            day.day == now.day;
+                        return Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              dayNames[i],
+                              style: TextStyle(
+                                color: selected ? AppTheme.cyan : AppTheme.textMuted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Container(
+                              width: 25,
+                              height: 25,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: selected
+                                    ? AppTheme.cyan.withValues(alpha: 0.11)
+                                    : Colors.transparent,
+                                border: Border.all(
+                                  color: selected ? AppTheme.cyan : Colors.transparent,
+                                  width: 1.0,
+                                ),
+                                boxShadow: selected
+                                    ? [
+                                        BoxShadow(
+                                          color: AppTheme.cyan.withValues(alpha: 0.18),
+                                          blurRadius: 10,
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Text(
+                                '${day.day}',
+                                style: TextStyle(
+                                  color: selected
+                                      ? AppTheme.textPrimary
+                                      : AppTheme.textSecondary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -442,34 +655,80 @@ class SalusRecoveryOrb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final value = score == null ? 0.0 : (score!.clamp(0, 100) / 100.0);
-    final content = SizedBox(
-      width: 235,
-      height: 235,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          CustomPaint(size: const Size.square(235), painter: _RecoveryOrbPainter(progress: value)),
-          Column(
-            mainAxisSize: MainAxisSize.min,
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 250,
+          height: 250,
+          child: Stack(
+            alignment: Alignment.center,
             children: [
-              const Text('RECOVERY', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 3.0)),
-              const SizedBox(height: 8),
-              Text(score?.toString() ?? '—', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 62, height: 0.95, fontWeight: FontWeight.w800, letterSpacing: -2.2)),
-              const SizedBox(height: 7),
-              Text(score == null ? 'Building baseline' : '/100', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 9),
-              SizedBox(
-                width: 150,
-                child: Text(subtitle, textAlign: TextAlign.center, maxLines: 2, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12.5, height: 1.3)),
+              CustomPaint(
+                size: const Size.square(250),
+                painter: _RecoveryOrbPainter(progress: value),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'RECOVERY',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 3.0,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    score?.toString() ?? '—',
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 62,
+                      height: 0.95,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -2.2,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    score == null ? 'Building baseline' : '/100',
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 2),
+        SizedBox(
+          width: 280,
+          child: Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 12.5,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
     );
 
     if (onTap == null) return content;
-    return InkWell(onTap: onTap, customBorder: const CircleBorder(), child: content);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(140),
+      child: content,
+    );
   }
 }
 
@@ -553,31 +812,79 @@ class SalusGlassMetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return SalusPaper(
       onTap: onTap,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: color.withValues(alpha: 0.11), border: Border.all(color: color.withValues(alpha: 0.18))),
-                child: Icon(icon, color: color, size: 18),
+                width: 31,
+                height: 31,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color.withValues(alpha: 0.11),
+                  border: Border.all(color: color.withValues(alpha: 0.18)),
+                ),
+                child: Icon(icon, color: color, size: 17),
               ),
-              const SizedBox(width: 8),
-              Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12.5, fontWeight: FontWeight.w600))),
-              if (onTap != null) const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted, size: 20),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (onTap != null)
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppTheme.textMuted,
+                  size: 18,
+                ),
             ],
           ),
-          const Spacer(),
+          const SizedBox(height: 10),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(value, maxLines: 1, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.7)),
+            child: Text(
+              value,
+              maxLines: 1,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 23,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.7,
+              ),
+            ),
           ),
-          const SizedBox(height: 4),
-          Text(status, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: color, fontSize: 12.5, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 3),
+          Expanded(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  status,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

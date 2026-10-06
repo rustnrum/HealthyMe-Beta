@@ -103,8 +103,6 @@ class HomeScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 18),
-            const _WeekStrip(),
-            const SizedBox(height: 20),
             Center(
               child: SalusRecoveryOrb(
                 score: recovery.score,
@@ -117,7 +115,7 @@ class HomeScreen extends ConsumerWidget {
               children: [
                 Expanded(
                   child: SizedBox(
-                    height: 126,
+                    height: 134,
                     child: SalusGlassMetricCard(
                       icon: Icons.bedtime_rounded,
                       label: 'Sleep',
@@ -131,7 +129,7 @@ class HomeScreen extends ConsumerWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: SizedBox(
-                    height: 126,
+                    height: 134,
                     child: SalusGlassMetricCard(
                       icon: Icons.show_chart_rounded,
                       label: 'HRV',
@@ -145,7 +143,7 @@ class HomeScreen extends ConsumerWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: SizedBox(
-                    height: 126,
+                    height: 134,
                     child: SalusGlassMetricCard(
                       icon: Icons.favorite_border_rounded,
                       label: 'Resting HR',
@@ -163,7 +161,7 @@ class HomeScreen extends ConsumerWidget {
               children: [
                 Expanded(
                   child: SizedBox(
-                    height: 118,
+                    height: 126,
                     child: SalusGlassMetricCard(
                       icon: Icons.air_rounded,
                       label: 'Respiration',
@@ -177,7 +175,7 @@ class HomeScreen extends ConsumerWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: SizedBox(
-                    height: 118,
+                    height: 126,
                     child: SalusGlassMetricCard(
                       icon: Icons.water_drop_outlined,
                       label: 'SpO₂',
@@ -195,7 +193,7 @@ class HomeScreen extends ConsumerWidget {
               children: [
                 Expanded(
                   child: SizedBox(
-                    height: 118,
+                    height: 126,
                     child: SalusGlassMetricCard(
                       icon: Icons.directions_walk_rounded,
                       label: 'Steps',
@@ -209,7 +207,7 @@ class HomeScreen extends ConsumerWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: SizedBox(
-                    height: 118,
+                    height: 126,
                     child: SalusGlassMetricCard(
                       icon: Icons.monitor_weight_outlined,
                       label: 'Weight',
@@ -297,52 +295,6 @@ class HomeScreen extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _WeekStrip extends StatelessWidget {
-  const _WeekStrip();
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final monday = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
-    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
-    return Row(
-      children: [
-        for (var i = 0; i < 7; i++) ...[
-          if (i > 0) const SizedBox(width: 6),
-          Expanded(
-            child: Builder(
-              builder: (context) {
-                final day = monday.add(Duration(days: i));
-                final selected = day.year == now.year && day.month == now.month && day.day == now.day;
-                return Column(
-                  children: [
-                    Text(labels[i], style: TextStyle(color: selected ? AppTheme.cyan : AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 7),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      width: 38,
-                      height: 38,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: selected ? AppTheme.cyan.withValues(alpha: 0.09) : Colors.transparent,
-                        border: Border.all(color: selected ? AppTheme.cyan : AppTheme.border, width: selected ? 1.2 : 0.8),
-                        boxShadow: selected ? [BoxShadow(color: AppTheme.cyan.withValues(alpha: 0.15), blurRadius: 16)] : null,
-                      ),
-                      child: Text('${day.day}', style: TextStyle(color: selected ? AppTheme.textPrimary : AppTheme.textSecondary, fontSize: 13.5, fontWeight: FontWeight.w700)),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
-      ],
     );
   }
 }
