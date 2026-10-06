@@ -2,11 +2,11 @@ from pathlib import Path
 import re
 import shutil
 
-VERSION = '0.14.0+26'
+VERSION = '0.14.0+29'
 
 
 def fail(message: str) -> None:
-    raise SystemExit(f'Salus build 26 brand patch: {message}')
+    raise SystemExit(f'Salus build 28 brand patch: {message}')
 
 
 pub = Path('pubspec.yaml')
@@ -27,12 +27,18 @@ text, count = re.subn(
     count=1,
 )
 if count != 1:
-    fail('Android app label missing')
+    fail('Android application label missing')
 manifest.write_text(text)
 
 src_root = Path('branding/android')
 res_root = Path('android/app/src/main/res')
-for folder in ('mipmap-mdpi', 'mipmap-hdpi', 'mipmap-xhdpi', 'mipmap-xxhdpi', 'mipmap-xxxhdpi'):
+for folder in (
+    'mipmap-mdpi',
+    'mipmap-hdpi',
+    'mipmap-xhdpi',
+    'mipmap-xxhdpi',
+    'mipmap-xxxhdpi',
+):
     src = src_root / folder / 'ic_launcher.png'
     if not src.exists():
         fail(f'missing launcher source {src}')
@@ -40,4 +46,4 @@ for folder in ('mipmap-mdpi', 'mipmap-hdpi', 'mipmap-xhdpi', 'mipmap-xxhdpi', 'm
     dst.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst / 'ic_launcher.png')
 
-print('Salus build 26 branding applied.')
+print('Salus build 28 branding applied.')

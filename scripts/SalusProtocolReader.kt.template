@@ -1,0 +1,1093 @@
+package com.rustnrum.healthyme.beta03
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothGattService
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Handler
+import io.flutter.plugin.common.MethodChannel
+import java.io.ByteArrayOutputStream
+import java.util.Calendar
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.sqrt
+
+/**
+ * SALUS_PROTOCOL_METRICS_V027
+ *
+ * Local, read-only protocol readers for device families Salus has positively
+ * identified. A metric is returned only after a real packet carrying that
+ * metric is received from the user's device.
+ */
+class SalusProtocolReader(
+    private val activity: Activity,
+    private val mainHandler: Handler,
+) {
+    companion object {
+        private val CCCD =
+            UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+
+        private val RING_SERVICE =
+            UUID.fromString("6e40fff0-b5a3-f393-e0a9-e50e24dcca9e")
+        private val RING_WRITE =
+            UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e")
+        private val RING_NOTIFY =
+            UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e")
+        private val RING_BIG_SERVICE =
+            UUID.fromString("de5bf728-d711-4e47-af26-65e3012a5dc7")
+        private val RING_BIG_WRITE =
+            UUID.fromString("de5bf72a-d711-4e47-af26-65e3012a5dc7")
+        private val RING_BIG_NOTIFY =
+            UUID.fromString("de5bf729-d711-4e47-af26-65e3012a5dc7")
+
+        private val GARMIN_SERVICE =
+            UUID.fromString("6a4e2800-667b-11e3-949a-0800200c9a66")
+
+        private const val GARMIN_GFDI = 1
+        private const val GARMIN_REALTIME_HR = 6
+        private const val GARMIN_REALTIME_STEPS = 7
+        private const val GARMIN_REALTIME_CALORIES = 8
+        private const val GARMIN_REALTIME_HRV = 12
+        private const val GARMIN_REALTIME_STRESS = 13
+        private const val GARMIN_REALTIME_SPO2 = 19
+        private const val GARMIN_REALTIME_BODY_BATTERY = 20
+        private const val GARMIN_REALTIME_RESPIRATION = 21
+
+        private val GARMIN_SERVICES = intArrayOf(
+            GARMIN_GFDI,
+            GARMIN_REALTIME_HR,
+            GARMIN_REALTIME_STEPS,
+            GARMIN_REALTIME_CALORIES,
+            GARMIN_REALTIME_HRV,
+            GARMIN_REALTIME_STRESS,
+            GARMIN_REALTIME_SPO2,
+            GARMIN_REALTIME_BODY_BATTERY,
+            GARMIN_REALTIME_RESPIRATION,
+        )
+    }
+
+    @SuppressLint("MissingPermission")
+    fun read(
+        deviceId: String,
+        deviceName: String,
+        durationMs: Long,
+        result: MethodChannel.Result,
+    ) {
+        if (!hasBluetoothPermission()) {
+            result.error(
+                "BLE_PERMISSION_DENIED",
+                "Bluetooth scan/connect permission is required.",
+                null,
+            )
+            return
+        }
+
+        val adapter =
+            activity.getSystemService(BluetoothManager::class.java)?.adapter
+        if (adapter == null || !adapter.isEnabled) {
+            result.error(
+                "BLE_UNAVAILABLE",
+                "Bluetooth is unavailable or turned off.",
+                null,
+            )
+            return
+        }
+
+        val device = try {
+            adapter.getRemoteDevice(deviceId)
+        } catch (error: Throwable) {
+            result.error(
+                "BLE_DEVICE_INVALID",
+                error.message ?: "Invalid Bluetooth address.",
+                null,
+            )
+            return
+        }
+
+        Session(device, deviceName, durationMs, result).start()
+    }
+
+    @SuppressLint("MissingPermission")
+    private inner class Session(
+        private val device: BluetoothDevice,
+        private val deviceName: String,
+        private val durationMs: Long,
+        private val result: MethodChannel.Result,
+    ) {
+        private val completed = AtomicBoolean(false)
+        private val metrics = linkedMapOf<String, Double>()
+        private val notes = mutableListOf<String>()
+        private var readerName = "Bluetooth protocol"
+        private var mode = "unknown"
+        private var gatt: BluetoothGatt? = null
+
+        // COLMI / QRing state.
+        private var ringWrite: BluetoothGattCharacteristic? = null
+        private var ringNotify: BluetoothGattCharacteristic? = null
+        private var ringBigWrite: BluetoothGattCharacteristic? = null
+        private var ringBigNotify: BluetoothGattCharacteristic? = null
+        private var ringNotifyStage = 0
+        private val ringBigBuffer = ByteArrayOutputStream()
+        private var ringStepTotal = 0
+        private var ringCaloriesTotal = 0
+        private var ringNewCalorieProtocol = false
+        private var ringLatestHr = 0
+        private var ringHrvPageCount = 0
+        private var ringHrvProxySum = 0
+        private var ringHrvProxyCount = 0
+        private var ringSleepSeen = false
+        private var ringSpo2Requested = false
+
+        // Garmin Multi-Link state.
+        private var garminRx: BluetoothGattCharacteristic? = null
+        private var garminTx: BluetoothGattCharacteristic? = null
+        private val garminHandleToService = mutableMapOf<Int, Int>()
+        private val garminRrMs = mutableListOf<Double>()
+        private var garminRegisterIndex = 0
+        private var garminPendingService: Int? = null
+        private var garminRegistrationStarted = false
+
+        private val callback = object : BluetoothGattCallback() {
+            override fun onConnectionStateChange(
+                gatt: BluetoothGatt,
+                status: Int,
+                newState: Int,
+            ) {
+                this@Session.gatt = gatt
+
+                if (
+                    status == BluetoothGatt.GATT_SUCCESS &&
+                    newState == BluetoothProfile.STATE_CONNECTED
+                ) {
+                    val started = try {
+                        gatt.discoverServices()
+                    } catch (_: Throwable) {
+                        false
+                    }
+                    if (!started) {
+                        finish("Connected, but service discovery could not start.")
+                    }
+                    return
+                }
+
+                if (
+                    newState == BluetoothProfile.STATE_DISCONNECTED &&
+                    !completed.get()
+                ) {
+                    finish("The device disconnected before direct sync completed.")
+                } else if (
+                    status != BluetoothGatt.GATT_SUCCESS &&
+                    !completed.get()
+                ) {
+                    finish("Bluetooth connection failed with status $status.")
+                }
+            }
+
+            override fun onServicesDiscovered(
+                gatt: BluetoothGatt,
+                status: Int,
+            ) {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    finish("Bluetooth service discovery failed with status $status.")
+                    return
+                }
+
+                val ringService = gatt.getService(RING_SERVICE)
+                if (ringService != null) {
+                    startRing(gatt, ringService)
+                    return
+                }
+
+                val garminService = gatt.getService(GARMIN_SERVICE)
+                if (garminService != null) {
+                    startGarmin(gatt, garminService)
+                    return
+                }
+
+                finish(
+                    "No supported COLMI/QRing or Garmin direct protocol was found on $deviceName.",
+                    fallbackStandard = true,
+                )
+            }
+
+            override fun onDescriptorWrite(
+                gatt: BluetoothGatt,
+                descriptor: BluetoothGattDescriptor,
+                status: Int,
+            ) {
+                if (completed.get()) return
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    finish("Bluetooth notification setup failed with status $status.")
+                    return
+                }
+
+                if (mode == "ring") {
+                    when (descriptor.characteristic.uuid) {
+                        RING_NOTIFY -> {
+                            val big = ringBigNotify
+                            if (big != null && ringBigWrite != null) {
+                                ringNotifyStage = 2
+                                if (!enableNotify(gatt, big)) {
+                                    ringNotifyStage = 3
+                                    startRingRequests()
+                                }
+                            } else {
+                                ringNotifyStage = 3
+                                startRingRequests()
+                            }
+                        }
+                        RING_BIG_NOTIFY -> {
+                            ringNotifyStage = 3
+                            startRingRequests()
+                        }
+                    }
+                } else if (mode == "garmin") {
+                    if (descriptor.characteristic.uuid == garminRx?.uuid) {
+                        startGarminHandshake()
+                    }
+                }
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onCharacteristicChanged(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+            ) {
+                val value = characteristic.value ?: return
+                handleChanged(characteristic.uuid, value)
+            }
+
+            override fun onCharacteristicChanged(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                value: ByteArray,
+            ) {
+                handleChanged(characteristic.uuid, value)
+            }
+        }
+
+        fun start() {
+            try {
+                gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    device.connectGatt(
+                        activity,
+                        false,
+                        callback,
+                        BluetoothDevice.TRANSPORT_LE,
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    device.connectGatt(activity, false, callback)
+                }
+            } catch (error: Throwable) {
+                result.error(
+                    "BLE_GATT_CONNECT_FAILED",
+                    error.message ?: error.javaClass.simpleName,
+                    null,
+                )
+                return
+            }
+
+            mainHandler.postDelayed(
+                {
+                    if (!completed.get()) {
+                        finish(
+                            if (metrics.isEmpty()) {
+                                "$readerName connected, but no real metric packets arrived before timeout."
+                            } else {
+                                null
+                            }
+                        )
+                    }
+                },
+                durationMs + 2500L,
+            )
+        }
+
+        private fun handleChanged(uuid: UUID, value: ByteArray) {
+            if (completed.get()) return
+            when {
+                uuid == RING_NOTIFY -> parseRingPacket(value)
+                uuid == RING_BIG_NOTIFY -> parseRingBigData(value)
+                uuid == garminRx?.uuid -> parseGarminPacket(value)
+            }
+        }
+
+        private fun finish(
+            message: String? = null,
+            fallbackStandard: Boolean = false,
+        ) {
+            if (!completed.compareAndSet(false, true)) return
+
+            if (garminRrMs.size >= 3 && !metrics.containsKey("HRV")) {
+                var sumSquares = 0.0
+                for (index in 1 until garminRrMs.size) {
+                    val delta = garminRrMs[index] - garminRrMs[index - 1]
+                    sumSquares += delta * delta
+                }
+                metrics["HRV"] =
+                    sqrt(sumSquares / (garminRrMs.size - 1))
+            }
+
+            if (ringHrvProxyCount > 0) {
+                metrics["Ring HRV proxy"] =
+                    ringHrvProxySum.toDouble() / ringHrvProxyCount.toDouble()
+            }
+
+            try {
+                gatt?.disconnect()
+            } catch (_: Throwable) {
+            }
+            try {
+                gatt?.close()
+            } catch (_: Throwable) {
+            }
+
+            val finalMessage = message ?: when {
+                metrics.isNotEmpty() ->
+                    "$readerName returned ${metrics.size} real metric${if (metrics.size == 1) "" else "s"}."
+                notes.isNotEmpty() -> notes.joinToString(" ")
+                else -> "No health packets were returned by this device."
+            }
+
+            mainHandler.post {
+                result.success(
+                    mapOf(
+                        "reader" to readerName,
+                        "metrics" to metrics,
+                        "message" to finalMessage,
+                        "fallbackStandard" to fallbackStandard,
+                    )
+                )
+            }
+        }
+
+        private fun u16(bytes: ByteArray, offset: Int): Int {
+            if (offset + 1 >= bytes.size) return 0
+            return (bytes[offset].toInt() and 0xff) or
+                ((bytes[offset + 1].toInt() and 0xff) shl 8)
+        }
+
+        private fun u32(bytes: ByteArray, offset: Int): Long {
+            if (offset + 3 >= bytes.size) return 0L
+            return (bytes[offset].toLong() and 0xffL) or
+                ((bytes[offset + 1].toLong() and 0xffL) shl 8) or
+                ((bytes[offset + 2].toLong() and 0xffL) shl 16) or
+                ((bytes[offset + 3].toLong() and 0xffL) shl 24)
+        }
+
+        @Suppress("DEPRECATION")
+        private fun writeCharacteristic(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            data: ByteArray,
+        ): Boolean {
+            characteristic.writeType =
+                if (
+                    characteristic.properties and
+                    BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0
+                ) {
+                    BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                } else {
+                    BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                }
+            characteristic.value = data
+            return try {
+                gatt.writeCharacteristic(characteristic)
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        @Suppress("DEPRECATION")
+        private fun enableNotify(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+        ): Boolean {
+            val enabled = try {
+                gatt.setCharacteristicNotification(characteristic, true)
+            } catch (_: Throwable) {
+                false
+            }
+            if (!enabled) return false
+
+            val descriptor = characteristic.getDescriptor(CCCD) ?: return true
+            descriptor.value =
+                if (
+                    characteristic.properties and
+                    BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+                ) {
+                    BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                } else {
+                    BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                }
+            return try {
+                gatt.writeDescriptor(descriptor)
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // COLMI / QRing R02-family reader.
+        // -----------------------------------------------------------------
+
+        private fun startRing(
+            gatt: BluetoothGatt,
+            service: BluetoothGattService,
+        ) {
+            readerName = "COLMI / QRing"
+            mode = "ring"
+            ringWrite = service.getCharacteristic(RING_WRITE)
+            ringNotify = service.getCharacteristic(RING_NOTIFY)
+
+            val bigService = gatt.getService(RING_BIG_SERVICE)
+            ringBigWrite = bigService?.getCharacteristic(RING_BIG_WRITE)
+            ringBigNotify = bigService?.getCharacteristic(RING_BIG_NOTIFY)
+
+            if (ringWrite == null || ringNotify == null) {
+                finish(
+                    "COLMI UART service was found, but required characteristics are missing."
+                )
+                return
+            }
+
+            ringNotifyStage = 1
+            if (!enableNotify(gatt, ringNotify!!)) {
+                finish("COLMI notification channel could not be enabled.")
+                return
+            }
+
+            // Some Android stacks omit a descriptor callback. Do not deadlock.
+            mainHandler.postDelayed(
+                {
+                    if (!completed.get() && ringNotifyStage < 3) {
+                        ringBigNotify?.let { enableNotify(gatt, it) }
+                        ringNotifyStage = 3
+                        startRingRequests()
+                    }
+                },
+                900L,
+            )
+        }
+
+        private fun ringPacket(
+            command: Int,
+            payload: ByteArray = byteArrayOf(),
+        ): ByteArray {
+            val out = ByteArray(16)
+            out[0] = command.toByte()
+            for (index in 0 until minOf(payload.size, 14)) {
+                out[index + 1] = payload[index]
+            }
+            var checksum = 0
+            for (index in 0 until 15) {
+                checksum =
+                    (checksum + (out[index].toInt() and 0xff)) and 0xff
+            }
+            out[15] = checksum.toByte()
+            return out
+        }
+
+        private fun ringSend(
+            command: Int,
+            payload: ByteArray = byteArrayOf(),
+        ) {
+            val activeGatt = gatt ?: return
+            val characteristic = ringWrite ?: return
+            writeCharacteristic(activeGatt, characteristic, ringPacket(command, payload))
+        }
+
+        private fun requestRingBigData(dataId: Int) {
+            val activeGatt = gatt ?: return
+            val characteristic = ringBigWrite ?: return
+            ringBigBuffer.reset()
+            writeCharacteristic(
+                activeGatt,
+                characteristic,
+                byteArrayOf(
+                    0xbc.toByte(),
+                    dataId.toByte(),
+                    0x01,
+                    0x00,
+                    0xff.toByte(),
+                    0x00,
+                    0xff.toByte(),
+                ),
+            )
+        }
+
+        private fun startRingRequests() {
+            if (completed.get()) return
+
+            val midnight = Calendar.getInstance()
+            midnight.set(Calendar.HOUR_OF_DAY, 0)
+            midnight.set(Calendar.MINUTE, 0)
+            midnight.set(Calendar.SECOND, 0)
+            midnight.set(Calendar.MILLISECOND, 0)
+            val epoch = midnight.timeInMillis / 1000L
+            val day = byteArrayOf(
+                (epoch and 0xff).toByte(),
+                ((epoch shr 8) and 0xff).toByte(),
+                ((epoch shr 16) and 0xff).toByte(),
+                ((epoch shr 24) and 0xff).toByte(),
+            )
+
+            ringSend(3) // battery
+            mainHandler.postDelayed(
+                { ringSend(67, byteArrayOf(0, 0x0f, 0, 0x5f, 1)) },
+                450L,
+            )
+            mainHandler.postDelayed({ ringSend(21, day) }, 1700L)
+
+            // Start HR sensor then poll computed BPM with command 30.
+            mainHandler.postDelayed(
+                { ringSend(105, byteArrayOf(1, 1)) },
+                3600L,
+            )
+            repeat(4) { index ->
+                mainHandler.postDelayed(
+                    { ringSend(30, byteArrayOf(3)) },
+                    4400L + index * 650L,
+                )
+            }
+            mainHandler.postDelayed(
+                { ringSend(106, byteArrayOf(1, 0, 0)) },
+                7000L,
+            )
+
+            // Real-time SpO2.
+            mainHandler.postDelayed(
+                { ringSend(105, byteArrayOf(3, 1)) },
+                7200L,
+            )
+            mainHandler.postDelayed(
+                { ringSend(106, byteArrayOf(3, 0, 0)) },
+                8600L,
+            )
+
+            // Firmware HRV proxy. Kept separate from RMSSD.
+            mainHandler.postDelayed(
+                { ringSend(57, byteArrayOf(0)) },
+                8800L,
+            )
+
+            mainHandler.postDelayed(
+                { requestRingBigData(0x27) },
+                10300L,
+            )
+            mainHandler.postDelayed(
+                {
+                    if (!ringSleepSeen && !ringSpo2Requested) {
+                        ringSpo2Requested = true
+                        requestRingBigData(0x2a)
+                    }
+                },
+                12800L,
+            )
+        }
+
+        private fun parseRingPacket(packet: ByteArray) {
+            if (packet.size < 2) return
+
+            when (packet[0].toInt() and 0xff) {
+                3 -> {
+                    val battery = packet[1].toInt() and 0xff
+                    if (battery in 1..100) {
+                        metrics["Battery"] = battery.toDouble()
+                    }
+                }
+
+                30 -> {
+                    val bpm = packet[1].toInt() and 0xff
+                    if (bpm in 30..240) {
+                        metrics["Heart rate"] = bpm.toDouble()
+                    }
+                }
+
+                21 -> {
+                    val subtype = packet[1].toInt() and 0xff
+                    if (subtype == 0xff || subtype == 0) return
+                    val start = if (subtype == 1) 6 else 2
+                    for (index in start until minOf(packet.size - 1, 15)) {
+                        val bpm = packet[index].toInt() and 0xff
+                        if (bpm in 30..240) ringLatestHr = bpm
+                    }
+                    if (ringLatestHr > 0) {
+                        metrics["Heart rate"] = ringLatestHr.toDouble()
+                    }
+                }
+
+                67 -> {
+                    val marker = packet[1].toInt() and 0xff
+                    if (marker == 0xff) return
+                    if (marker == 0xf0) {
+                        ringStepTotal = 0
+                        ringCaloriesTotal = 0
+                        ringNewCalorieProtocol =
+                            packet.size > 3 && (packet[3].toInt() and 0xff) == 1
+                        return
+                    }
+                    if (packet.size >= 13) {
+                        var calories = u16(packet, 7)
+                        if (ringNewCalorieProtocol) calories *= 10
+                        ringStepTotal += u16(packet, 9)
+                        ringCaloriesTotal += calories
+
+                        val recordIndex = packet[5].toInt() and 0xff
+                        val recordCount = packet[6].toInt() and 0xff
+                        if (recordCount > 0 && recordIndex >= recordCount - 1) {
+                            metrics["Steps"] = ringStepTotal.toDouble()
+                            if (ringCaloriesTotal > 0) {
+                                metrics["Active calories"] =
+                                    ringCaloriesTotal.toDouble()
+                            }
+                        }
+                    }
+                }
+
+                57 -> {
+                    val index = packet[1].toInt() and 0xff
+                    if (index == 0xff) return
+                    if (index == 0) {
+                        ringHrvPageCount =
+                            if (packet.size > 2) packet[2].toInt() and 0xff else 0
+                        for (page in 1..ringHrvPageCount) {
+                            mainHandler.postDelayed(
+                                { ringSend(57, byteArrayOf(page.toByte())) },
+                                page * 120L,
+                            )
+                        }
+                        return
+                    }
+                    for (position in 3 until minOf(packet.size - 1, 15)) {
+                        val value = packet[position].toInt() and 0xff
+                        if (value != 0 && value != 0xff) {
+                            ringHrvProxySum += value
+                            ringHrvProxyCount += 1
+                        }
+                    }
+                }
+
+                105 -> {
+                    if (packet.size < 4) return
+                    val kind = packet[1].toInt() and 0xff
+                    val error = packet[2].toInt() and 0xff
+                    val value = packet[3].toInt() and 0xff
+                    if (error == 0 && kind == 3 && value in 70..100) {
+                        metrics["SpO2"] = value.toDouble()
+                    }
+                }
+            }
+        }
+
+        private fun parseRingBigData(chunk: ByteArray) {
+            ringBigBuffer.write(chunk)
+            val bytes = ringBigBuffer.toByteArray()
+            if (bytes.size < 6) return
+
+            val dataLength = u16(bytes, 2)
+            val total = 6 + dataLength
+            if (bytes.size < total) return
+
+            val dataId = bytes[1].toInt() and 0xff
+            val payload = bytes.copyOfRange(6, total)
+            ringBigBuffer.reset()
+
+            if (dataId == 0x27) {
+                ringSleepSeen = true
+                parseRingSleep(payload)
+                if (!ringSpo2Requested) {
+                    ringSpo2Requested = true
+                    mainHandler.postDelayed(
+                        { requestRingBigData(0x2a) },
+                        300L,
+                    )
+                }
+            } else if (dataId == 0x2a) {
+                parseRingSpo2(payload)
+            }
+        }
+
+        private fun parseRingSleep(payload: ByteArray) {
+            if (payload.isEmpty()) return
+            val nightCount = payload[0].toInt() and 0xff
+            var pointer = 1
+            var bestDaysAgo = Int.MAX_VALUE
+            var bestLight = 0
+            var bestDeep = 0
+            var bestRem = 0
+            var bestAwake = 0
+
+            repeat(nightCount) {
+                if (pointer + 6 > payload.size) return@repeat
+                val daysAgo = payload[pointer].toInt() and 0xff
+                val recordBytes = payload[pointer + 1].toInt() and 0xff
+                val end = pointer + 2 + recordBytes
+                if (end <= pointer || end > payload.size) return@repeat
+
+                var light = 0
+                var deep = 0
+                var rem = 0
+                var awake = 0
+                var cursor = pointer + 6
+
+                while (cursor + 1 < end) {
+                    val stage = payload[cursor].toInt() and 0xff
+                    val minutes = payload[cursor + 1].toInt() and 0xff
+                    when (stage) {
+                        2 -> light += minutes
+                        3 -> deep += minutes
+                        4 -> rem += minutes
+                        5 -> awake += minutes
+                    }
+                    cursor += 2
+                }
+
+                val asleep = light + deep + rem
+                if (asleep > 0 && daysAgo < bestDaysAgo) {
+                    bestDaysAgo = daysAgo
+                    bestLight = light
+                    bestDeep = deep
+                    bestRem = rem
+                    bestAwake = awake
+                }
+                pointer = end
+            }
+
+            val asleep = bestLight + bestDeep + bestRem
+            if (asleep > 0) {
+                metrics["Sleep"] = asleep.toDouble()
+                metrics["Sleep light"] = bestLight.toDouble()
+                metrics["Sleep deep"] = bestDeep.toDouble()
+                metrics["Sleep REM"] = bestRem.toDouble()
+                metrics["Sleep awake"] = bestAwake.toDouble()
+            }
+        }
+
+        private fun parseRingSpo2(payload: ByteArray) {
+            var bestDaysAgo = Int.MAX_VALUE
+            var bestHour = -1
+            var latest = 0.0
+            var base = 0
+
+            while (base + 49 <= payload.size) {
+                val daysAgo = payload[base].toInt() and 0xff
+                for (hour in 0 until 24) {
+                    val maximum = payload[base + 1 + hour * 2].toInt() and 0xff
+                    val minimum = payload[base + 2 + hour * 2].toInt() and 0xff
+                    if (maximum == 0 && minimum == 0) continue
+
+                    if (
+                        daysAgo < bestDaysAgo ||
+                        (daysAgo == bestDaysAgo && hour > bestHour)
+                    ) {
+                        bestDaysAgo = daysAgo
+                        bestHour = hour
+                        val low = if (minimum > 0) minimum else maximum
+                        val high = if (maximum > 0) maximum else minimum
+                        latest = (low + high) / 2.0
+                    }
+                }
+                base += 49
+            }
+
+            if (latest in 70.0..100.0) {
+                metrics["SpO2"] = latest
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Garmin Multi-Link real-time reader.
+        // -----------------------------------------------------------------
+
+        private fun startGarmin(
+            gatt: BluetoothGatt,
+            service: BluetoothGattService,
+        ) {
+            readerName = "Garmin Multi-Link"
+            mode = "garmin"
+
+            var selectedRx: BluetoothGattCharacteristic? = null
+            var selectedTx: BluetoothGattCharacteristic? = null
+
+            for (index in 0..4) {
+                val rxCode = 0x2810 + index
+                val txCode = rxCode + 0x10
+                val rx = service.getCharacteristic(
+                    UUID.fromString(
+                        "6a4e${rxCode.toString(16).padStart(4, '0')}-667b-11e3-949a-0800200c9a66"
+                    )
+                )
+                val tx = service.getCharacteristic(
+                    UUID.fromString(
+                        "6a4e${txCode.toString(16).padStart(4, '0')}-667b-11e3-949a-0800200c9a66"
+                    )
+                )
+
+                if (
+                    rx != null &&
+                    tx != null &&
+                    rx.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0
+                ) {
+                    selectedRx = rx
+                    selectedTx = tx
+                    break
+                }
+            }
+
+            if (selectedRx == null || selectedTx == null) {
+                finish(
+                    "Garmin Multi-Link is present, but no usable notify/write pair was found."
+                )
+                return
+            }
+
+            garminRx = selectedRx
+            garminTx = selectedTx
+
+            if (!enableNotify(gatt, selectedRx)) {
+                finish("Garmin Multi-Link notification channel could not be enabled.")
+                return
+            }
+
+            // Descriptor callback can be skipped on a few Android stacks.
+            mainHandler.postDelayed(
+                {
+                    if (!completed.get() && !garminRegistrationStarted) {
+                        startGarminHandshake()
+                    }
+                },
+                1000L,
+            )
+        }
+
+        private fun garminWrite(data: ByteArray): Boolean {
+            val activeGatt = gatt ?: return false
+            val characteristic = garminTx ?: return false
+            return writeCharacteristic(activeGatt, characteristic, data)
+        }
+
+        private fun startGarminHandshake() {
+            if (garminRegistrationStarted || completed.get()) return
+            garminRegistrationStarted = true
+
+            // CLOSE_ALL: handle 0, type 5, reserved u16=0, clientId=2, flag=0.
+            garminWrite(
+                byteArrayOf(
+                    0x00,
+                    0x05,
+                    0x00, 0x00,
+                    0x02, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00,
+                    0x00,
+                )
+            )
+
+            mainHandler.postDelayed(
+                {
+                    if (!completed.get()) {
+                        garminRegisterIndex = 0
+                        garminPendingService = null
+                        registerNextGarmin()
+                    }
+                },
+                700L,
+            )
+        }
+
+        private fun registerPacket(service: Int): ByteArray {
+            // handle 0 + REGISTER_ML_REQ + clientId(8 LE)=2 + service u16 + flag.
+            return byteArrayOf(
+                0x00,
+                0x00,
+                0x02, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00,
+                (service and 0xff).toByte(),
+                ((service ushr 8) and 0xff).toByte(),
+                0x00,
+            )
+        }
+
+        private fun registerNextGarmin() {
+            if (
+                completed.get() ||
+                garminPendingService != null ||
+                garminRegisterIndex >= GARMIN_SERVICES.size
+            ) {
+                return
+            }
+
+            val service = GARMIN_SERVICES[garminRegisterIndex]
+            garminPendingService = service
+            if (!garminWrite(registerPacket(service))) {
+                garminPendingService = null
+                garminRegisterIndex += 1
+                mainHandler.postDelayed({ registerNextGarmin() }, 120L)
+                return
+            }
+
+            // Some firmware ignores unsupported service ids instead of replying.
+            mainHandler.postDelayed(
+                {
+                    if (garminPendingService == service) {
+                        garminPendingService = null
+                        garminRegisterIndex += 1
+                        registerNextGarmin()
+                    }
+                },
+                900L,
+            )
+        }
+
+        private fun parseGarminPacket(value: ByteArray) {
+            if (value.size < 2) return
+            val first = value[0].toInt() and 0xff
+
+            if (first == 0) {
+                parseGarminControl(value)
+                return
+            }
+
+            val handle =
+                if (first and 0x80 != 0) {
+                    (first and 0x70) ushr 4
+                } else {
+                    first
+                }
+            val service = garminHandleToService[handle] ?: return
+            if (service == GARMIN_GFDI || value.size <= 1) return
+
+            parseGarminTelemetry(
+                service,
+                value.copyOfRange(1, value.size),
+            )
+        }
+
+        private fun parseGarminControl(value: ByteArray) {
+            if (value.size < 2) return
+            val type = value[1].toInt() and 0xff
+
+            // REGISTER_ML_RESP. Public captures place service/status/handle here.
+            if (type == 1 && value.size >= 14) {
+                val service = u16(value, 10)
+                val status = value[12].toInt() and 0xff
+                val handle = value[13].toInt() and 0xff
+
+                if (status == 0 && handle in 1..127) {
+                    garminHandleToService[handle] = service
+                    if (service != GARMIN_GFDI) {
+                        // A one-byte 1 payload starts the real-time stream.
+                        garminWrite(byteArrayOf(handle.toByte(), 0x01))
+                    }
+                }
+
+                if (garminPendingService == service) {
+                    garminPendingService = null
+                    garminRegisterIndex += 1
+                    mainHandler.postDelayed({ registerNextGarmin() }, 120L)
+                }
+            }
+        }
+
+        private fun parseGarminTelemetry(
+            service: Int,
+            payload: ByteArray,
+        ) {
+            when (service) {
+                GARMIN_REALTIME_HR -> {
+                    if (payload.size >= 3) {
+                        val heart = payload[1].toInt() and 0xff
+                        val resting = payload[2].toInt() and 0xff
+                        if (heart in 30..240) {
+                            metrics["Heart rate"] = heart.toDouble()
+                        }
+                        if (resting in 30..140) {
+                            metrics["Resting heart rate"] = resting.toDouble()
+                        }
+                    }
+                }
+
+                GARMIN_REALTIME_STEPS -> {
+                    if (payload.size >= 8) {
+                        val steps = u32(payload, 0)
+                        if (steps in 0L..250000L) {
+                            metrics["Steps"] = steps.toDouble()
+                        }
+                    }
+                }
+
+                GARMIN_REALTIME_CALORIES -> {
+                    if (payload.size >= 8) {
+                        val active = u32(payload, 4)
+                        if (active in 0L..50000L) {
+                            metrics["Active calories"] = active.toDouble()
+                        }
+                    }
+                }
+
+                GARMIN_REALTIME_HRV -> {
+                    if (payload.size >= 2) {
+                        val rr = u16(payload, 0)
+                        if (rr in 250..2500) {
+                            garminRrMs.add(rr.toDouble())
+                        }
+                    }
+                }
+
+                GARMIN_REALTIME_STRESS -> {
+                    if (payload.isNotEmpty()) {
+                        val stress = payload[0].toInt()
+                        if (stress in 0..100) {
+                            metrics["Stress"] = stress.toDouble()
+                        }
+                    }
+                }
+
+                GARMIN_REALTIME_SPO2 -> {
+                    if (payload.isNotEmpty()) {
+                        val spo2 = payload[0].toInt() and 0xff
+                        if (spo2 in 70..100) {
+                            metrics["SpO2"] = spo2.toDouble()
+                        }
+                    }
+                }
+
+                GARMIN_REALTIME_BODY_BATTERY -> {
+                    if (payload.isNotEmpty()) {
+                        val bodyBattery = payload[0].toInt()
+                        if (bodyBattery in 0..100) {
+                            metrics["Body battery"] = bodyBattery.toDouble()
+                        }
+                    }
+                }
+
+                GARMIN_REALTIME_RESPIRATION -> {
+                    if (payload.isNotEmpty()) {
+                        val breaths = payload[0].toInt()
+                        if (breaths in 1..80) {
+                            metrics["Respiratory rate"] = breaths.toDouble()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun hasBluetoothPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        return activity.checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) ==
+            PackageManager.PERMISSION_GRANTED &&
+            activity.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+}

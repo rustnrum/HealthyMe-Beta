@@ -27,7 +27,7 @@ class BleDeviceCandidate {
     required this.protocolProfile,
     this.protocolId,
     required this.protocolNote,
-    this.deviceKind = 'Health device',
+    this.deviceKind = 'Bluetooth device',
     required this.manufacturerDataHex,
     this.bondState = 'unknown',
   });
@@ -60,7 +60,7 @@ class BleDeviceInspection {
     required this.protocolProfile,
     this.protocolId,
     required this.protocolNote,
-    this.deviceKind = 'Health device',
+    this.deviceKind = 'Bluetooth device',
   });
 }
 
@@ -96,7 +96,7 @@ class BleDiscoveryService {
     if (scan != PermissionStatus.granted ||
         connect != PermissionStatus.granted) {
       throw StateError(
-        'Bluetooth scan/connect permission is required to use nearby health devices.',
+        'Bluetooth scan/connect permission is required to use nearby Bluetooth devices.',
       );
     }
   }

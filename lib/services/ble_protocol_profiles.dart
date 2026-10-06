@@ -242,7 +242,7 @@ class BleProtocolProfiles {
     if (value.contains('watch') || value.contains('band')) return 'Watch / band';
     if (capabilities.contains('Blood pressure')) return 'Blood pressure monitor';
     if (capabilities.contains('Glucose')) return 'Glucose meter';
-    if (capabilities.contains('Heart rate')) return 'Health sensor';
-    return 'Bluetooth health device';
+    if (capabilities.contains('Heart rate')) return 'Heart-rate sensor';
+    return 'Bluetooth device';
   }
 }

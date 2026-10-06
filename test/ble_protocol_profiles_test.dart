@@ -40,6 +40,6 @@ void main() {
     );
     expect(report.protocolProfile, isNull);
     expect(report.allCapabilities, contains('Heart rate'));
-    expect(report.deviceKind, 'Health sensor');
+    expect(report.deviceKind, 'Heart-rate sensor');
   });
 }

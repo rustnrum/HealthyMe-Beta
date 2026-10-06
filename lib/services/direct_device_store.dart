@@ -103,6 +103,39 @@ class DirectDeviceStore {
     await _write(updated);
   }
 
+  Future<void> refreshInspection({
+    required BleDeviceCandidate device,
+    required BleDeviceInspection inspection,
+  }) async {
+    final devices = await load();
+    SavedDirectDevice? existing;
+    for (final item in devices) {
+      if (item.id == device.id) {
+        existing = item;
+        break;
+      }
+    }
+    if (existing == null) return;
+
+    final next = SavedDirectDevice(
+      id: existing.id,
+      name: device.name,
+      deviceKind: inspection.deviceKind,
+      protocolId: inspection.protocolId,
+      protocolLabel: inspection.protocolProfile,
+      capabilities: inspection.capabilities,
+      bonded: existing.bonded,
+      pairState: existing.pairState,
+      savedAt: existing.savedAt,
+    );
+
+    await _write([
+      for (final item in devices)
+        if (item.id != device.id) item,
+      next,
+    ]);
+  }
+
   Future<void> remove(String id) async {
     final devices = await load();
     await _write(devices.where((device) => device.id != id).toList());

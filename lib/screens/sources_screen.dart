@@ -128,6 +128,25 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     setState(() => _readingDirect.add(device.id));
 
     try {
+      if (!_bleInspections.containsKey(device.id)) {
+        try {
+          final inspection = await _bleDiscovery.inspect(device);
+          if (mounted) {
+            setState(() => _bleInspections[device.id] = inspection);
+          }
+          if (_savedDirectDevices.any((saved) => saved.id == device.id)) {
+            await _directDeviceStore.refreshInspection(
+              device: device,
+              inspection: inspection,
+            );
+            await _loadSavedDirectDevices();
+          }
+        } catch (_) {
+          // The native reader independently identifies the full GATT service
+          // family, so a UI inspection failure does not block the read.
+        }
+      }
+
       final result = await _directMetricService.readAndStore(device);
       final samples = await _directMetricService.loadSamples();
       final app = ref.read(appStateProvider);
@@ -161,6 +180,75 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     }
   }
 
+  // SALUS_BUILD29_AUTO_IDENTIFY
+  bool _looksLikeHealthDevice(BleDeviceCandidate device) {
+    if (device.hasKnownCapabilities) return true;
+    if (_savedDirectDevices.any((saved) => saved.id == device.id)) return true;
+
+    final name = device.name.trim().toLowerCase();
+    if (name.isEmpty || name == 'unnamed ble device') return false;
+    const hints = <String>[
+      'garmin',
+      'vivoactive',
+      'vívoactive',
+      'venu',
+      'fenix',
+      'forerunner',
+      'instinct',
+      'ring',
+      'colmi',
+      'qring',
+      'watch',
+      'band',
+      'amazfit',
+      'xiaomi',
+      'zepp',
+      'fitcloud',
+      'dafit',
+      'da fit',
+      'scale',
+      'weight',
+      'oximeter',
+      'spo2',
+      'blood pressure',
+      'glucose',
+      'cpap',
+      'bipap',
+      'airsense',
+      'aircurve',
+      'dreamstation',
+    ];
+    return hints.any((hint) => name.contains(hint));
+  }
+
+  Future<void> _autoIdentifyScannedDevices(
+    List<BleDeviceCandidate> devices,
+  ) async {
+    final likely = devices.where(_looksLikeHealthDevice).take(12).toList();
+    for (final device in likely) {
+      if (!mounted) return;
+      if (_bleInspections.containsKey(device.id)) continue;
+      setState(() => _inspecting.add(device.id));
+      try {
+        final inspection = await _bleDiscovery.inspect(device);
+        if (!mounted) return;
+        setState(() => _bleInspections[device.id] = inspection);
+        if (_savedDirectDevices.any((saved) => saved.id == device.id)) {
+          await _directDeviceStore.refreshInspection(
+            device: device,
+            inspection: inspection,
+          );
+          await _loadSavedDirectDevices();
+        }
+      } catch (_) {
+        // Keep the scan result. A device that does not answer GATT inspection
+        // is not promoted to a health device just because it was nearby.
+      } finally {
+        if (mounted) setState(() => _inspecting.remove(device.id));
+      }
+    }
+  }
+
   Future<void> _scanBluetooth() async {
     if (_scanningBle) return;
     setState(() {
@@ -174,6 +262,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
       final devices = await _bleDiscovery.scan();
       if (!mounted) return;
       setState(() => _bleDevices = devices);
+      await _autoIdentifyScannedDevices(devices);
     } catch (error) {
       if (!mounted) return;
       setState(() => _bleError = error.toString());
@@ -190,6 +279,13 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
       final inspection = await _bleDiscovery.inspect(device);
       if (!mounted) return;
       setState(() => _bleInspections[device.id] = inspection);
+      if (_savedDirectDevices.any((saved) => saved.id == device.id)) {
+        await _directDeviceStore.refreshInspection(
+          device: device,
+          inspection: inspection,
+        );
+        await _loadSavedDirectDevices();
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -521,6 +617,13 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
   }
 
   Widget _bluetoothCard(List<HealthyDataSource> sources) {
+    final healthSources = sources
+        .where(SourceHubService.isBluetoothHealthCandidate)
+        .toList();
+    final otherSources = sources
+        .where((source) => !SourceHubService.isBluetoothHealthCandidate(source))
+        .toList();
+
     return CommandCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -531,7 +634,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
               onPressed: _scanningBle ? null : _scanBluetooth,
               icon: const Icon(Icons.bluetooth_searching_rounded),
               label: Text(
-                _scanningBle ? 'Scanning for 8 seconds…' : 'Scan for devices',
+                _scanningBle ? 'Scanning & identifying…' : 'Scan for devices',
               ),
             ),
           ),
@@ -557,9 +660,18 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
               ),
             ),
           ],
-          if (sources.isNotEmpty) ...[
+          if (healthSources.isNotEmpty) ...[
             const SizedBox(height: 10),
-            for (final source in sources.take(20))
+            const Text(
+              'Health devices',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 4),
+            for (final source in healthSources.take(20))
               _BleSourceRow(
                 source: source,
                 device: _bleDevices.firstWhere(
@@ -598,7 +710,73 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
                     (device) => source.id == 'ble:${device.id}',
                   ),
                 ),
+                healthCandidate: true,
               ),
+          ],
+          if (otherSources.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: Text(
+                'Other Bluetooth devices (${otherSources.length})',
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              subtitle: const Text(
+                'Nearby devices not identified as health hardware',
+                style: TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 11.5,
+                ),
+              ),
+              children: [
+                for (final source in otherSources.take(20))
+                  _BleSourceRow(
+                    source: source,
+                    device: _bleDevices.firstWhere(
+                      (device) => source.id == 'ble:${device.id}',
+                    ),
+                    inspection: _bleInspections[
+                      source.id.replaceFirst('ble:', '')
+                    ],
+                    inspecting: _inspecting.contains(
+                      source.id.replaceFirst('ble:', ''),
+                    ),
+                    onInspect: () => _inspectBluetooth(
+                      _bleDevices.firstWhere(
+                        (device) => source.id == 'ble:${device.id}',
+                      ),
+                    ),
+                    saved: _savedDirectDevices.any(
+                      (saved) => saved.id == source.id.replaceFirst('ble:', ''),
+                    ),
+                    pairing: _pairing.contains(
+                      source.id.replaceFirst('ble:', ''),
+                    ),
+                    onUse: () => _useWithSalus(
+                      _bleDevices.firstWhere(
+                        (device) => source.id == 'ble:${device.id}',
+                      ),
+                    ),
+                    reading: _readingDirect.contains(
+                      source.id.replaceFirst('ble:', ''),
+                    ),
+                    readSummary: _directReadSummary[
+                      source.id.replaceFirst('ble:', '')
+                    ],
+                    onRead: () => _readDirectMetrics(
+                      _bleDevices.firstWhere(
+                        (device) => source.id == 'ble:${device.id}',
+                      ),
+                    ),
+                    healthCandidate: false,
+                  ),
+              ],
+            ),
           ],
         ],
       ),
@@ -1006,6 +1184,7 @@ class _BleSourceRow extends StatelessWidget {
   final VoidCallback onInspect;
   final VoidCallback onUse;
   final VoidCallback onRead;
+  final bool healthCandidate;
 
   const _BleSourceRow({
     required this.source,
@@ -1019,6 +1198,7 @@ class _BleSourceRow extends StatelessWidget {
     required this.onInspect,
     required this.onUse,
     required this.onRead,
+    this.healthCandidate = true,
   });
 
   @override
@@ -1076,10 +1256,12 @@ class _BleSourceRow extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         saved
-                            ? 'Paired with Salus • ${device.bondState}'
-                            : inspection == null
-                                ? 'Detected nearby • ${device.bondState}'
-                                : source.note ?? 'Bluetooth services identified',
+                            ? 'Paired with Salus • ${device.bondState} • Read data to sync'
+                            : !healthCandidate
+                                ? 'Nearby Bluetooth device • not identified as health hardware'
+                                : inspection == null
+                                    ? 'Detected nearby • ${device.bondState}'
+                                    : source.note ?? 'Health services identified',
                         style: const TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 12,
@@ -1131,13 +1313,13 @@ class _BleSourceRow extends StatelessWidget {
                             : 'Identify again',
                   ),
                 ),
-                if (!saved)
+                if (!saved && healthCandidate)
                   FilledButton.tonalIcon(
                     onPressed: pairing ? null : onUse,
                     icon: const Icon(Icons.link_rounded, size: 18),
                     label: Text(pairing ? 'Pairing…' : 'Pair'),
                   )
-                else
+                else if (saved)
                   FilledButton.tonalIcon(
                     onPressed: reading ? null : onRead,
                     icon: const Icon(Icons.sensors_rounded, size: 18),

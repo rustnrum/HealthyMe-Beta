@@ -148,18 +148,18 @@ class SourceHubService {
         ..sort();
 
       final profile = inspection?.protocolProfile ?? device.protocolProfile;
-      final identifiedAsRing = profile != null &&
-          (capabilities.contains('Sleep') ||
-              capabilities.contains('Steps')) &&
-          (capabilities.contains('Heart rate') ||
-              capabilities.contains('SpO2'));
+      final protocolId = inspection?.protocolId ?? device.protocolId;
+      final kind = inspection?.deviceKind ?? device.deviceKind;
+      final identifiedAsRing =
+          protocolId == 'ring-uart-v1' ||
+          kind.toLowerCase().contains('ring');
 
       final rawName = device.name.trim();
-      final label = identifiedAsRing
-          ? 'Smart ring'
-          : rawName.isEmpty || rawName == 'Unnamed BLE device'
-              ? 'Bluetooth device'
-              : rawName;
+      final unnamed = rawName.isEmpty || rawName == 'Unnamed BLE device';
+      final profileLabel = inspection?.protocolProfile ?? device.protocolProfile;
+      final label = unnamed
+          ? (profileLabel ?? (identifiedAsRing ? 'Smart ring' : 'Bluetooth device'))
+          : rawName;
 
       result.add(
         HealthyDataSource(
@@ -186,6 +186,35 @@ class SourceHubService {
       return a.label.compareTo(b.label);
     });
     return result;
+  }
+
+  // SALUS_BUILD29_HEALTH_CANDIDATE
+  static bool isBluetoothHealthCandidate(HealthyDataSource source) {
+    if (source.transport != SourceTransport.directBluetooth) return false;
+    const healthMetrics = <String>{
+      'Heart rate',
+      'Resting heart rate',
+      'HRV',
+      'SpO2',
+      'Respiratory rate',
+      'Steps',
+      'Sleep',
+      'Sleep Stages',
+      'Weight',
+      'Body fat',
+      'Body composition',
+      'Blood pressure',
+      'Glucose',
+      'Temperature',
+      'Cadence',
+      'Cycling cadence',
+      'Workout telemetry',
+      'Workouts',
+      'Therapy data',
+      'Raw motion',
+    };
+    return source.metrics.any(healthMetrics.contains) ||
+        source.note == 'Identified by Bluetooth protocol fingerprint';
   }
 
   static String _normalizeMetric(String value) {

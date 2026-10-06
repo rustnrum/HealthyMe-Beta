@@ -92,7 +92,7 @@ void main() {
     );
 
     expect(sources, hasLength(1));
-    expect(sources.single.label, 'Smart ring');
+    expect(sources.single.label, 'R02_TEST');
     expect(sources.single.selectable, isFalse);
     expect(sources.single.transportLabel, 'Direct Bluetooth');
   });
