@@ -32,9 +32,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.sqrt
 
 /**
- * SALUS_PROTOCOL_METRICS_V034
+ * SALUS_PROTOCOL_METRICS_V035
  *
- * Local protocol readers plus a read-only ResMed AirSense 11 secure session reader.
+ * Local protocol readers plus a two-stage read-only ResMed AirSense 11 secure session reader.
  * The ResMed path only performs pairing/session RPC plus read-only Get requests;
  * it does not change pressure, mode, comfort, or therapy settings.
  */
@@ -90,6 +90,16 @@ class SalusProtocolReader(
             16,
         )
         private val RESMED_SRP_G = BigInteger.valueOf(2L)
+        private val ACTIVE_CPAP_PAIRINGS =
+            java.util.concurrent.ConcurrentHashMap<String, (String) -> Boolean>()
+
+        fun submitCpapPasskey(deviceId: String, passkey: String): Boolean {
+            val code = passkey.trim()
+            if (!Regex("^[0-9]{4}$").matches(code)) return false
+            val key = deviceId.replace(":", "").lowercase()
+            val handler = ACTIVE_CPAP_PAIRINGS[key] ?: return false
+            return handler(code)
+        }
 
         private const val GARMIN_GFDI = 1
         private const val GARMIN_REALTIME_HR = 6
@@ -218,6 +228,7 @@ class SalusProtocolReader(
         private var cpapSessionStarted = false
         private var cpapAuthenticated = false
         private var cpapPairingRequired = false
+        private var cpapAwaitingPasskey = false
         private var cpapRpcId = 100
         private var cpapPendingMethod = ""
         private val cpapFigBuffer = ByteArrayOutputStream()
@@ -500,7 +511,7 @@ class SalusProtocolReader(
                 if (cpapAuthenticated) {
                     "ResMed secure session established. Read ${metrics.size} verified therapy metric${if (metrics.size == 1) "" else "s"}."
                 } else if (cpapPairingRequired) {
-                    "Secure ResMed pairing is required. Put the AirSense in Bluetooth pairing mode, enter the 4-digit code shown on its screen, then run Secure sync again."
+                    "ResMed pairing timed out before the one-time code was submitted. Start secure sync again and enter the code while it is still displayed."
                 } else {
                     "ResMed connected, but a secure application session was not established before timeout."
                 }
@@ -804,16 +815,14 @@ class SalusProtocolReader(
                 return
             }
 
-            val code = cpapPasskey?.trim().orEmpty()
-            if (!Regex("^[0-9]{4}$").matches(code)) {
-                cpapPairingRequired = true
-                finish()
-                return
-            }
-            startCpapKeyExchange(code)
+            startCpapKeyExchange()
         }
 
-        private fun startCpapKeyExchange(passkey: String) {
+        private fun startCpapKeyExchange() {
+            cpapPairingRequired = true
+            cpapAwaitingPasskey = false
+            val pairingKey = device.address.replace(":", "").lowercase()
+            ACTIVE_CPAP_PAIRINGS.remove(pairingKey)
             var a: BigInteger
             do {
                 a = BigInteger(256, cpapRandom)
@@ -821,12 +830,42 @@ class SalusProtocolReader(
             val public = RESMED_SRP_G.modPow(a, RESMED_SRP_N)
             cpapSrpPrivate = a
             cpapSrpPublic = public
-            notes.add("Starting ResMed secure pairing exchange.")
+            notes.add("Starting ResMed secure pairing exchange; waiting for the AirSense one-time code.")
             sendCpapRpc(
                 "StartKeyExchange",
                 JSONObject().put("clientPk", bytesToHex(srpPad(public)).uppercase()),
                 encrypted = false,
             )
+        }
+
+        private fun continueCpapKeyExchange(
+            serverPk: String,
+            salt: String,
+            passkey: String,
+        ) {
+            if (completed.get()) return
+            val proof = computeCpapSrpProof(serverPk, salt, passkey) ?: run {
+                finish("Could not compute the ResMed pairing proof.")
+                return
+            }
+            sendCpapRpc(
+                "ConfirmKeyExchange",
+                JSONObject().put("clientConfirmation", bytesToHex(proof).uppercase()),
+                encrypted = false,
+            )
+        }
+
+        private fun clearStoredCpapCredentials() {
+            val prefs = activity.getSharedPreferences("salus_resmed_session_v1", 0)
+            val key = device.address.replace(":", "").lowercase()
+            prefs.edit()
+                .remove("${key}_clientId")
+                .remove("${key}_masterPairKey")
+                .apply()
+            cpapMasterPairKey = null
+            cpapPendingNonce = null
+            cpapSessionKey = null
+            cpapAuthenticated = false
         }
 
         private fun sendCpapRpc(
@@ -938,6 +977,12 @@ class SalusProtocolReader(
             val method = cpapPendingMethod
             if (message.has("error")) {
                 val error = message.optJSONObject("error")
+                if (method == "RequestSession" || method == "CheckSessionIntegrity") {
+                    clearStoredCpapCredentials()
+                    notes.add("Stored ResMed credentials were rejected; starting a fresh pairing exchange.")
+                    startCpapKeyExchange()
+                    return
+                }
                 if (method == "Get") {
                     error?.optJSONObject("data")?.let { parseCpapGetResult(it) }
                     if (metrics.isNotEmpty()) {
@@ -957,20 +1002,37 @@ class SalusProtocolReader(
                     if (resultObject == null) return
                     val serverPk = resultObject.optString("serverPk")
                     val salt = resultObject.optString("salt")
-                    val passkey = cpapPasskey?.trim().orEmpty()
-                    if (serverPk.isBlank() || salt.isBlank() || passkey.length != 4) {
+                    if (serverPk.isBlank() || salt.isBlank()) {
                         finish("ResMed key exchange did not return the expected pairing fields.")
                         return
                     }
-                    val proof = computeCpapSrpProof(serverPk, salt, passkey) ?: run {
-                        finish("Could not compute the ResMed pairing proof.")
+
+                    val initialCode = cpapPasskey?.trim().orEmpty()
+                    if (Regex("^[0-9]{4}$").matches(initialCode)) {
+                        continueCpapKeyExchange(serverPk, salt, initialCode)
                         return
                     }
-                    sendCpapRpc(
-                        "ConfirmKeyExchange",
-                        JSONObject().put("clientConfirmation", bytesToHex(proof).uppercase()),
-                        encrypted = false,
-                    )
+
+                    cpapPairingRequired = true
+                    cpapAwaitingPasskey = true
+                    val pairingKey = device.address.replace(":", "").lowercase()
+                    ACTIVE_CPAP_PAIRINGS[pairingKey] = { code ->
+                        if (completed.get() || !cpapAwaitingPasskey ||
+                            !Regex("^[0-9]{4}$").matches(code)
+                        ) {
+                            false
+                        } else {
+                            mainHandler.post {
+                                if (!completed.get() && cpapAwaitingPasskey) {
+                                    cpapAwaitingPasskey = false
+                                    ACTIVE_CPAP_PAIRINGS.remove(pairingKey)
+                                    continueCpapKeyExchange(serverPk, salt, code)
+                                }
+                            }
+                            true
+                        }
+                    }
+                    notes.add("AirSense one-time pairing code is being displayed; waiting for Salus code submission.")
                 }
                 "ConfirmKeyExchange" -> {
                     if (resultObject == null) return
@@ -991,6 +1053,8 @@ class SalusProtocolReader(
                         .apply()
                     cpapSessionKey = sha256(master, nonce)
                     cpapAuthenticated = true
+                    cpapPairingRequired = false
+                    cpapAwaitingPasskey = false
                     requestCpapReadOnlyData()
                 }
                 "RequestSession" -> {
@@ -1017,7 +1081,9 @@ class SalusProtocolReader(
                     val master = cpapMasterPairKey
                     val nonce = cpapPendingNonce
                     if (!accepted || master == null || nonce == null) {
-                        finish("Stored ResMed session credentials were rejected. Enter a fresh 4-digit pairing code to pair Salus again.")
+                        clearStoredCpapCredentials()
+                        notes.add("Stored ResMed session credentials were rejected; starting a fresh pairing exchange.")
+                        startCpapKeyExchange()
                         return
                     }
                     cpapSessionKey = sha256(master, nonce)

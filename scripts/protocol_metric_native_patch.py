@@ -14,7 +14,7 @@ if '"readProtocolMetrics" ->' not in text:
                     val protocolId = call.argument<String>("protocolId") ?: ""
                     val durationMs =
                         (call.argument<Number>("durationMs")?.toLong()
-                            ?: 16000L).coerceIn(5000L, 30000L)
+                            ?: 16000L).coerceIn(5000L, 90000L)
                     val cpapPasskey = call.argument<String>("cpapPasskey")
                     if (deviceId.isNullOrBlank()) {
                         result.error(
@@ -27,15 +27,44 @@ if '"readProtocolMetrics" ->' not in text:
                             .read(deviceId, deviceName, protocolId, durationMs, cpapPasskey, result)
                     }
                 }
+                "submitCpapPasskey" -> {
+                    val deviceId = call.argument<String>("deviceId")
+                    val cpapPasskey = call.argument<String>("cpapPasskey")
+                    if (deviceId.isNullOrBlank() || cpapPasskey.isNullOrBlank()) {
+                        result.success(false)
+                    } else {
+                        result.success(
+                            SalusProtocolReader.submitCpapPasskey(deviceId, cpapPasskey)
+                        )
+                    }
+                }
 '''
     if anchor not in text:
         raise SystemExit('protocol metric native patch: MethodChannel fallback anchor missing')
     text = text.replace(anchor, block + anchor, 1)
-    main.write_text(text)
+elif '"submitCpapPasskey" ->' not in text:
+    anchor = '                else -> result.notImplemented()\n'
+    block = '''                "submitCpapPasskey" -> {
+                    val deviceId = call.argument<String>("deviceId")
+                    val cpapPasskey = call.argument<String>("cpapPasskey")
+                    if (deviceId.isNullOrBlank() || cpapPasskey.isNullOrBlank()) {
+                        result.success(false)
+                    } else {
+                        result.success(
+                            SalusProtocolReader.submitCpapPasskey(deviceId, cpapPasskey)
+                        )
+                    }
+                }
+'''
+    if anchor not in text:
+        raise SystemExit('protocol metric native patch: MethodChannel fallback anchor missing for passkey submit')
+    text = text.replace(anchor, block + anchor, 1)
+
+main.write_text(text)
 
 source = Path('scripts/SalusProtocolReader.kt.template')
 if not source.exists():
     raise SystemExit('protocol metric native patch: Kotlin template missing')
 target = main.parent / 'SalusProtocolReader.kt'
 target.write_text(source.read_text())
-print('Salus build 34 protocol reader bridge applied.')
+print('Salus build 35 protocol reader bridge applied.')

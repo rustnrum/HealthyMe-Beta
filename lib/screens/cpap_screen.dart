@@ -31,6 +31,7 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
   int _view = 0;
   bool _loading = true;
   bool _checking = false;
+  bool _submittingPasskey = false;
   bool _argsLoaded = false;
 
   @override
@@ -109,9 +110,11 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
   Future<void> _checkForData() async {
     final device = _selected;
     if (device == null || _checking) return;
+    _passkeyController.clear();
     setState(() {
       _checking = true;
-      _status = null;
+      _status =
+          'Opening ResMed pairing session. When the AirSense shows a 4-digit code, enter it below without stopping sync.';
     });
 
     try {
@@ -130,10 +133,8 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
           bondState: device.bonded ? 'bonded' : device.pairState,
         ),
         protocolId: 'cpap-family',
-        duration: const Duration(seconds: 24),
-        cpapPasskey: _passkeyController.text.trim().isEmpty
-            ? null
-            : _passkeyController.text.trim(),
+        duration: const Duration(seconds: 70),
+        cpapPasskey: null,
       );
       if (!mounted) return;
       setState(() {
@@ -147,6 +148,32 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
       setState(() => _status = 'Could not check therapy data: $error');
     } finally {
       if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  Future<void> _submitPairingCode() async {
+    final device = _selected;
+    final code = _passkeyController.text.trim();
+    if (device == null || !_checking || _submittingPasskey) return;
+    if (!DirectMetricService.isValidCpapPasskey(code)) {
+      setState(() => _status = 'Enter the 4-digit code currently shown on the AirSense.');
+      return;
+    }
+
+    setState(() => _submittingPasskey = true);
+    try {
+      final accepted = await _direct.submitCpapPasskey(device.id, code);
+      if (!mounted) return;
+      setState(() {
+        _status = accepted
+            ? 'Pairing code sent. Keep the AirSense screen open while Salus completes the secure session.'
+            : 'No active ResMed pairing request was found. Start secure sync again and enter the new code while it is displayed.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _status = 'Could not submit ResMed pairing code: $error');
+    } finally {
+      if (mounted) setState(() => _submittingPasskey = false);
     }
   }
 
@@ -186,18 +213,6 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
                   const SizedBox(height: 14),
                   _providerCard(selected),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _passkeyController,
-                    keyboardType: TextInputType.number,
-                    maxLength: 4,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'ResMed 4-digit code',
-                      helperText: 'First secure pairing only. Leave blank after Salus has paired.',
-                      counterText: '',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -210,10 +225,47 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
                             )
                           : const Icon(Icons.sync_rounded, size: 18),
                       label: Text(
-                        _checking ? 'Syncing…' : 'Secure sync CPAP data',
+                        _checking ? 'Secure session in progress…' : 'Start secure CPAP sync',
                       ),
                     ),
                   ),
+                  if (_checking) ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _passkeyController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 4,
+                      obscureText: true,
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(
+                        labelText: 'Code shown on AirSense',
+                        helperText: 'Wait for the CPAP to display its code, enter it here, then tap Submit code.',
+                        counterText: '',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonalIcon(
+                        onPressed: _submittingPasskey ||
+                                !DirectMetricService.isValidCpapPasskey(
+                                  _passkeyController.text,
+                                )
+                            ? null
+                            : _submitPairingCode,
+                        icon: _submittingPasskey
+                            ? const SizedBox(
+                                width: 17,
+                                height: 17,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.key_rounded, size: 18),
+                        label: Text(
+                          _submittingPasskey ? 'Submitting…' : 'Submit pairing code',
+                        ),
+                      ),
+                    ),
+                  ],
                   if (_status != null) ...[
                     const SizedBox(height: 9),
                     Text(

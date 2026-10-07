@@ -140,6 +140,22 @@ class DirectMetricService {
     }
   }
 
+  static bool isValidCpapPasskey(String value) =>
+      RegExp(r'^\d{4}$').hasMatch(value.trim());
+
+  Future<bool> submitCpapPasskey(String deviceId, String passkey) async {
+    final code = passkey.trim();
+    if (deviceId.isEmpty || !isValidCpapPasskey(code)) return false;
+    final accepted = await _channel.invokeMethod<bool>(
+      'submitCpapPasskey',
+      <String, dynamic>{
+        'deviceId': deviceId,
+        'cpapPasskey': code,
+      },
+    );
+    return accepted ?? false;
+  }
+
   static bool isTherapyOnlyProtocol(String? protocolId) =>
       protocolId == 'cpap-family';
 
