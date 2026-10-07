@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/ai_coach_screen.dart';
 import 'screens/connections_screen.dart';
+import 'screens/cpap_screen.dart';
 import 'screens/daily_state_screen.dart';
 import 'screens/diet/diet_shell.dart';
 import 'screens/health/health_shell.dart';
@@ -44,6 +45,7 @@ class HealthyMeApp extends ConsumerWidget {
         '/sources-debug': (_) => _showDeviceDebug
             ? const SourcesScreen()
             : const ConnectionsScreen(),
+        '/cpap': (_) => const CpapScreen(),
         '/coach': (_) => const AiCoachScreen(),
       },
       home: state.profile.completed

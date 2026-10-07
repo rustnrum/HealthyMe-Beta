@@ -17,7 +17,7 @@ MAIN_ACTIVITY="$(find android/app/src/main/kotlin -name MainActivity.kt -print -
 PROTO_READER="$(dirname "$MAIN_ACTIVITY")/SalusProtocolReader.kt"
 [ -s "$PROTO_READER" ] || fail "SalusProtocolReader.kt missing"
 
-grep -q '^version: 0.14.0+31$' pubspec.yaml || fail "build 31 version missing"
+grep -q '^version: 0.15.0+32$' pubspec.yaml || fail "build 32 version missing"
 
 # UI/source patches must already have been applied by ui_contract_check.sh.
 grep -q 'SALUS_BUILD29_AUTO_IDENTIFY' lib/screens/sources_screen.dart || fail "Build 29 UI patch was not applied before source contract"
@@ -71,4 +71,8 @@ grep -q "isTherapyOnlyProtocol" lib/services/direct_metric_service.dart || fail 
 grep -q "'AHI'" lib/services/ble_protocol_profiles.dart || fail "Build 31 CPAP AHI metric missing"
 grep -q "CPAP therapy reader pending" lib/screens/sources_screen.dart || fail "Build 31 CPAP debug state missing"
 
-echo "Salus build 31 CPAP metrics + direct protocol + locked home visual contract passed."
+grep -q "strongCpapIdentity" lib/services/ble_protocol_profiles.dart || fail "Build 32 CPAP identity priority missing"
+grep -q "registeredDevices" lib/services/direct_metric_service.dart || fail "Build 32 provider registry missing"
+grep -q "class CpapScreen" lib/screens/cpap_screen.dart || fail "Build 32 CPAP dashboard missing"
+
+echo "Salus build 32 CPAP provider/dashboard + direct protocol + locked home visual contract passed."

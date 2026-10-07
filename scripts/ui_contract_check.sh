@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build 30 source is already validated and committed on main.
-# Build 31 applies only its CPAP metric/read-routing correction.
+# Build 31 is the validated baseline. Build 32 repairs device identity,
+# registers CPAP as a real therapy provider, and adds the CPAP dashboard.
 python3 scripts/salus_brand_patch.py
 python3 scripts/build31_cpap_metrics_patch.py
+python3 scripts/build32_cpap_module_patch.py
 
 fail() { echo "UI CONTRACT FAILURE: $1" >&2; exit 1; }
 
-grep -q '^version: 0.14.0+31$' pubspec.yaml || fail "build 31 version missing"
+grep -q '^version: 0.15.0+32$' pubspec.yaml || fail "build 32 version missing"
 grep -q "protocolId == 'ring-uart-v1'" lib/services/source_hub_service.dart || fail "ring/watch identity fix missing"
 grep -q 'refreshInspection' lib/services/direct_device_store.dart || fail "saved device identity refresh missing"
 grep -q 'Read data to sync' lib/screens/sources_screen.dart || fail "direct reader status copy missing"
@@ -52,11 +53,21 @@ grep -q "'Leak rate'" lib/services/ble_protocol_profiles.dart || fail "CPAP leak
 grep -q "'Therapy pressure'" lib/services/ble_protocol_profiles.dart || fail "CPAP pressure metric missing"
 grep -q "isTherapyOnlyProtocol" lib/services/direct_metric_service.dart || fail "CPAP reader guard missing"
 grep -q "CPAP therapy sync is not enabled yet" lib/services/direct_metric_service.dart || fail "CPAP reader message missing"
-grep -q "Connected • CPAP therapy sync pending" lib/screens/connections_screen.dart || fail "normal CPAP pending state missing"
+grep -q "Connected • therapy provider registered" lib/screens/connections_screen.dart || fail "Build 32 CPAP provider state missing"
 grep -q "saved && isCpap" lib/screens/sources_screen.dart || fail "debug CPAP guard missing"
 if grep -q 'const FilledButton\.tonalIcon' lib/screens/sources_screen.dart; then
   fail "non-const FilledButton.tonalIcon incorrectly invoked with const"
 fi
 grep -q "CPAP protocol never falls through to wearable metric reader" test/direct_metric_service_test.dart || fail "CPAP routing regression test missing"
 
-echo "Salus build 31 UI contract passed."
+grep -q "static bool looksLikeCpapName" lib/services/ble_protocol_profiles.dart || fail "Build 32 CPAP strong-identity matcher missing"
+grep -q "strongCpapIdentity" lib/services/ble_protocol_profiles.dart || fail "Build 32 protocol priority missing"
+grep -q "Registered direct provider • waiting for readable data" lib/services/source_hub_service.dart || fail "Build 32 provider pending state missing"
+grep -q "registeredDevices" lib/services/direct_metric_service.dart || fail "Build 32 direct provider registry missing"
+grep -q "class CpapScreen" lib/screens/cpap_screen.dart || fail "Build 32 CPAP dashboard missing"
+grep -q "class CpapTherapyService" lib/services/cpap_therapy_service.dart || fail "Build 32 CPAP trend service missing"
+grep -q "'/cpap': (_) => const CpapScreen()" lib/app.dart || fail "Build 32 CPAP route missing"
+grep -q "Open CPAP dashboard" lib/screens/connections_screen.dart || fail "Build 32 Connections dashboard action missing"
+grep -q "strong ResMed identity wins over generic ring UART fingerprint" test/build32_cpap_module_test.dart || fail "Build 32 identity regression test missing"
+
+echo "Salus build 32 UI contract passed."

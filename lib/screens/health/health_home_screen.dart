@@ -30,6 +30,20 @@ class HealthHomeScreen extends ConsumerWidget {
           Row(children: [Expanded(child: _VitalCard(label: 'Blood Oxygen', value: h.bloodOxygenPercent == null ? '—' : '${h.bloodOxygenPercent!.toStringAsFixed(1)}%', icon: Icons.air_rounded, tint: AppTheme.blue)), const SizedBox(width: 9), Expanded(child: _VitalCard(label: 'Breathing', value: h.respiratoryRate == null ? '—' : '${h.respiratoryRate!.toStringAsFixed(1)}/min', icon: Icons.air_rounded, tint: AppTheme.teal))]),
         ])),
         const SizedBox(height: 11),
+        GestureDetector(
+          onTap: () => Navigator.of(context).pushNamed('/cpap'),
+          child: SalusPaper(child: Row(children: [
+            Container(width: 48, height: 48, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0x2262E8F2)), child: const Icon(Icons.air_rounded, color: AppTheme.cyan, size: 25)),
+            const SizedBox(width: 12),
+            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('CPAP Therapy', style: TextStyle(color: AppTheme.textPrimary, fontSize: 20, fontWeight: FontWeight.w700)),
+              SizedBox(height: 3),
+              Text('Nightly therapy, 7/30-day trends and Salus insights from your CPAP provider.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13.2, height: 1.35)),
+            ])),
+            const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
+          ])),
+        ),
+        const SizedBox(height: 11),
         SalusPaper(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Row(children: [Icon(Icons.science_outlined, color: AppTheme.mint, size: 28), SizedBox(width: 10), Text('Bloodwork', style: TextStyle(color: AppTheme.textPrimary, fontSize: 22, fontWeight: FontWeight.w700))]),
           const SizedBox(height: 10),

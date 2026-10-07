@@ -105,9 +105,14 @@ class SourceHubService {
               : SourceTransport.healthConnect,
           metrics: metrics,
           recordCounts: recordCounts,
-          selectable: metrics.isNotEmpty,
+          selectable: metrics.isNotEmpty &&
+              (!direct || recordCounts.values.any((count) => count > 0)),
           lastSeen: health.sourceLastSeen[id],
-          note: direct ? 'Read directly from the paired device' : null,
+          note: direct
+              ? recordCounts.values.any((count) => count > 0)
+                  ? 'Read directly from the paired device'
+                  : 'Registered direct provider • waiting for readable data'
+              : null,
         ),
       );
     }

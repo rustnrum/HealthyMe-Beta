@@ -220,6 +220,36 @@ class BleProtocolProfiles {
     return value;
   }
 
+  static bool looksLikeCpapName(String name) {
+    final value = name.trim().toLowerCase();
+    const hints = <String>[
+      'resmed',
+      'airsense',
+      'aircurve',
+      'dreamstation',
+      'cpap',
+      'bipap',
+      'bpap',
+      'prisma',
+      'luna g3',
+    ];
+    return hints.any(value.contains);
+  }
+
+  static bool looksLikeRingName(String name) {
+    final value = name.trim().toLowerCase();
+    const hints = <String>[
+      'colmi',
+      'qring',
+      'yawell',
+      'r02',
+      'r03',
+      'r06',
+      'smart ring',
+    ];
+    return hints.any(value.contains);
+  }
+
   static BleCapabilityReport analyze(
     Iterable<String> serviceUuids, {
     String name = '',
@@ -232,10 +262,30 @@ class BleProtocolProfiles {
     }
 
     BleProtocolProfile? matched;
-    for (final profile in profiles) {
-      if (profile.matches(name, services)) {
-        matched = profile;
-        break;
+    final cpapProfile =
+        profiles.firstWhere((profile) => profile.id == 'cpap-family');
+    final ringProfile =
+        profiles.firstWhere((profile) => profile.id == 'ring-uart-v1');
+
+    final strongCpapIdentity = looksLikeCpapName(name) ||
+        cpapProfile.anyServices.any(services.contains);
+    final strongRingIdentity = looksLikeRingName(name) ||
+        (services.contains(ringUartService) &&
+            services.contains(ringBigDataService));
+
+    if (strongCpapIdentity) {
+      matched = cpapProfile;
+    } else if (strongRingIdentity) {
+      matched = ringProfile;
+    } else {
+      for (final profile in profiles) {
+        if (profile.id == 'cpap-family' || profile.id == 'ring-uart-v1') {
+          continue;
+        }
+        if (profile.matches(name, services)) {
+          matched = profile;
+          break;
+        }
       }
     }
 

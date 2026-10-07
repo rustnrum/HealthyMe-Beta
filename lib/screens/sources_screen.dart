@@ -37,6 +37,11 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     'Body water',
     'Lean body mass',
     'Workouts',
+    'Usage time',
+    'AHI',
+    'Leak rate',
+    'Therapy pressure',
+    'Mask on/off',
   ];
 
   final _bleDiscovery = BleDiscoveryService();
@@ -68,8 +73,17 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
 
   Future<void> _loadSavedDirectDevices() async {
     final devices = await _directDeviceStore.load();
+    final samples = await _directMetricService.loadSamples();
     if (!mounted) return;
     setState(() => _savedDirectDevices = devices);
+    final app = ref.read(appStateProvider);
+    final merged = _directMetricService.mergeIntoSnapshot(
+      app.health,
+      metricSources: app.metricSources,
+      samples: samples,
+      registeredDevices: devices,
+    );
+    ref.read(appStateProvider.notifier).setHealthSnapshot(merged);
   }
 
   Future<void> _useWithSalus(BleDeviceCandidate device) async {
@@ -154,6 +168,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
         app.health,
         metricSources: app.metricSources,
         samples: samples,
+        registeredDevices: _savedDirectDevices,
       );
       ref.read(appStateProvider.notifier).setHealthSnapshot(merged);
 

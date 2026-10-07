@@ -41,8 +41,17 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen> {
 
   Future<void> _loadSaved() async {
     final values = await _store.load();
+    final samples = await _direct.loadSamples();
     if (!mounted) return;
     setState(() => _saved = values);
+    final app = ref.read(appStateProvider);
+    final merged = _direct.mergeIntoSnapshot(
+      app.health,
+      metricSources: app.metricSources,
+      samples: samples,
+      registeredDevices: values,
+    );
+    ref.read(appStateProvider.notifier).setHealthSnapshot(merged);
   }
 
   BleDeviceCandidate _candidateFromSaved(SavedDirectDevice device) {
@@ -218,6 +227,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen> {
         app.health,
         metricSources: app.metricSources,
         samples: samples,
+        registeredDevices: _saved,
       );
       ref.read(appStateProvider.notifier).setHealthSnapshot(merged);
 
@@ -238,7 +248,9 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen> {
   }
 
   Future<void> _syncAll() async {
-    for (final device in _saved) {
+    for (final device in _saved.where(
+      (device) => device.protocolId != 'cpap-family',
+    )) {
       await _syncSaved(device, showMessage: false);
     }
     final app = ref.read(appStateProvider);
@@ -319,6 +331,10 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen> {
                 syncing: _syncing.contains(device.id),
                 metrics: _displayMetrics(device.capabilities),
                 onSync: () => _syncSaved(device),
+                onOpenTherapy: () => Navigator.of(context).pushNamed(
+                  '/cpap',
+                  arguments: device.id,
+                ),
                 onRemove: () => _remove(device),
               ),
               const SizedBox(height: 10),
@@ -562,6 +578,7 @@ class _SavedDeviceCard extends StatelessWidget {
   final bool syncing;
   final List<String> metrics;
   final VoidCallback onSync;
+  final VoidCallback onOpenTherapy;
   final VoidCallback onRemove;
 
   const _SavedDeviceCard({
@@ -570,6 +587,7 @@ class _SavedDeviceCard extends StatelessWidget {
     required this.syncing,
     required this.metrics,
     required this.onSync,
+    required this.onOpenTherapy,
     required this.onRemove,
   });
 
@@ -658,7 +676,7 @@ class _SavedDeviceCard extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       therapyPending
-                          ? 'Connected • CPAP therapy sync pending'
+                          ? 'Connected • therapy provider registered'
                           : _status(lastSeen),
                       style: const TextStyle(
                         color: AppTheme.textSecondary,
@@ -698,7 +716,7 @@ class _SavedDeviceCard extends StatelessWidget {
           if (therapyPending) ...[
             const SizedBox(height: 10),
             const Text(
-              'Salus recognizes this as a CPAP. It will not use the wearable heart-rate reader for this device.',
+              'Registered as the provider for CPAP therapy metrics. Nightly values remain separate from Sleep and Sleep Stages.',
               style: TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 12.2,
@@ -710,9 +728,13 @@ class _SavedDeviceCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: therapyPending || syncing ? null : onSync,
+              onPressed: therapyPending
+                  ? onOpenTherapy
+                  : syncing
+                      ? null
+                      : onSync,
               icon: therapyPending
-                  ? const Icon(Icons.air_rounded, size: 18)
+                  ? const Icon(Icons.insights_rounded, size: 18)
                   : syncing
                       ? const SizedBox(
                           width: 17,
@@ -722,7 +744,7 @@ class _SavedDeviceCard extends StatelessWidget {
                       : const Icon(Icons.sync_rounded, size: 18),
               label: Text(
                 therapyPending
-                    ? 'Therapy sync pending'
+                    ? 'Open CPAP dashboard'
                     : syncing
                         ? 'Syncing…'
                         : 'Sync now',

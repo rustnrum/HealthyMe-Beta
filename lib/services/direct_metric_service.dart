@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
 import 'ble_discovery_service.dart';
+import 'direct_device_store.dart';
 
 class DirectMetricSample {
   final String sourceId;
@@ -78,6 +79,10 @@ class DirectMetricReadResult {
         'Sleep awake' => ' min',
         'Battery' => '%',
         'Active calories' => ' kcal',
+        'Usage time' => ' min',
+        'AHI' => ' events/hour',
+        'Leak rate' => ' L/min',
+        'Therapy pressure' => ' cmH₂O',
         _ => '',
       };
 
@@ -91,6 +96,10 @@ class DirectMetricReadResult {
       'HRV',
       'SpO2',
       'Respiratory rate',
+      'Usage time',
+      'AHI',
+      'Leak rate',
+      'Therapy pressure',
       'Battery',
       'Body battery',
       'Stress',
@@ -243,6 +252,11 @@ class DirectMetricService {
         'Sleep awake' => 'min',
         'Battery' => '%',
         'Active calories' => 'kcal',
+        'Usage time' => 'min',
+        'AHI' => 'events/hour',
+        'Leak rate' => 'L/min',
+        'Therapy pressure' => 'cmH₂O',
+        'Mask on/off' => 'state',
         'Ring HRV proxy' => 'firmware-proxy',
         _ => '',
       };
@@ -292,6 +306,7 @@ class DirectMetricService {
     HealthSnapshot base, {
     required Map<String, String> metricSources,
     required List<DirectMetricSample> samples,
+    List<SavedDirectDevice> registeredDevices = const [],
   }) {
     final available = <String, List<String>>{
       for (final entry in base.availableSources.entries)
@@ -320,6 +335,37 @@ class DirectMetricService {
         if (!entry.value.startsWith('ble:')) entry.key: entry.value,
     };
     final freshness = <String, DateTime>{...base.freshness};
+
+    for (final device in registeredDevices) {
+      final sourceId = 'ble:${device.id}';
+      detected.add(sourceId);
+      labels[sourceId] = device.name;
+
+      final providerMetrics = device.protocolId == 'cpap-family'
+          ? const [
+              'Usage time',
+              'AHI',
+              'Leak rate',
+              'Therapy pressure',
+              'Mask on/off',
+            ]
+          : device.capabilities;
+      for (final rawMetric in providerMetrics) {
+        final metric = rawMetric == 'SpO₂' ? 'SpO2' : rawMetric;
+        if (metric.isEmpty ||
+            metric == 'Raw motion' ||
+            metric == 'Battery' ||
+            metric == 'Device information') {
+          continue;
+        }
+        final sourceList =
+            available.putIfAbsent(metric, () => <String>[]);
+        if (!sourceList.contains(sourceId)) sourceList.add(sourceId);
+        final metricCounts =
+            counts.putIfAbsent(metric, () => <String, int>{});
+        metricCounts.putIfAbsent(sourceId, () => 0);
+      }
+    }
 
     final direct = samples
         .where((sample) => sample.sourceId.startsWith('ble:'))
