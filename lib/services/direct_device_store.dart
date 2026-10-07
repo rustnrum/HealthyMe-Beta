@@ -46,8 +46,15 @@ class SavedDirectDevice {
         deviceKind: json['deviceKind']?.toString() ?? 'Bluetooth health device',
         protocolId: json['protocolId']?.toString(),
         protocolLabel: json['protocolLabel']?.toString(),
-        capabilities:
-            (json['capabilities'] as List<dynamic>? ?? const <dynamic>[])
+        capabilities: json['protocolId']?.toString() == 'cpap-family'
+            ? const [
+                'Usage time',
+                'AHI',
+                'Leak rate',
+                'Therapy pressure',
+                'Mask on/off',
+              ]
+            : (json['capabilities'] as List<dynamic>? ?? const <dynamic>[])
                 .map((value) => value.toString())
                 .toList(),
         bonded: json['bonded'] == true,

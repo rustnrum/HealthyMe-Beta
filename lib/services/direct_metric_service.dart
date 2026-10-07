@@ -127,11 +127,24 @@ class DirectMetricService {
     }
   }
 
+  static bool isTherapyOnlyProtocol(String? protocolId) =>
+      protocolId == 'cpap-family';
+
   Future<DirectMetricReadResult> readAndStore(
     BleDeviceCandidate device, {
     String? protocolId,
     Duration duration = const Duration(seconds: 14),
   }) async {
+    final resolvedProtocolId = protocolId ?? device.protocolId;
+    if (isTherapyOnlyProtocol(resolvedProtocolId)) {
+      return const DirectMetricReadResult(
+        metrics: {},
+        message:
+            'CPAP therapy sync is not enabled yet. Salus will not treat this machine as a heart-rate sensor. Expected therapy metrics: usage time, AHI, leak rate, therapy pressure, and mask on/off.',
+        reader: 'cpap-pending',
+      );
+    }
+
     if (!Platform.isAndroid) {
       return const DirectMetricReadResult(
         metrics: {},
@@ -145,7 +158,7 @@ class DirectMetricService {
       <String, dynamic>{
         'deviceId': device.id,
         'deviceName': device.name,
-        'protocolId': protocolId ?? device.protocolId,
+        'protocolId': resolvedProtocolId,
         'durationMs': duration.inMilliseconds,
       },
     );

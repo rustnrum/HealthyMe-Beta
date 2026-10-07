@@ -211,6 +211,11 @@ class SourceHubService {
       'Workout telemetry',
       'Workouts',
       'Therapy data',
+      'Usage time',
+      'AHI',
+      'Leak rate',
+      'Therapy pressure',
+      'Mask on/off',
       'Raw motion',
     };
     return source.metrics.any(healthMetrics.contains) ||

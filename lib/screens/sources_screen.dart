@@ -1240,7 +1240,9 @@ class _BleSourceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final capabilities = source.metrics;
     final protocol = inspection?.protocolProfile ?? device.protocolProfile;
+    final protocolId = inspection?.protocolId ?? device.protocolId;
     final kind = inspection?.deviceKind ?? device.deviceKind;
+    final isCpap = protocolId == 'cpap-family';
 
     return Container(
       margin: const EdgeInsets.only(top: 8),
@@ -1291,7 +1293,9 @@ class _BleSourceRow extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         saved
-                            ? 'Paired with Salus • ${device.bondState} • Read data to sync'
+                            ? isCpap
+                                ? 'Paired with Salus • CPAP therapy reader pending'
+                                : 'Paired with Salus • ${device.bondState} • Read data to sync'
                             : !healthCandidate
                                 ? 'Nearby Bluetooth device • not identified as health hardware'
                                 : inspection == null
@@ -1353,6 +1357,12 @@ class _BleSourceRow extends StatelessWidget {
                     onPressed: pairing ? null : onUse,
                     icon: const Icon(Icons.link_rounded, size: 18),
                     label: Text(pairing ? 'Pairing…' : 'Pair'),
+                  )
+                else if (saved && isCpap)
+                  FilledButton.tonalIcon(
+                    onPressed: null,
+                    icon: Icon(Icons.air_rounded, size: 18),
+                    label: Text('Therapy sync pending'),
                   )
                 else if (saved)
                   FilledButton.tonalIcon(

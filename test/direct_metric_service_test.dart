@@ -62,4 +62,11 @@ void main() {
       contains('ble:AA:BB'),
     );
   });
+
+  test('CPAP protocol never falls through to wearable metric reader', () {
+    expect(DirectMetricService.isTherapyOnlyProtocol('cpap-family'), isTrue);
+    expect(DirectMetricService.isTherapyOnlyProtocol('garmin-family'), isFalse);
+    expect(DirectMetricService.isTherapyOnlyProtocol(null), isFalse);
+  });
+
 }

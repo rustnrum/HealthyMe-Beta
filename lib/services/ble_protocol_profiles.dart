@@ -182,9 +182,15 @@ class BleProtocolProfiles {
         'prisma',
         'luna g3',
       ],
-      capabilities: ['Therapy data'],
+      capabilities: [
+        'Usage time',
+        'AHI',
+        'Leak rate',
+        'Therapy pressure',
+        'Mask on/off',
+      ],
       note:
-          'Respiratory-device candidate. Salus can pair/inspect Bluetooth now; therapy-data decoding depends on the machine protocol or local file format.',
+          'Respiratory-device candidate. Salus identifies CPAP therapy metrics separately from wearable metrics. Direct therapy-session decoding is not enabled yet.',
     ),
   ];
 

@@ -50,7 +50,11 @@ void main() {
     );
     expect(report.protocolProfile?.id, 'cpap-family');
     expect(report.deviceKind, 'CPAP / respiratory');
-    expect(report.allCapabilities, contains('Therapy data'));
+    expect(report.allCapabilities, contains('Usage time'));
+    expect(report.allCapabilities, contains('AHI'));
+    expect(report.allCapabilities, contains('Leak rate'));
+    expect(report.allCapabilities, contains('Therapy pressure'));
+    expect(report.allCapabilities, isNot(contains('Heart rate')));
   });
 
   test('ResMed advertised service identifies CPAP', () {

@@ -17,7 +17,7 @@ MAIN_ACTIVITY="$(find android/app/src/main/kotlin -name MainActivity.kt -print -
 PROTO_READER="$(dirname "$MAIN_ACTIVITY")/SalusProtocolReader.kt"
 [ -s "$PROTO_READER" ] || fail "SalusProtocolReader.kt missing"
 
-grep -q '^version: 0.14.0+30$' pubspec.yaml || fail "build 30 version missing"
+grep -q '^version: 0.14.0+31$' pubspec.yaml || fail "build 31 version missing"
 
 # UI/source patches must already have been applied by ui_contract_check.sh.
 grep -q 'SALUS_BUILD29_AUTO_IDENTIFY' lib/screens/sources_screen.dart || fail "Build 29 UI patch was not applied before source contract"
@@ -65,4 +65,10 @@ grep -q 'SALUS_BUILD28_LOCKED_HOME_BACKGROUND' lib/widgets/salus_widgets.dart ||
 grep -q 'SALUS_BUILD29_AUTO_IDENTIFY' lib/screens/sources_screen.dart || fail "automatic device identification missing"
 grep -q 'SALUS_BUILD29_HEALTH_CANDIDATE' lib/services/source_hub_service.dart || fail "Bluetooth health classification missing"
 
-echo "Salus build 30 connections + direct protocol + locked home visual contract passed."
+
+
+grep -q "isTherapyOnlyProtocol" lib/services/direct_metric_service.dart || fail "Build 31 CPAP reader guard missing"
+grep -q "'AHI'" lib/services/ble_protocol_profiles.dart || fail "Build 31 CPAP AHI metric missing"
+grep -q "CPAP therapy reader pending" lib/screens/sources_screen.dart || fail "Build 31 CPAP debug state missing"
+
+echo "Salus build 31 CPAP metrics + direct protocol + locked home visual contract passed."

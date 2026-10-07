@@ -94,7 +94,6 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen> {
       'bipap',
       'airsense',
       'aircurve',
-      'resmed',
       'dreamstation',
     ];
     return hints.any(name.contains);
@@ -598,8 +597,18 @@ class _SavedDeviceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visible = metrics.take(5).toList();
-    final remaining = metrics.length - visible.length;
+    final therapyPending = device.protocolId == 'cpap-family';
+    final displayMetrics = therapyPending
+        ? const [
+            'Usage time',
+            'AHI',
+            'Leak rate',
+            'Therapy pressure',
+            'Mask on/off',
+          ]
+        : metrics;
+    final visible = displayMetrics.take(5).toList();
+    final remaining = displayMetrics.length - visible.length;
 
     return _GlassCard(
       child: Column(
@@ -648,7 +657,9 @@ class _SavedDeviceCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      _status(lastSeen),
+                      therapyPending
+                          ? 'Connected • CPAP therapy sync pending'
+                          : _status(lastSeen),
                       style: const TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 12.2,
@@ -684,19 +695,38 @@ class _SavedDeviceCard extends StatelessWidget {
               ],
             ),
           ],
+          if (therapyPending) ...[
+            const SizedBox(height: 10),
+            const Text(
+              'Salus recognizes this as a CPAP. It will not use the wearable heart-rate reader for this device.',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 12.2,
+                height: 1.35,
+              ),
+            ),
+          ],
           const SizedBox(height: 13),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: syncing ? null : onSync,
-              icon: syncing
-                  ? const SizedBox(
-                      width: 17,
-                      height: 17,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.sync_rounded, size: 18),
-              label: Text(syncing ? 'Syncing…' : 'Sync now'),
+              onPressed: therapyPending || syncing ? null : onSync,
+              icon: therapyPending
+                  ? const Icon(Icons.air_rounded, size: 18)
+                  : syncing
+                      ? const SizedBox(
+                          width: 17,
+                          height: 17,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.sync_rounded, size: 18),
+              label: Text(
+                therapyPending
+                    ? 'Therapy sync pending'
+                    : syncing
+                        ? 'Syncing…'
+                        : 'Sync now',
+              ),
             ),
           ),
         ],
