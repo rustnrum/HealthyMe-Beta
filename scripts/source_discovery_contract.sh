@@ -17,7 +17,7 @@ MAIN_ACTIVITY="$(find android/app/src/main/kotlin -name MainActivity.kt -print -
 PROTO_READER="$(dirname "$MAIN_ACTIVITY")/SalusProtocolReader.kt"
 [ -s "$PROTO_READER" ] || fail "SalusProtocolReader.kt missing"
 
-grep -q '^version: 0.15.0+32$' pubspec.yaml || fail "build 32 version missing"
+grep -q '^version: 0.16.0+33$' pubspec.yaml || fail "build 33 version missing"
 
 # UI/source patches must already have been applied by ui_contract_check.sh.
 grep -q 'SALUS_BUILD29_AUTO_IDENTIFY' lib/screens/sources_screen.dart || fail "Build 29 UI patch was not applied before source contract"
@@ -39,7 +39,7 @@ for required in \
 done
 
 for required in \
-  'SALUS_PROTOCOL_METRICS_V027' \
+  'SALUS_PROTOCOL_METRICS_V033' \
   '6e40fff0-b5a3-f393-e0a9-e50e24dcca9e' \
   'de5bf728-d711-4e47-af26-65e3012a5dc7' \
   '6a4e2800-667b-11e3-949a-0800200c9a66' \
@@ -67,7 +67,7 @@ grep -q 'SALUS_BUILD29_HEALTH_CANDIDATE' lib/services/source_hub_service.dart ||
 
 
 
-grep -q "isTherapyOnlyProtocol" lib/services/direct_metric_service.dart || fail "Build 31 CPAP reader guard missing"
+grep -q "isTherapyOnlyProtocol" lib/services/direct_metric_service.dart || fail "CPAP protocol identity helper missing"
 grep -q "'AHI'" lib/services/ble_protocol_profiles.dart || fail "Build 31 CPAP AHI metric missing"
 grep -q "CPAP therapy reader pending" lib/screens/sources_screen.dart || fail "Build 31 CPAP debug state missing"
 
@@ -75,4 +75,10 @@ grep -q "strongCpapIdentity" lib/services/ble_protocol_profiles.dart || fail "Bu
 grep -q "registeredDevices" lib/services/direct_metric_service.dart || fail "Build 32 provider registry missing"
 grep -q "class CpapScreen" lib/screens/cpap_screen.dart || fail "Build 32 CPAP dashboard missing"
 
-echo "Salus build 32 CPAP provider/dashboard + direct protocol + locked home visual contract passed."
+grep -q 'protocolId = call.argument<String>("protocolId")' scripts/protocol_metric_native_patch.py || fail "Build 33 protocol id bridge missing"
+grep -q 'startCpapProbe' "$PROTO_READER" || fail "Build 33 ResMed probe missing"
+grep -q 'ResMed read-only BLE probe' "$PROTO_READER" || fail "Build 33 read-only reader label missing"
+grep -q 'cpapObservations' "$PROTO_READER" || fail "Build 33 CPAP observations missing"
+grep -q 'readCharacteristic' "$PROTO_READER" || fail "Build 33 safe characteristic reads missing"
+
+echo "Salus build 33 CPAP read-only probe + provider/dashboard contract passed."

@@ -25,3 +25,13 @@ A saved CPAP is now registered in Salus as a direct therapy provider for **Usage
 The new CPAP Therapy dashboard includes Last night, 7 days, 30 days, and Insights views. Trend and suggestion logic operates only on stored real therapy samples. CPAP usage is deliberately kept separate from Sleep and Sleep Stages; mask-on/therapy time is not treated as sleep duration.
 
 Build 32 does **not** claim a completed proprietary ResMed nightly-history decoder. Bluetooth/GATT service discovery identifies transport capabilities, not therapy results. The existing CPAP reader guard remains in place until the machine-specific session protocol is validated.
+
+## Build 33 — ResMed read-only BLE probe
+
+Build 33 removes the CPAP short-circuit that prevented a recognized ResMed device from reaching the native Bluetooth reader. The native reader now receives the resolved protocol id, gives CPAP identity priority over Nordic UART/ring services, and runs a **read-only ResMed probe**.
+
+The probe reads characteristics that explicitly advertise the Bluetooth GATT READ property and subscribes to NOTIFY/INDICATE characteristics using only the standard CCCD subscription descriptor. It does **not** write proprietary ResMed commands, modify therapy settings, or infer AHI/leak/pressure from unknown bytes.
+
+The CPAP dashboard reports how many readable characteristic values were returned, how many notification channels were subscribed, and how many live notifications arrived. Up to 12 raw observations are shown for protocol identification. These values are diagnostic until a field is positively mapped to a therapy metric.
+
+Public AirSense 11 reverse-engineering documents the advertised `0000fd56-0000-1000-8000-00805f9b34fb` BLE service and a secure FIG/RPC session model. Normal application RPC traffic requires a paired session, so Build 33 intentionally starts with passive/read-only observation before implementing credentialed therapy RPC.

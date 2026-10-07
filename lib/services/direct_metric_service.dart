@@ -57,11 +57,15 @@ class DirectMetricReadResult {
   final Map<String, double> metrics;
   final String message;
   final String reader;
+  final List<String> observations;
+  final Map<String, int> diagnostics;
 
   const DirectMetricReadResult({
     required this.metrics,
     required this.message,
     this.reader = 'generic',
+    this.observations = const [],
+    this.diagnostics = const {},
   });
 
   bool get hasMetrics => metrics.isNotEmpty;
@@ -145,14 +149,6 @@ class DirectMetricService {
     Duration duration = const Duration(seconds: 14),
   }) async {
     final resolvedProtocolId = protocolId ?? device.protocolId;
-    if (isTherapyOnlyProtocol(resolvedProtocolId)) {
-      return const DirectMetricReadResult(
-        metrics: {},
-        message:
-            'CPAP therapy sync is not enabled yet. Salus will not treat this machine as a heart-rate sensor. Expected therapy metrics: usage time, AHI, leak rate, therapy pressure, and mask on/off.',
-        reader: 'cpap-pending',
-      );
-    }
 
     if (!Platform.isAndroid) {
       return const DirectMetricReadResult(
@@ -202,6 +198,25 @@ class DirectMetricService {
         (metrics.isEmpty
             ? 'No readable direct-device metric was returned.'
             : 'Direct device data read successfully.');
+    final observations = <String>[];
+    final rawObservations = map['observations'];
+    if (rawObservations is List) {
+      for (final item in rawObservations.whereType<Map>()) {
+        final label = item['label']?.toString() ?? '';
+        final hex = item['hex']?.toString() ?? '';
+        if (label.isNotEmpty && hex.isNotEmpty) {
+          observations.add('$label = $hex');
+        }
+      }
+    }
+    final diagnostics = <String, int>{};
+    final rawDiagnostics = map['diagnostics'];
+    if (rawDiagnostics is Map) {
+      for (final entry in rawDiagnostics.entries) {
+        final value = entry.value;
+        if (value is num) diagnostics[entry.key.toString()] = value.toInt();
+      }
+    }
 
     if (metrics.isNotEmpty) {
       final now = DateTime.now();
@@ -224,6 +239,8 @@ class DirectMetricService {
       metrics: metrics,
       message: message,
       reader: reader,
+      observations: observations,
+      diagnostics: diagnostics,
     );
   }
 

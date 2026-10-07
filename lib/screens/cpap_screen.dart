@@ -25,6 +25,8 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
   List<DirectMetricSample> _samples = const [];
   String? _selectedId;
   String? _status;
+  List<String> _probeObservations = const [];
+  Map<String, int> _probeDiagnostics = const {};
   int _view = 0;
   bool _loading = true;
   bool _checking = false;
@@ -120,9 +122,15 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
           manufacturerDataHex: '',
           bondState: device.bonded ? 'bonded' : device.pairState,
         ),
+        protocolId: 'cpap-family',
+        duration: const Duration(seconds: 20),
       );
       if (!mounted) return;
-      setState(() => _status = result.message);
+      setState(() {
+        _status = result.message;
+        _probeObservations = result.observations;
+        _probeDiagnostics = result.diagnostics;
+      });
       await _load();
     } catch (error) {
       if (!mounted) return;
@@ -180,7 +188,7 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
                             )
                           : const Icon(Icons.sync_rounded, size: 18),
                       label: Text(
-                        _checking ? 'Checking…' : 'Check for therapy data',
+                        _checking ? 'Listening…' : 'Probe live CPAP data',
                       ),
                     ),
                   ),
@@ -195,9 +203,76 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
                       ),
                     ),
                   ],
+                  if (_probeDiagnostics.isNotEmpty ||
+                      _probeObservations.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _probeCard(),
+                  ],
                 ],
               ],
             ),
+    );
+  }
+
+  Widget _probeCard() {
+    final reads = _probeDiagnostics['readCount'] ?? 0;
+    final notifications = _probeDiagnostics['notificationCount'] ?? 0;
+    final subscriptions = _probeDiagnostics['subscriptionCount'] ?? 0;
+    return _GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.bluetooth_connected_rounded,
+                  color: AppTheme.cyan, size: 21),
+              SizedBox(width: 8),
+              Text(
+                'Live ResMed probe',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$reads readable values • $subscriptions notification channels • '
+            '$notifications live notifications',
+            style: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 12.5,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 5),
+          const Text(
+            'Raw BLE observations are diagnostic only until Salus maps them to verified therapy fields.',
+            style: TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 11.8,
+              height: 1.35,
+            ),
+          ),
+          if (_probeObservations.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            for (final observation in _probeObservations.take(12)) ...[
+              SelectableText(
+                observation,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 10.8,
+                  height: 1.35,
+                  fontFamily: 'monospace',
+                ),
+              ),
+              const SizedBox(height: 5),
+            ],
+          ],
+        ],
+      ),
     );
   }
 
@@ -241,7 +316,7 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
                 Text(
                   device == null
                       ? 'Connect a CPAP to start building nightly therapy trends.'
-                      : '${device.name} • direct therapy provider',
+                      : '${device.name} • ResMed read-only probe',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13.2,

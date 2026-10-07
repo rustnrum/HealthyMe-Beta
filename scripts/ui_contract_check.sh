@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build 31 is the validated baseline. Build 32 repairs device identity,
-# registers CPAP as a real therapy provider, and adds the CPAP dashboard.
+# Build 32 is the validated source already committed on main.
+# Build 33 must not replay older non-idempotent source migrations.
 python3 scripts/salus_brand_patch.py
-python3 scripts/build31_cpap_metrics_patch.py
-python3 scripts/build32_cpap_module_patch.py
+python3 scripts/build33_resmed_probe_patch.py
 
 fail() { echo "UI CONTRACT FAILURE: $1" >&2; exit 1; }
 
-grep -q '^version: 0.15.0+32$' pubspec.yaml || fail "build 32 version missing"
+grep -q '^version: 0.16.0+33$' pubspec.yaml || fail "build 33 version missing"
 grep -q "protocolId == 'ring-uart-v1'" lib/services/source_hub_service.dart || fail "ring/watch identity fix missing"
 grep -q 'refreshInspection' lib/services/direct_device_store.dart || fail "saved device identity refresh missing"
 grep -q 'Read data to sync' lib/screens/sources_screen.dart || fail "direct reader status copy missing"
@@ -51,8 +50,7 @@ grep -q "'Usage time'" lib/services/ble_protocol_profiles.dart || fail "CPAP usa
 grep -q "'AHI'" lib/services/ble_protocol_profiles.dart || fail "CPAP AHI metric missing"
 grep -q "'Leak rate'" lib/services/ble_protocol_profiles.dart || fail "CPAP leak metric missing"
 grep -q "'Therapy pressure'" lib/services/ble_protocol_profiles.dart || fail "CPAP pressure metric missing"
-grep -q "isTherapyOnlyProtocol" lib/services/direct_metric_service.dart || fail "CPAP reader guard missing"
-grep -q "CPAP therapy sync is not enabled yet" lib/services/direct_metric_service.dart || fail "CPAP reader message missing"
+grep -q "isTherapyOnlyProtocol" lib/services/direct_metric_service.dart || fail "CPAP protocol identity helper missing"
 grep -q "Connected • therapy provider registered" lib/screens/connections_screen.dart || fail "Build 32 CPAP provider state missing"
 grep -q "saved && isCpap" lib/screens/sources_screen.dart || fail "debug CPAP guard missing"
 if grep -q 'const FilledButton\.tonalIcon' lib/screens/sources_screen.dart; then
@@ -70,4 +68,12 @@ grep -q "'/cpap': (_) => const CpapScreen()" lib/app.dart || fail "Build 32 CPAP
 grep -q "Open CPAP dashboard" lib/screens/connections_screen.dart || fail "Build 32 Connections dashboard action missing"
 grep -q "strong ResMed identity wins over generic ring UART fingerprint" test/build32_cpap_module_test.dart || fail "Build 32 identity regression test missing"
 
-echo "Salus build 32 UI contract passed."
+grep -q "final List<String> observations" lib/services/direct_metric_service.dart || fail "Build 33 probe observations missing"
+grep -q "duration: const Duration(seconds: 20)" lib/screens/cpap_screen.dart || fail "Build 33 CPAP probe duration missing"
+grep -q "Probe live CPAP data" lib/screens/cpap_screen.dart || fail "Build 33 probe action missing"
+grep -q "Live ResMed probe" lib/screens/cpap_screen.dart || fail "Build 33 probe UI missing"
+if grep -q "CPAP therapy sync is not enabled yet" lib/services/direct_metric_service.dart; then
+  fail "Build 31 CPAP short-circuit still blocks Build 33 probe"
+fi
+
+echo "Salus build 33 UI contract passed."

@@ -2,11 +2,11 @@ from pathlib import Path
 import re
 import shutil
 
-VERSION = '0.15.0+32'
+VERSION = '0.16.0+33'
 
 
 def fail(message: str) -> None:
-    raise SystemExit(f'Salus build 32 brand patch: {message}')
+    raise SystemExit(f'Salus build 33 brand patch: {message}')
 
 
 pub = Path('pubspec.yaml')
@@ -46,4 +46,4 @@ for folder in (
     dst.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst / 'ic_launcher.png')
 
-print('Salus build 32 branding applied.')
+print('Salus build 33 branding applied.')

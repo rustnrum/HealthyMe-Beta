@@ -22,10 +22,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.sqrt
 
 /**
- * SALUS_PROTOCOL_METRICS_V027
+ * SALUS_PROTOCOL_METRICS_V033
  *
- * Local, read-only protocol readers for device families Salus has positively
- * identified. A metric is returned only after a real packet carrying that
+ * Local protocol readers plus a read-only ResMed BLE probe for positively
+ * identified device families. A metric is returned only after a real packet carrying that
  * metric is received from the user's device.
  */
 class SalusProtocolReader(
@@ -51,6 +51,13 @@ class SalusProtocolReader(
 
         private val GARMIN_SERVICE =
             UUID.fromString("6a4e2800-667b-11e3-949a-0800200c9a66")
+
+        // ResMed AirSense/AirCurve BLE identifiers observed in the field.
+        // Build 33 remains read-only: it does not send proprietary commands.
+        private val RESMED_ADVERTISED_SERVICE =
+            UUID.fromString("0000fd56-0000-1000-8000-00805f9b34fb")
+        private val RESMED_DEVICE_SERVICE =
+            UUID.fromString("948652e2-d03b-11e8-a8d5-f2801f1b9fd1")
 
         private const val GARMIN_GFDI = 1
         private const val GARMIN_REALTIME_HR = 6
@@ -79,6 +86,7 @@ class SalusProtocolReader(
     fun read(
         deviceId: String,
         deviceName: String,
+        protocolId: String,
         durationMs: Long,
         result: MethodChannel.Result,
     ) {
@@ -113,13 +121,14 @@ class SalusProtocolReader(
             return
         }
 
-        Session(device, deviceName, durationMs, result).start()
+        Session(device, deviceName, protocolId, durationMs, result).start()
     }
 
     @SuppressLint("MissingPermission")
     private inner class Session(
         private val device: BluetoothDevice,
         private val deviceName: String,
+        private val protocolId: String,
         private val durationMs: Long,
         private val result: MethodChannel.Result,
     ) {
@@ -155,6 +164,18 @@ class SalusProtocolReader(
         private var garminRegisterIndex = 0
         private var garminPendingService: Int? = null
         private var garminRegistrationStarted = false
+
+        // ResMed read-only probe state. We intentionally do not write to any
+        // proprietary characteristic. The only descriptor write is the
+        // standard CCCD needed to subscribe to notifications/indications.
+        private val cpapReadQueue = mutableListOf<BluetoothGattCharacteristic>()
+        private val cpapNotifyQueue = mutableListOf<BluetoothGattCharacteristic>()
+        private val cpapObservations = linkedMapOf<String, String>()
+        private var cpapReadIndex = 0
+        private var cpapNotifyIndex = 0
+        private var cpapReadCount = 0
+        private var cpapNotificationCount = 0
+        private var cpapSubscriptions = 0
 
         private val callback = object : BluetoothGattCallback() {
             override fun onConnectionStateChange(
@@ -201,6 +222,17 @@ class SalusProtocolReader(
                     return
                 }
 
+                val cpapIdentity = protocolId == "cpap-family" ||
+                    deviceName.lowercase().contains("resmed") ||
+                    deviceName.lowercase().contains("airsense") ||
+                    deviceName.lowercase().contains("aircurve") ||
+                    gatt.getService(RESMED_ADVERTISED_SERVICE) != null ||
+                    gatt.getService(RESMED_DEVICE_SERVICE) != null
+                if (cpapIdentity) {
+                    startCpapProbe(gatt)
+                    return
+                }
+
                 val ringService = gatt.getService(RING_SERVICE)
                 if (ringService != null) {
                     startRing(gatt, ringService)
@@ -225,6 +257,20 @@ class SalusProtocolReader(
                 status: Int,
             ) {
                 if (completed.get()) return
+
+                if (mode == "cpap") {
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        cpapSubscriptions += 1
+                    } else {
+                        notes.add(
+                            "A ResMed notification subscription returned status $status."
+                        )
+                    }
+                    cpapNotifyIndex += 1
+                    setupNextCpapNotification()
+                    return
+                }
+
                 if (status != BluetoothGatt.GATT_SUCCESS) {
                     finish("Bluetooth notification setup failed with status $status.")
                     return
@@ -255,6 +301,27 @@ class SalusProtocolReader(
                         startGarminHandshake()
                     }
                 }
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onCharacteristicRead(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                status: Int,
+            ) {
+                if (mode != "cpap" || completed.get()) return
+                val value = characteristic.value ?: byteArrayOf()
+                handleCpapRead(characteristic.uuid, value, status)
+            }
+
+            override fun onCharacteristicRead(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                value: ByteArray,
+                status: Int,
+            ) {
+                if (mode != "cpap" || completed.get()) return
+                handleCpapRead(characteristic.uuid, value, status)
             }
 
             @Deprecated("Deprecated in Java")
@@ -315,6 +382,11 @@ class SalusProtocolReader(
 
         private fun handleChanged(uuid: UUID, value: ByteArray) {
             if (completed.get()) return
+            if (mode == "cpap") {
+                cpapNotificationCount += 1
+                recordCpapObservation("notify", uuid, value)
+                return
+            }
             when {
                 uuid == RING_NOTIFY -> parseRingPacket(value)
                 uuid == RING_BIG_NOTIFY -> parseRingBigData(value)
@@ -352,7 +424,15 @@ class SalusProtocolReader(
             } catch (_: Throwable) {
             }
 
-            val finalMessage = message ?: when {
+            val cpapMessage = if (mode == "cpap" && message == null) {
+                "ResMed connected. Read $cpapReadCount characteristic value${if (cpapReadCount == 1) "" else "s"}; " +
+                    "received $cpapNotificationCount live notification${if (cpapNotificationCount == 1) "" else "s"}. " +
+                    "This is a read-only BLE probe; therapy values are not decoded until their fields are identified."
+            } else {
+                null
+            }
+
+            val finalMessage = cpapMessage ?: message ?: when {
                 metrics.isNotEmpty() ->
                     "$readerName returned ${metrics.size} real metric${if (metrics.size == 1) "" else "s"}."
                 notes.isNotEmpty() -> notes.joinToString(" ")
@@ -366,6 +446,22 @@ class SalusProtocolReader(
                         "metrics" to metrics,
                         "message" to finalMessage,
                         "fallbackStandard" to fallbackStandard,
+                        "observations" to if (mode == "cpap") {
+                            cpapObservations.entries.map { entry ->
+                                mapOf("label" to entry.key, "hex" to entry.value)
+                            }
+                        } else {
+                            emptyList<Map<String, String>>()
+                        },
+                        "diagnostics" to if (mode == "cpap") {
+                            mapOf(
+                                "readCount" to cpapReadCount,
+                                "notificationCount" to cpapNotificationCount,
+                                "subscriptionCount" to cpapSubscriptions,
+                            )
+                        } else {
+                            emptyMap<String, Int>()
+                        },
                     )
                 )
             }
@@ -434,6 +530,156 @@ class SalusProtocolReader(
                 gatt.writeDescriptor(descriptor)
             } catch (_: Throwable) {
                 false
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // ResMed read-only BLE probe.
+        //
+        // AirSense/AirCurve application traffic can require a device-specific
+        // secure session. Build 33 therefore performs only passive reads and
+        // standard notification subscriptions. It never writes proprietary
+        // commands or therapy settings.
+        // -----------------------------------------------------------------
+
+        private fun startCpapProbe(gatt: BluetoothGatt) {
+            readerName = "ResMed read-only BLE probe"
+            mode = "cpap"
+            cpapReadQueue.clear()
+            cpapNotifyQueue.clear()
+            cpapObservations.clear()
+            cpapReadIndex = 0
+            cpapNotifyIndex = 0
+            cpapReadCount = 0
+            cpapNotificationCount = 0
+            cpapSubscriptions = 0
+
+            for (service in gatt.services) {
+                for (characteristic in service.characteristics) {
+                    val properties = characteristic.properties
+                    if (
+                        properties and BluetoothGattCharacteristic.PROPERTY_READ != 0
+                    ) {
+                        cpapReadQueue.add(characteristic)
+                    }
+                    if (
+                        properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0 ||
+                        properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+                    ) {
+                        cpapNotifyQueue.add(characteristic)
+                    }
+                }
+            }
+
+            notes.add(
+                "ResMed GATT exposed ${cpapReadQueue.size} readable and " +
+                    "${cpapNotifyQueue.size} notify/indicate characteristics."
+            )
+
+            if (cpapReadQueue.isNotEmpty()) {
+                readNextCpapCharacteristic()
+            } else {
+                setupNextCpapNotification()
+            }
+        }
+
+        @Suppress("DEPRECATION")
+        private fun readNextCpapCharacteristic() {
+            if (completed.get()) return
+            val activeGatt = gatt ?: return
+            while (cpapReadIndex < cpapReadQueue.size) {
+                val characteristic = cpapReadQueue[cpapReadIndex]
+                val started = try {
+                    activeGatt.readCharacteristic(characteristic)
+                } catch (_: Throwable) {
+                    false
+                }
+                if (started) return
+                cpapReadIndex += 1
+            }
+            setupNextCpapNotification()
+        }
+
+        private fun handleCpapRead(
+            uuid: UUID,
+            value: ByteArray,
+            status: Int,
+        ) {
+            if (completed.get()) return
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                cpapReadCount += 1
+                recordCpapObservation("read", uuid, value)
+            }
+            cpapReadIndex += 1
+            mainHandler.post { readNextCpapCharacteristic() }
+        }
+
+        @Suppress("DEPRECATION")
+        private fun setupNextCpapNotification() {
+            if (completed.get()) return
+            val activeGatt = gatt ?: return
+
+            while (cpapNotifyIndex < cpapNotifyQueue.size) {
+                val characteristic = cpapNotifyQueue[cpapNotifyIndex]
+                val enabled = try {
+                    activeGatt.setCharacteristicNotification(characteristic, true)
+                } catch (_: Throwable) {
+                    false
+                }
+                if (!enabled) {
+                    cpapNotifyIndex += 1
+                    continue
+                }
+
+                val descriptor = characteristic.getDescriptor(CCCD)
+                if (descriptor == null) {
+                    cpapNotifyIndex += 1
+                    continue
+                }
+                descriptor.value =
+                    if (
+                        characteristic.properties and
+                        BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+                    ) {
+                        BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                    } else {
+                        BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                    }
+                val started = try {
+                    activeGatt.writeDescriptor(descriptor)
+                } catch (_: Throwable) {
+                    false
+                }
+                if (started) return
+                cpapNotifyIndex += 1
+            }
+
+            notes.add(
+                "ResMed probe is listening for live BLE changes until timeout."
+            )
+        }
+
+        private fun recordCpapObservation(
+            kind: String,
+            uuid: UUID,
+            value: ByteArray,
+        ) {
+            if (value.isEmpty()) return
+            val key = "$kind • $uuid"
+            val limit = minOf(value.size, 64)
+            val builder = StringBuilder()
+            for (index in 0 until limit) {
+                builder.append(
+                    (value[index].toInt() and 0xff)
+                        .toString(16)
+                        .padStart(2, '0')
+                )
+            }
+            if (value.size > limit) builder.append("…")
+            cpapObservations[key] = builder.toString()
+            while (cpapObservations.size > 24) {
+                val first = cpapObservations.keys.firstOrNull() ?: break
+                cpapObservations.remove(first)
             }
         }
 

@@ -11,6 +11,7 @@ if '"readProtocolMetrics" ->' not in text:
     block = '''                "readProtocolMetrics" -> {
                     val deviceId = call.argument<String>("deviceId")
                     val deviceName = call.argument<String>("deviceName") ?: ""
+                    val protocolId = call.argument<String>("protocolId") ?: ""
                     val durationMs =
                         (call.argument<Number>("durationMs")?.toLong()
                             ?: 16000L).coerceIn(5000L, 24000L)
@@ -22,7 +23,7 @@ if '"readProtocolMetrics" ->' not in text:
                         )
                     } else {
                         SalusProtocolReader(this, mainHandler)
-                            .read(deviceId, deviceName, durationMs, result)
+                            .read(deviceId, deviceName, protocolId, durationMs, result)
                     }
                 }
 '''
@@ -36,4 +37,4 @@ if not source.exists():
     raise SystemExit('protocol metric native patch: Kotlin template missing')
 target = main.parent / 'SalusProtocolReader.kt'
 target.write_text(source.read_text())
-print('Salus build 27 COLMI/Garmin protocol reader bridge applied.')
+print('Salus build 33 protocol reader bridge applied.')
