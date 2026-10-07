@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/debug_flags.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/ai_coach_screen.dart';
 import 'screens/connections_screen.dart';
@@ -17,11 +18,6 @@ import 'screens/workout_screen.dart';
 import 'screens/watch_device_screen.dart';
 import 'state/app_state.dart';
 import 'widgets/morning_checkin_gate.dart';
-
-const bool _showDeviceDebug = bool.fromEnvironment(
-  'SALUS_SHOW_DEVICE_DEBUG',
-  defaultValue: true,
-);
 
 class HealthyMeApp extends ConsumerWidget {
   const HealthyMeApp({super.key});
@@ -43,7 +39,7 @@ class HealthyMeApp extends ConsumerWidget {
         '/recovery': (_) => const RecoveryDetailScreen(),
         '/daily-state': (_) => const DailyStateScreen(),
         '/sources': (_) => const ConnectionsScreen(),
-        '/sources-debug': (_) => _showDeviceDebug
+        '/sources-debug': (_) => salusShowDeviceDebug
             ? const SourcesScreen()
             : const ConnectionsScreen(),
         '/cpap': (_) => const CpapScreen(),

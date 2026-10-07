@@ -4,7 +4,7 @@ class BleProtocolProfile {
   final String deviceKind;
   final Set<String> requiredServices;
   final Set<String> anyServices;
-  final List<String> nameHints;
+  final List<String> nameTokens;
   final List<String> capabilities;
   final String note;
   final bool dataReaderReady;
@@ -15,27 +15,26 @@ class BleProtocolProfile {
     required this.deviceKind,
     this.requiredServices = const {},
     this.anyServices = const {},
-    this.nameHints = const [],
+    this.nameTokens = const [],
     required this.capabilities,
     required this.note,
     this.dataReaderReady = false,
   });
 
   bool matches(String name, Set<String> services) {
-    final normalizedName = name.trim().toLowerCase();
-    final requiredMatch = requiredServices.isEmpty ||
-        requiredServices.every(services.contains);
-    if (!requiredMatch) return false;
+    if (requiredServices.isNotEmpty &&
+        !requiredServices.every(services.contains)) {
+      return false;
+    }
+    if (anyServices.any(services.contains)) return true;
 
-    final serviceMatch = anyServices.isNotEmpty &&
-        anyServices.any(services.contains);
-    final nameMatch = nameHints.isNotEmpty &&
-        nameHints.any(normalizedName.contains);
-
-    if (requiredServices.isNotEmpty && anyServices.isEmpty) return true;
-    if (serviceMatch) return true;
-    if (nameMatch) return true;
-    return false;
+    final tokens = name
+        .trim()
+        .toLowerCase()
+        .split(RegExp(r'[^a-z0-9áéíóúüñ]+'))
+        .where((token) => token.isNotEmpty)
+        .toSet();
+    return nameTokens.any(tokens.contains);
   }
 }
 
@@ -64,12 +63,8 @@ class BleProtocolProfiles {
       '6e40fff0-b5a3-f393-e0a9-e50e24dcca9e';
   static const String ringBigDataService =
       'de5bf728-d711-4e47-af26-65e3012a5dc7';
-  static const String huamiFee0 =
-      '0000fee0-0000-1000-8000-00805f9b34fb';
-  static const String huamiFee1 =
-      '0000fee1-0000-1000-8000-00805f9b34fb';
-  static const String no1Service =
-      '000055ff-0000-1000-8000-00805f9b34fb';
+  static const String garminService =
+      '6a4e2800-667b-11e3-949a-0800200c9a66';
   static const String resMedAdvertisedService =
       '0000fd56-0000-1000-8000-00805f9b34fb';
   static const String resMedDeviceService =
@@ -81,6 +76,7 @@ class BleProtocolProfiles {
       label: 'QRing / Yawell ring family',
       deviceKind: 'Ring',
       requiredServices: {ringUartService},
+      nameTokens: ['qring', 'colmi', 'yawell', 'r02', 'r03', 'r06'],
       capabilities: [
         'Heart rate',
         'SpO2',
@@ -90,32 +86,15 @@ class BleProtocolProfiles {
         'Raw motion',
         'Battery',
       ],
-      note:
-          'Known direct BLE ring protocol. Salus can identify the UART/big-data family without the vendor app; metric decoding is enabled per protocol reader.',
-    ),
-    BleProtocolProfile(
-      id: 'huami-zepp-family',
-      label: 'Xiaomi / Amazfit / Huami family',
-      deviceKind: 'Watch / band',
-      anyServices: {huamiFee0, huamiFee1},
-      nameHints: ['amazfit', 'xiaomi', 'mi band', 'zepp'],
-      capabilities: ['Steps', 'Sleep', 'Heart rate', 'Workouts', 'Battery'],
-      note:
-          'Known Huami/Zepp BLE family. Some models require an authentication key before health history can be read.',
-    ),
-    BleProtocolProfile(
-      id: 'no1-f1-family',
-      label: 'NO.1 / compatible watch family',
-      deviceKind: 'Watch / band',
-      anyServices: {no1Service},
-      capabilities: ['Steps', 'Sleep', 'Heart rate', 'Battery'],
-      note: 'Known BLE watch protocol family with direct activity/history commands.',
+      note: 'Built-in direct ring reader.',
+      dataReaderReady: true,
     ),
     BleProtocolProfile(
       id: 'garmin-family',
       label: 'Garmin watch family',
       deviceKind: 'Watch',
-      nameHints: [
+      anyServices: {garminService},
+      nameTokens: [
         'garmin',
         'fenix',
         'forerunner',
@@ -127,41 +106,17 @@ class BleProtocolProfiles {
       ],
       capabilities: [
         'Steps',
-        'Sleep',
         'Heart rate',
-        'Resting heart rate',
         'HRV',
         'SpO2',
         'Respiratory rate',
-        'Workouts',
+        'Active calories',
+        'Body battery',
+        'Stress',
       ],
       note:
-          'Garmin-family candidate by advertised identity. Direct Garmin/GFDI history decoding is a separate reader; these are potential device metrics, not proof that every model exposes all of them.',
-    ),
-    BleProtocolProfile(
-      id: 'fitcloud-family',
-      label: 'FitCloud watch family',
-      deviceKind: 'Watch',
-      nameHints: ['fitcloud'],
-      capabilities: [
-        'Steps',
-        'Sleep',
-        'Heart rate',
-        'Resting heart rate',
-        'SpO2',
-        'Workouts',
-      ],
-      note:
-          'FitCloud-family candidate. Many rebranded watches share this protocol; exact reader support depends on the device revision.',
-    ),
-    BleProtocolProfile(
-      id: 'moyoung-dafit-family',
-      label: 'Moyoung / Da Fit watch family',
-      deviceKind: 'Watch',
-      nameHints: ['moyoung', 'da fit', 'dafit'],
-      capabilities: ['Steps', 'Sleep', 'Heart rate', 'SpO2', 'Workouts'],
-      note:
-          'Moyoung/Da Fit family candidate. Many brand names share this protocol.',
+          'Built-in Garmin realtime reader. Stored FIT history remains a separate capability.',
+      dataReaderReady: true,
     ),
     BleProtocolProfile(
       id: 'cpap-family',
@@ -171,7 +126,7 @@ class BleProtocolProfiles {
         resMedAdvertisedService,
         resMedDeviceService,
       },
-      nameHints: [
+      nameTokens: [
         'resmed',
         'airsense',
         'aircurve',
@@ -180,17 +135,17 @@ class BleProtocolProfiles {
         'bipap',
         'bpap',
         'prisma',
-        'luna g3',
       ],
       capabilities: [
         'Usage time',
         'AHI',
         'Leak rate',
         'Therapy pressure',
-        'Mask on/off',
+        'Respiratory rate',
       ],
       note:
-          'Respiratory-device candidate. Salus identifies CPAP therapy metrics separately from wearable metrics. Direct therapy-session decoding is not enabled yet.',
+          'Built-in read-only therapy reader where the device protocol is supported.',
+      dataReaderReady: true,
     ),
   ];
 
@@ -220,35 +175,11 @@ class BleProtocolProfiles {
     return value;
   }
 
-  static bool looksLikeCpapName(String name) {
-    final value = name.trim().toLowerCase();
-    const hints = <String>[
-      'resmed',
-      'airsense',
-      'aircurve',
-      'dreamstation',
-      'cpap',
-      'bipap',
-      'bpap',
-      'prisma',
-      'luna g3',
-    ];
-    return hints.any(value.contains);
-  }
-
-  static bool looksLikeRingName(String name) {
-    final value = name.trim().toLowerCase();
-    const hints = <String>[
-      'colmi',
-      'qring',
-      'yawell',
-      'r02',
-      'r03',
-      'r06',
-      'smart ring',
-    ];
-    return hints.any(value.contains);
-  }
+  static bool hasBuiltInReader(String? protocolId) =>
+      protocolId != null &&
+      profiles.any(
+        (profile) => profile.id == protocolId && profile.dataReaderReady,
+      );
 
   static BleCapabilityReport analyze(
     Iterable<String> serviceUuids, {
@@ -262,16 +193,27 @@ class BleProtocolProfiles {
     }
 
     BleProtocolProfile? matched;
+
+    final tokens = name
+        .trim()
+        .toLowerCase()
+        .split(RegExp(r'[^a-z0-9áéíóúüñ]+'))
+        .where((token) => token.isNotEmpty)
+        .toSet();
+
     final cpapProfile =
         profiles.firstWhere((profile) => profile.id == 'cpap-family');
     final ringProfile =
         profiles.firstWhere((profile) => profile.id == 'ring-uart-v1');
 
-    final strongCpapIdentity = looksLikeCpapName(name) ||
-        cpapProfile.anyServices.any(services.contains);
-    final strongRingIdentity = looksLikeRingName(name) ||
+    final strongCpapIdentity =
+        cpapProfile.anyServices.any(services.contains) ||
+        cpapProfile.nameTokens.any(tokens.contains);
+
+    final strongRingIdentity =
         (services.contains(ringUartService) &&
-            services.contains(ringBigDataService));
+            services.contains(ringBigDataService)) ||
+        ringProfile.nameTokens.any(tokens.contains);
 
     if (strongCpapIdentity) {
       matched = cpapProfile;
@@ -296,16 +238,32 @@ class BleProtocolProfiles {
     );
   }
 
+  static bool looksLikeCpapName(String name) =>
+      analyze(const [], name: name).protocolProfile?.id == 'cpap-family';
+
+  static bool looksLikeRingName(String name) =>
+      analyze(const [], name: name).protocolProfile?.id == 'ring-uart-v1';
+
   static String _inferKind(String name, List<String> capabilities) {
-    final value = name.toLowerCase();
+    final tokens = name
+        .trim()
+        .toLowerCase()
+        .split(RegExp(r'[^a-z0-9áéíóúüñ]+'))
+        .where((token) => token.isNotEmpty)
+        .toSet();
+
     if (capabilities.contains('Weight') ||
         capabilities.contains('Body composition') ||
-        value.contains('scale')) {
+        tokens.contains('scale')) {
       return 'Scale';
     }
-    if (value.contains('ring')) return 'Ring';
-    if (value.contains('watch') || value.contains('band')) return 'Watch / band';
-    if (capabilities.contains('Blood pressure')) return 'Blood pressure monitor';
+    if (tokens.contains('ring')) return 'Ring';
+    if (tokens.contains('watch') || tokens.contains('band')) {
+      return 'Watch / band';
+    }
+    if (capabilities.contains('Blood pressure')) {
+      return 'Blood pressure monitor';
+    }
     if (capabilities.contains('Glucose')) return 'Glucose meter';
     if (capabilities.contains('Heart rate')) return 'Heart-rate sensor';
     return 'Bluetooth device';

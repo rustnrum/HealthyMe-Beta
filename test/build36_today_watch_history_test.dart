@@ -9,7 +9,7 @@ void main() {
     final direct =
         File('lib/services/direct_metric_service.dart').readAsStringSync();
     final native =
-        File('scripts/SalusProtocolReader.kt.template').readAsStringSync();
+        File('native/android/SalusProtocolReader.kt').readAsStringSync();
 
     expect(home, contains('Device batteries'));
     expect(home, contains('plannedWorkouts'));

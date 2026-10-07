@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "packs": [
+    {
+      "id": "ido-veryfit-family",
+      "label": "IDO / VeryFit",
+      "deviceKind": "Watch / band",
+      "services": [
+        "00000af0-0000-1000-8000-00805f9b34fb"
+      ],
+      "nameTokens": [
+        "veryfit",
+        "toobur",
+        "idw16",
+        "idw19"
+      ],
+      "capabilities": [],
+      "builtInReader": false,
+      "note": "Compatibility family recognized locally. Proprietary health-history decoding is not enabled yet."
+    },
+    {
+      "id": "huami-zepp-family",
+      "label": "Xiaomi / Amazfit / Huami",
+      "deviceKind": "Watch / band",
+      "services": [
+        "0000fee0-0000-1000-8000-00805f9b34fb",
+        "0000fee1-0000-1000-8000-00805f9b34fb"
+      ],
+      "nameTokens": [
+        "amazfit",
+        "xiaomi",
+        "zepp"
+      ],
+      "capabilities": [],
+      "builtInReader": false,
+      "note": "Compatibility family recognized locally. Model authentication may still be required."
+    },
+    {
+      "id": "fitcloud-family",
+      "label": "FitCloud",
+      "deviceKind": "Watch / band",
+      "services": [],
+      "nameTokens": [
+        "fitcloud"
+      ],
+      "capabilities": [],
+      "builtInReader": false,
+      "note": "Compatibility family recognized locally."
+    },
+    {
+      "id": "moyoung-dafit-family",
+      "label": "Moyoung / Da Fit",
+      "deviceKind": "Watch / band",
+      "services": [],
+      "nameTokens": [
+        "moyoung",
+        "dafit"
+      ],
+      "capabilities": [],
+      "builtInReader": false,
+      "note": "Compatibility family recognized locally."
+    },
+    {
+      "id": "gloryfit-family",
+      "label": "GloryFit",
+      "deviceKind": "Watch / band",
+      "services": [],
+      "nameTokens": [
+        "gloryfit"
+      ],
+      "capabilities": [],
+      "builtInReader": false,
+      "note": "Compatibility family recognized locally."
+    },
+    {
+      "id": "fitpro-family",
+      "label": "FitPro / Lefun",
+      "deviceKind": "Watch / band",
+      "services": [],
+      "nameTokens": [
+        "fitpro",
+        "lefun"
+      ],
+      "capabilities": [],
+      "builtInReader": false,
+      "note": "Compatibility family recognized locally."
+    },
+    {
+      "id": "wearfit-family",
+      "label": "WearFit",
+      "deviceKind": "Watch / band",
+      "services": [],
+      "nameTokens": [
+        "wearfit"
+      ],
+      "capabilities": [],
+      "builtInReader": false,
+      "note": "Compatibility family recognized locally."
+    },
+    {
+      "id": "huawei-family",
+      "label": "Huawei / Honor",
+      "deviceKind": "Watch / band",
+      "services": [],
+      "nameTokens": [
+        "huawei",
+        "honor"
+      ],
+      "capabilities": [],
+      "builtInReader": false,
+      "note": "Compatibility family recognized locally."
+    },
+    {
+      "id": "polar-family",
+      "label": "Polar",
+      "deviceKind": "Watch / sensor",
+      "services": [],
+      "nameTokens": [
+        "polar"
+      ],
+      "capabilities": [],
+      "builtInReader": false,
+      "note": "Standard Bluetooth health services are used when exposed."
+    }
+  ]
+}

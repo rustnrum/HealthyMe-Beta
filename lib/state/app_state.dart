@@ -223,18 +223,20 @@ class AppStateNotifier extends Notifier<HealthyMeState> {
 
   void removePhoto(String id) {
     _set(
-      state.copyWith(
-        photos: state.photos.where((item) => item.id != id).toList(),
-      ),
+      state.copyWith(photos: state.photos.where((item) => item.id != id).toList()),
     );
   }
 
   void setMetricSource(String metric, String source) {
     final next = Map<String, String>.from(state.metricSources);
+    final routingMetric = metric == 'Sleep Stages' ? 'Sleep' : metric;
+
     if (source == 'Auto') {
-      next.remove(metric);
+      next.remove(routingMetric);
+      if (routingMetric == 'Sleep') next.remove('Sleep Stages');
     } else {
-      next[metric] = source;
+      next[routingMetric] = source;
+      if (routingMetric == 'Sleep') next['Sleep Stages'] = source;
     }
     _set(state.copyWith(metricSources: next));
   }

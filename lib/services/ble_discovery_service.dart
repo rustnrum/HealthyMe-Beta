@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'ble_protocol_profiles.dart';
+import 'local_protocol_pack_registry.dart';
 
 class BleDeviceCandidate {
   final String id;
@@ -33,7 +34,7 @@ class BleDeviceCandidate {
   });
 
   bool get hasKnownCapabilities =>
-      capabilities.isNotEmpty || protocolProfile != null;
+      capabilities.isNotEmpty || protocolId != null || protocolProfile != null;
 }
 
 class BleServiceInspection {
@@ -90,11 +91,8 @@ class BleDiscoveryService {
       Permission.bluetoothConnect,
     ].request();
 
-    final scan = statuses[Permission.bluetoothScan];
-    final connect = statuses[Permission.bluetoothConnect];
-
-    if (scan != PermissionStatus.granted ||
-        connect != PermissionStatus.granted) {
+    if (statuses[Permission.bluetoothScan] != PermissionStatus.granted ||
+        statuses[Permission.bluetoothConnect] != PermissionStatus.granted) {
       throw StateError(
         'Bluetooth scan/connect permission is required to use nearby Bluetooth devices.',
       );
@@ -106,6 +104,7 @@ class BleDiscoveryService {
   }) async {
     if (!Platform.isAndroid) return const [];
     await _requestPermissions();
+    final registry = await LocalProtocolPackRegistry.load();
 
     try {
       final raw = await _channel.invokeMethod<List<dynamic>>(
@@ -113,16 +112,18 @@ class BleDiscoveryService {
         <String, dynamic>{'durationMs': duration.inMilliseconds},
       );
 
-      final devices = (raw ?? const <dynamic>[])
-          .whereType<Map<dynamic, dynamic>>()
-          .map(_candidateFromMap)
-          .toList()
-        ..sort((a, b) {
-          if (a.hasKnownCapabilities != b.hasKnownCapabilities) {
-            return a.hasKnownCapabilities ? -1 : 1;
-          }
-          return b.rssi.compareTo(a.rssi);
-        });
+      final devices = <BleDeviceCandidate>[];
+      for (final map
+          in (raw ?? const <dynamic>[]).whereType<Map<dynamic, dynamic>>()) {
+        devices.add(_candidateFromMap(map, registry));
+      }
+
+      devices.sort((a, b) {
+        if (a.hasKnownCapabilities != b.hasKnownCapabilities) {
+          return a.hasKnownCapabilities ? -1 : 1;
+        }
+        return b.rssi.compareTo(a.rssi);
+      });
 
       return devices;
     } on PlatformException catch (error) {
@@ -135,6 +136,7 @@ class BleDiscoveryService {
       throw StateError('Bluetooth inspection is only available on Android.');
     }
     await _requestPermissions();
+    final registry = await LocalProtocolPackRegistry.load();
 
     try {
       final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
@@ -157,18 +159,26 @@ class BleDiscoveryService {
           .where((service) => service.serviceUuid.isNotEmpty)
           .toList();
 
-      final report = BleProtocolProfiles.analyze(
-        services.map((service) => service.serviceUuid),
-        name: device.name,
-      );
+      final serviceIds =
+          services.map((service) => service.serviceUuid).toList();
+      final standard =
+          BleProtocolProfiles.analyze(serviceIds, name: device.name);
+      final pack = standard.protocolProfile == null
+          ? registry.match(name: device.name, services: serviceIds)
+          : null;
 
       return BleDeviceInspection(
         services: services,
-        capabilities: report.allCapabilities,
-        protocolProfile: report.protocolProfile?.label,
-        protocolId: report.protocolProfile?.id,
-        protocolNote: report.protocolProfile?.note,
-        deviceKind: report.deviceKind,
+        capabilities: <String>{
+          ...standard.allCapabilities,
+          ...?pack?.capabilities,
+        }.toList(),
+        protocolProfile: standard.protocolProfile?.label ?? pack?.label,
+        protocolId: standard.protocolProfile?.id ?? pack?.id,
+        protocolNote: standard.protocolProfile?.note ?? pack?.note,
+        deviceKind: standard.protocolProfile?.deviceKind ??
+            pack?.deviceKind ??
+            standard.deviceKind,
       );
     } on PlatformException catch (error) {
       throw StateError(error.message ?? error.code);
@@ -177,7 +187,9 @@ class BleDiscoveryService {
 
   Future<BlePairResult> pair(BleDeviceCandidate device) async {
     if (!Platform.isAndroid) {
-      throw StateError('Direct Bluetooth pairing is only available on Android.');
+      throw StateError(
+        'Direct Bluetooth pairing is only available on Android.',
+      );
     }
     await _requestPermissions();
 
@@ -199,25 +211,37 @@ class BleDiscoveryService {
     }
   }
 
-  BleDeviceCandidate _candidateFromMap(Map<dynamic, dynamic> raw) {
+  BleDeviceCandidate _candidateFromMap(
+    Map<dynamic, dynamic> raw,
+    LocalProtocolPackRegistry registry,
+  ) {
     final services =
         (raw['advertisedServices'] as List<dynamic>? ?? const <dynamic>[])
             .map((value) => value.toString())
             .toList();
     final rawName = raw['name']?.toString().trim() ?? '';
     final name = rawName.isEmpty ? 'Unnamed BLE device' : rawName;
-    final report = BleProtocolProfiles.analyze(services, name: name);
+
+    final standard = BleProtocolProfiles.analyze(services, name: name);
+    final pack = standard.protocolProfile == null
+        ? registry.match(name: name, services: services)
+        : null;
 
     return BleDeviceCandidate(
       id: raw['id']?.toString() ?? '',
       name: name,
       rssi: (raw['rssi'] as num?)?.toInt() ?? -127,
       advertisedServices: services,
-      capabilities: report.allCapabilities,
-      protocolProfile: report.protocolProfile?.label,
-      protocolId: report.protocolProfile?.id,
-      protocolNote: report.protocolProfile?.note,
-      deviceKind: report.deviceKind,
+      capabilities: <String>{
+        ...standard.allCapabilities,
+        ...?pack?.capabilities,
+      }.toList(),
+      protocolProfile: standard.protocolProfile?.label ?? pack?.label,
+      protocolId: standard.protocolProfile?.id ?? pack?.id,
+      protocolNote: standard.protocolProfile?.note ?? pack?.note,
+      deviceKind: standard.protocolProfile?.deviceKind ??
+          pack?.deviceKind ??
+          standard.deviceKind,
       manufacturerDataHex: raw['manufacturerDataHex']?.toString() ?? '',
       bondState: raw['bondState']?.toString() ?? 'unknown',
     );
