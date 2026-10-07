@@ -335,6 +335,10 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen> {
                   '/cpap',
                   arguments: device.id,
                 ),
+                onOpenWatch: () => Navigator.of(context).pushNamed(
+                  '/watch-device',
+                  arguments: device.id,
+                ),
                 onRemove: () => _remove(device),
               ),
               const SizedBox(height: 10),
@@ -579,6 +583,7 @@ class _SavedDeviceCard extends StatelessWidget {
   final List<String> metrics;
   final VoidCallback onSync;
   final VoidCallback onOpenTherapy;
+  final VoidCallback onOpenWatch;
   final VoidCallback onRemove;
 
   const _SavedDeviceCard({
@@ -588,6 +593,7 @@ class _SavedDeviceCard extends StatelessWidget {
     required this.metrics,
     required this.onSync,
     required this.onOpenTherapy,
+    required this.onOpenWatch,
     required this.onRemove,
   });
 
@@ -616,6 +622,10 @@ class _SavedDeviceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final therapyPending = device.protocolId == 'cpap-family';
+    final kind = device.deviceKind.toLowerCase();
+    final isWatch = kind.contains('watch') ||
+        kind.contains('band') ||
+        (device.protocolId ?? '').toLowerCase().contains('garmin');
     final displayMetrics = therapyPending
         ? const [
             'Usage time',
@@ -730,24 +740,30 @@ class _SavedDeviceCard extends StatelessWidget {
             child: OutlinedButton.icon(
               onPressed: therapyPending
                   ? onOpenTherapy
-                  : syncing
-                      ? null
-                      : onSync,
+                  : isWatch
+                      ? onOpenWatch
+                      : syncing
+                          ? null
+                          : onSync,
               icon: therapyPending
                   ? const Icon(Icons.insights_rounded, size: 18)
-                  : syncing
-                      ? const SizedBox(
-                          width: 17,
-                          height: 17,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.sync_rounded, size: 18),
+                  : isWatch
+                      ? const Icon(Icons.watch_outlined, size: 18)
+                      : syncing
+                          ? const SizedBox(
+                              width: 17,
+                              height: 17,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.sync_rounded, size: 18),
               label: Text(
                 therapyPending
                     ? 'Open CPAP dashboard'
-                    : syncing
-                        ? 'Syncing…'
-                        : 'Sync now',
+                    : isWatch
+                        ? 'Watch settings'
+                        : syncing
+                            ? 'Syncing…'
+                            : 'Sync now',
               ),
             ),
           ),

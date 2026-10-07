@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.sqrt
 
 /**
- * SALUS_PROTOCOL_METRICS_V035
+ * SALUS_PROTOCOL_METRICS_V036
  *
  * Local protocol readers plus a two-stage read-only ResMed AirSense 11 secure session reader.
  * The ResMed path only performs pairing/session RPC plus read-only Get requests;
@@ -124,6 +124,12 @@ class SalusProtocolReader(
         )
     }
 
+    private data class ProtoValue(
+        val wire: Int,
+        val varint: Long? = null,
+        val bytes: ByteArray? = null,
+    )
+
     @SuppressLint("MissingPermission")
     fun read(
         deviceId: String,
@@ -178,6 +184,7 @@ class SalusProtocolReader(
     ) {
         private val completed = AtomicBoolean(false)
         private val metrics = linkedMapOf<String, Double>()
+        private val historySamples = mutableListOf<Map<String, Any>>()
         private val notes = mutableListOf<String>()
         private var readerName = "Bluetooth protocol"
         private var mode = "unknown"
@@ -241,6 +248,8 @@ class SalusProtocolReader(
         private var cpapSessionKey: ByteArray? = null
         private val cpapWriteQueue = java.util.ArrayDeque<ByteArray>()
         private var cpapWriteBusy = false
+        private val cpapSpoolBuffer = ByteArrayOutputStream()
+        private var cpapSummaryRecords = 0
 
         private val callback = object : BluetoothGattCallback() {
             override fun onConnectionStateChange(
@@ -531,6 +540,7 @@ class SalusProtocolReader(
                     mapOf(
                         "reader" to readerName,
                         "metrics" to metrics,
+                        "history" to historySamples,
                         "message" to finalMessage,
                         "fallbackStandard" to fallbackStandard,
                         "observations" to if (mode == "cpap") {
@@ -554,6 +564,31 @@ class SalusProtocolReader(
                     )
                 )
             }
+        }
+
+        private fun addHistoryMetric(
+            metric: String,
+            value: Double,
+            capturedAtMs: Long,
+        ) {
+            if (!value.isFinite() || capturedAtMs <= 0L) return
+            historySamples.add(
+                mapOf(
+                    "metric" to metric,
+                    "value" to value,
+                    "capturedAtMs" to capturedAtMs,
+                )
+            )
+        }
+
+        private fun dayTimestamp(daysAgo: Int): Long {
+            val calendar = Calendar.getInstance()
+            calendar.set(Calendar.HOUR_OF_DAY, 12)
+            calendar.set(Calendar.MINUTE, 0)
+            calendar.set(Calendar.SECOND, 0)
+            calendar.set(Calendar.MILLISECOND, 0)
+            calendar.add(Calendar.DAY_OF_YEAR, -daysAgo.coerceAtLeast(0))
+            return calendar.timeInMillis
         }
 
         private fun u16(bytes: ByteArray, offset: Int): Int {
@@ -875,7 +910,14 @@ class SalusProtocolReader(
         ) {
             val request = JSONObject()
             request.put("id", ++cpapRpcId)
-            request.put("jsonrpc", if (method == "Get") "1.0" else "2.0")
+            request.put(
+                "jsonrpc",
+                if (
+                    method == "Get" ||
+                    method == "StartSpool" ||
+                    method == "PullSpoolFragments"
+                ) "1.0" else "2.0",
+            )
             request.put("method", method)
             if (params != null) request.put("params", params)
             val json = request.toString().toByteArray(Charsets.UTF_8)
@@ -974,6 +1016,10 @@ class SalusProtocolReader(
         }
 
         private fun handleCpapJson(message: JSONObject) {
+            if (message.optString("method") == "SpoolFragment") {
+                handleCpapSpoolFragment(message.optJSONObject("params"))
+                return
+            }
             val method = cpapPendingMethod
             if (message.has("error")) {
                 val error = message.optJSONObject("error")
@@ -985,12 +1031,12 @@ class SalusProtocolReader(
                 }
                 if (method == "Get") {
                     error?.optJSONObject("data")?.let { parseCpapGetResult(it) }
-                    if (metrics.isNotEmpty()) {
-                        cpapAuthenticated = true
-                        finish("ResMed secure session returned ${metrics.size} verified therapy metrics.")
-                    } else {
-                        finish("ResMed secure session opened, but the requested therapy fields were unavailable on this firmware/state.")
-                    }
+                    startCpapSummaryHistory()
+                } else if (method == "StartSpool" || method == "PullSpoolFragments") {
+                    finish(
+                        "ResMed live summary synced, but stored Summary history was unavailable: " +
+                            (error?.optString("message") ?: "spool error")
+                    )
                 } else {
                     finish("ResMed $method returned ${error?.optString("message") ?: "an error"}.")
                 }
@@ -1092,16 +1138,202 @@ class SalusProtocolReader(
                 }
                 "Get" -> {
                     if (resultObject != null) parseCpapGetResult(resultObject)
-                    finish(
-                        if (metrics.isEmpty()) {
-                            "ResMed secure session opened, but no requested therapy values were available right now."
-                        } else {
-                            "ResMed secure session read ${metrics.size} verified therapy metric${if (metrics.size == 1) "" else "s"}."
-                        }
-                    )
+                    startCpapSummaryHistory()
+                }
+                "StartSpool" -> {
+                    val spoolId = resultObject?.optInt("spoolId", -1) ?: -1
+                    if (spoolId < 0) {
+                        finish("ResMed Summary history did not return a spool id.")
+                        return
+                    }
+                    val params = JSONObject()
+                        .put("spoolId", spoolId)
+                        .put("maxFragmentSize", 3000)
+                        .put("maxNotifications", 0)
+                    sendCpapRpc("PullSpoolFragments", params, encrypted = true)
+                }
+                "PullSpoolFragments" -> {
+                    // SpoolFragment notifications carry the data.
                 }
             }
         }
+
+
+private fun startCpapSummaryHistory(
+    spoolAddressOverride: JSONObject? = null,
+) {
+    cpapSpoolBuffer.reset()
+    val address = spoolAddressOverride ?: JSONObject().put(
+        "Summary",
+        JSONObject().put(
+            "fromDateTime",
+            java.time.Instant.ofEpochMilli(
+                System.currentTimeMillis() - 35L * 24L * 60L * 60L * 1000L
+            ).toString(),
+        ),
+    )
+    val params = JSONObject()
+        .put("spoolAddress", address)
+        .put("maxSpoolSize", 32768)
+    sendCpapRpc("StartSpool", params, encrypted = true)
+}
+
+private fun handleCpapSpoolFragment(params: JSONObject?) {
+    if (params == null) return
+    val encoded = params.optString("data")
+    if (encoded.isNotBlank()) {
+        try {
+            cpapSpoolBuffer.write(
+                android.util.Base64.decode(
+                    encoded,
+                    android.util.Base64.DEFAULT,
+                )
+            )
+        } catch (_: Throwable) {
+            notes.add("A ResMed Summary spool fragment could not be decoded.")
+        }
+    }
+    val status = params.optString("status")
+    if (status == "SPOOL_INCOMPLETE" || status.isBlank()) return
+    val bytes = cpapSpoolBuffer.toByteArray()
+    cpapSpoolBuffer.reset()
+    if (bytes.isNotEmpty()) parseCpapSummaryPayload(bytes)
+    if (status == "SPOOL_COMPLETE_MORE_DATA_PENDING") {
+        val next = params.optJSONObject("nextSpoolAddress")
+        if (next != null) {
+            startCpapSummaryHistory(next)
+            return
+        }
+    }
+    if (
+        status == "SPOOL_COMPLETE_NO_MORE_DATA" ||
+        status == "SPOOL_COMPLETE_MORE_DATA_PENDING" ||
+        status == "ERROR_DATA_UNAVAILABLE"
+    ) {
+        finish(
+            "ResMed secure sync completed with ${cpapSummaryRecords} stored nightly Summary record" +
+                (if (cpapSummaryRecords == 1) "." else "s.")
+        )
+    }
+}
+
+private fun readProtoVarint(
+    data: ByteArray,
+    start: Int,
+): Pair<Long, Int>? {
+    var value = 0L
+    var shift = 0
+    var index = start
+    while (index < data.size && shift < 64) {
+        val byte = data[index].toInt() and 0xff
+        value = value or ((byte and 0x7f).toLong() shl shift)
+        index += 1
+        if (byte and 0x80 == 0) return value to index
+        shift += 7
+    }
+    return null
+}
+
+private fun protoFields(data: ByteArray): Map<Int, List<ProtoValue>> {
+    val result = linkedMapOf<Int, MutableList<ProtoValue>>()
+    var index = 0
+    while (index < data.size) {
+        val keyRead = readProtoVarint(data, index) ?: break
+        val key = keyRead.first
+        index = keyRead.second
+        val field = (key ushr 3).toInt()
+        val wire = (key and 7L).toInt()
+        if (field <= 0) break
+        when (wire) {
+            0 -> {
+                val read = readProtoVarint(data, index) ?: break
+                index = read.second
+                result.getOrPut(field) { mutableListOf() }
+                    .add(ProtoValue(wire = wire, varint = read.first))
+            }
+            1 -> {
+                if (index + 8 > data.size) break
+                index += 8
+            }
+            2 -> {
+                val lengthRead = readProtoVarint(data, index) ?: break
+                index = lengthRead.second
+                val length = lengthRead.first.toInt()
+                if (length < 0 || index + length > data.size) break
+                val chunk = data.copyOfRange(index, index + length)
+                index += length
+                result.getOrPut(field) { mutableListOf() }
+                    .add(ProtoValue(wire = wire, bytes = chunk))
+            }
+            5 -> {
+                if (index + 4 > data.size) break
+                index += 4
+            }
+            else -> break
+        }
+    }
+    return result
+}
+
+private fun protoFirstVarint(
+    fields: Map<Int, List<ProtoValue>>,
+    field: Int,
+): Long? = fields[field]?.firstOrNull { it.varint != null }?.varint
+
+private fun protoNestedValue(
+    fields: Map<Int, List<ProtoValue>>,
+    field: Int,
+    preferredSubfield: Int,
+    fallbackSubfield: Int? = null,
+): Long? {
+    val nested = fields[field]?.firstOrNull { it.bytes != null }?.bytes
+        ?: return null
+    val child = protoFields(nested)
+    return protoFirstVarint(child, preferredSubfield)
+        ?: fallbackSubfield?.let { protoFirstVarint(child, it) }
+}
+
+private fun parseCpapSummaryPayload(payload: ByteArray) {
+    val records = protoFields(payload)[2].orEmpty().mapNotNull { it.bytes }
+    for (record in records) {
+        val fields = protoFields(record)
+        val periodStart = protoFirstVarint(fields, 2) ?: continue
+        if (periodStart < 946684800000L) continue
+        var added = false
+        protoFirstVarint(fields, 5)?.toDouble()?.let {
+            if (it in 0.0..1440.0) {
+                addHistoryMetric("Usage time", it, periodStart)
+                added = true
+            }
+        }
+        protoFirstVarint(fields, 7)?.toDouble()?.div(100.0)?.let {
+            if (it in 0.0..240.0) {
+                addHistoryMetric("AHI", it, periodStart)
+                added = true
+            }
+        }
+        protoNestedValue(fields, 14, 4, 3)?.toDouble()?.div(100.0)
+            ?.times(60.0)?.let {
+                if (it in 0.0..240.0) {
+                    addHistoryMetric("Leak rate", it, periodStart)
+                    added = true
+                }
+            }
+        protoNestedValue(fields, 21, 2, 3)?.toDouble()?.div(100.0)?.let {
+            if (it in 0.0..40.0) {
+                addHistoryMetric("Therapy pressure", it, periodStart)
+                added = true
+            }
+        }
+        protoNestedValue(fields, 25, 2, 3)?.toDouble()?.div(100.0)?.let {
+            if (it in 0.0..80.0) {
+                addHistoryMetric("Respiratory rate", it, periodStart)
+                added = true
+            }
+        }
+        if (added) cpapSummaryRecords += 1
+    }
+}
 
         private fun requestCpapReadOnlyData() {
             // These are read-only Get targets documented by the AirSense 11
@@ -1582,93 +1814,110 @@ class SalusProtocolReader(
             }
         }
 
-        private fun parseRingSleep(payload: ByteArray) {
-            if (payload.isEmpty()) return
-            val nightCount = payload[0].toInt() and 0xff
-            var pointer = 1
-            var bestDaysAgo = Int.MAX_VALUE
-            var bestLight = 0
-            var bestDeep = 0
-            var bestRem = 0
-            var bestAwake = 0
 
-            repeat(nightCount) {
-                if (pointer + 6 > payload.size) return@repeat
-                val daysAgo = payload[pointer].toInt() and 0xff
-                val recordBytes = payload[pointer + 1].toInt() and 0xff
-                val end = pointer + 2 + recordBytes
-                if (end <= pointer || end > payload.size) return@repeat
+private fun parseRingSleep(payload: ByteArray) {
+    if (payload.isEmpty()) return
+    val nightCount = payload[0].toInt() and 0xff
+    var pointer = 1
+    var bestDaysAgo = Int.MAX_VALUE
+    var bestLight = 0
+    var bestDeep = 0
+    var bestRem = 0
+    var bestAwake = 0
 
-                var light = 0
-                var deep = 0
-                var rem = 0
-                var awake = 0
-                var cursor = pointer + 6
-
-                while (cursor + 1 < end) {
-                    val stage = payload[cursor].toInt() and 0xff
-                    val minutes = payload[cursor + 1].toInt() and 0xff
-                    when (stage) {
-                        2 -> light += minutes
-                        3 -> deep += minutes
-                        4 -> rem += minutes
-                        5 -> awake += minutes
-                    }
-                    cursor += 2
-                }
-
-                val asleep = light + deep + rem
-                if (asleep > 0 && daysAgo < bestDaysAgo) {
-                    bestDaysAgo = daysAgo
-                    bestLight = light
-                    bestDeep = deep
-                    bestRem = rem
-                    bestAwake = awake
-                }
-                pointer = end
+    repeat(nightCount) {
+        if (pointer + 6 > payload.size) return@repeat
+        val daysAgo = payload[pointer].toInt() and 0xff
+        val recordBytes = payload[pointer + 1].toInt() and 0xff
+        val end = pointer + 2 + recordBytes
+        if (end <= pointer || end > payload.size) return@repeat
+        var light = 0
+        var deep = 0
+        var rem = 0
+        var awake = 0
+        var cursor = pointer + 6
+        while (cursor + 1 < end) {
+            val stage = payload[cursor].toInt() and 0xff
+            val minutes = payload[cursor + 1].toInt() and 0xff
+            when (stage) {
+                2 -> light += minutes
+                3 -> deep += minutes
+                4 -> rem += minutes
+                5 -> awake += minutes
             }
+            cursor += 2
+        }
+        val asleep = light + deep + rem
+        if (asleep > 0) {
+            val captured = dayTimestamp(daysAgo)
+            addHistoryMetric("Sleep", asleep.toDouble(), captured)
+            addHistoryMetric("Sleep light", light.toDouble(), captured)
+            addHistoryMetric("Sleep deep", deep.toDouble(), captured)
+            if (rem > 0) addHistoryMetric("Sleep REM", rem.toDouble(), captured)
+            addHistoryMetric("Sleep awake", awake.toDouble(), captured)
+        }
+        if (asleep > 0 && daysAgo < bestDaysAgo) {
+            bestDaysAgo = daysAgo
+            bestLight = light
+            bestDeep = deep
+            bestRem = rem
+            bestAwake = awake
+        }
+        pointer = end
+    }
 
-            val asleep = bestLight + bestDeep + bestRem
-            if (asleep > 0) {
-                metrics["Sleep"] = asleep.toDouble()
-                metrics["Sleep light"] = bestLight.toDouble()
-                metrics["Sleep deep"] = bestDeep.toDouble()
-                metrics["Sleep REM"] = bestRem.toDouble()
-                metrics["Sleep awake"] = bestAwake.toDouble()
+    val asleep = bestLight + bestDeep + bestRem
+    if (asleep > 0) {
+        metrics["Sleep"] = asleep.toDouble()
+        metrics["Sleep light"] = bestLight.toDouble()
+        metrics["Sleep deep"] = bestDeep.toDouble()
+        if (bestRem > 0) metrics["Sleep REM"] = bestRem.toDouble()
+        metrics["Sleep awake"] = bestAwake.toDouble()
+    }
+}
+
+
+private fun parseRingSpo2(payload: ByteArray) {
+    var bestDaysAgo = Int.MAX_VALUE
+    var bestHour = -1
+    var latest = 0.0
+    var base = 0
+
+    while (base + 49 <= payload.size) {
+        val daysAgo = payload[base].toInt() and 0xff
+        var dailyTotal = 0.0
+        var dailyCount = 0
+        for (hour in 0 until 24) {
+            val maximum = payload[base + 1 + hour * 2].toInt() and 0xff
+            val minimum = payload[base + 2 + hour * 2].toInt() and 0xff
+            if (maximum == 0 && minimum == 0) continue
+            val low = if (minimum > 0) minimum else maximum
+            val high = if (maximum > 0) maximum else minimum
+            val average = (low + high) / 2.0
+            if (average in 70.0..100.0) {
+                dailyTotal += average
+                dailyCount += 1
+            }
+            if (
+                daysAgo < bestDaysAgo ||
+                (daysAgo == bestDaysAgo && hour > bestHour)
+            ) {
+                bestDaysAgo = daysAgo
+                bestHour = hour
+                latest = average
             }
         }
-
-        private fun parseRingSpo2(payload: ByteArray) {
-            var bestDaysAgo = Int.MAX_VALUE
-            var bestHour = -1
-            var latest = 0.0
-            var base = 0
-
-            while (base + 49 <= payload.size) {
-                val daysAgo = payload[base].toInt() and 0xff
-                for (hour in 0 until 24) {
-                    val maximum = payload[base + 1 + hour * 2].toInt() and 0xff
-                    val minimum = payload[base + 2 + hour * 2].toInt() and 0xff
-                    if (maximum == 0 && minimum == 0) continue
-
-                    if (
-                        daysAgo < bestDaysAgo ||
-                        (daysAgo == bestDaysAgo && hour > bestHour)
-                    ) {
-                        bestDaysAgo = daysAgo
-                        bestHour = hour
-                        val low = if (minimum > 0) minimum else maximum
-                        val high = if (maximum > 0) maximum else minimum
-                        latest = (low + high) / 2.0
-                    }
-                }
-                base += 49
-            }
-
-            if (latest in 70.0..100.0) {
-                metrics["SpO2"] = latest
-            }
+        if (dailyCount > 0) {
+            addHistoryMetric(
+                "SpO2",
+                dailyTotal / dailyCount.toDouble(),
+                dayTimestamp(daysAgo),
+            )
         }
+        base += 49
+    }
+    if (latest in 70.0..100.0) metrics["SpO2"] = latest
+}
 
         // -----------------------------------------------------------------
         // Garmin Multi-Link real-time reader.

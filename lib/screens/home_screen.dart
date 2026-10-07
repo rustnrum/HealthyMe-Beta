@@ -2,17 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_theme.dart';
+import '../models/workout_models.dart';
+import '../services/direct_device_store.dart';
+import '../services/direct_metric_service.dart';
 import '../services/recovery_service.dart';
 import '../state/app_state.dart';
 import '../state/health_sync_provider.dart';
 import '../state/navigation_provider.dart';
+import '../state/today_plan_state.dart';
+import '../state/workout_state.dart';
 import '../widgets/salus_widgets.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
-  String _sleep(int minutes) => minutes <= 0 ? '—' : '${minutes ~/ 60}h ${minutes % 60}m';
-  String _weight(double? value) => value == null ? '—' : '${value.toStringAsFixed(1)} lb';
+  String _sleep(int minutes) =>
+      minutes <= 0 ? '—' : '${minutes ~/ 60}h ${minutes % 60}m';
+  String _weight(double? value) =>
+      value == null ? '—' : '${value.toStringAsFixed(1)} lb';
   String _number(double? value, String suffix, {int decimals = 0}) =>
       value == null ? '—' : '${value.toStringAsFixed(decimals)} $suffix';
 
@@ -55,6 +62,16 @@ class HomeScreen extends ConsumerWidget {
     final h = app.health;
     final recovery = RecoveryService.build(app);
     final weight = app.currentWeightLb;
+    final mealState = ref.watch(todayPlanStateProvider);
+    final workoutState = ref.watch(workoutStateProvider);
+    final now = DateTime.now();
+    final meals = mealState.mealsFor(now);
+    final plannedWorkouts = workoutState.scheduled
+        .where((item) => _sameDay(item.scheduledFor, now))
+        .toList();
+    final completedToday = workoutState.history
+        .where((item) => _sameDay(item.completedAt, now))
+        .toList();
     final firstName = app.profile.firstName.trim().isEmpty
         ? 'there'
         : app.profile.firstName.trim().split(RegExp(r'\s+')).first;
@@ -75,7 +92,13 @@ class HomeScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(_greeting(), style: const TextStyle(color: AppTheme.textSecondary, fontSize: 18, fontWeight: FontWeight.w400)),
+                      Text(
+                        _greeting(),
+                        style: const TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 18,
+                        ),
+                      ),
                       const SizedBox(height: 2),
                       Text(
                         firstName,
@@ -89,8 +112,12 @@ class HomeScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Your signals, your baseline, your next move.',
-                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 14.5, height: 1.35),
+                        'What’s on the plan today — and how you’re doing.',
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 14.5,
+                          height: 1.35,
+                        ),
                       ),
                     ],
                   ),
@@ -98,7 +125,10 @@ class HomeScreen extends ConsumerWidget {
                 IconButton.filledTonal(
                   tooltip: 'Salus AI',
                   onPressed: () => Navigator.of(context).pushNamed('/coach'),
-                  icon: const Icon(Icons.auto_awesome_rounded, color: AppTheme.cyan),
+                  icon: const Icon(
+                    Icons.auto_awesome_rounded,
+                    color: AppTheme.cyan,
+                  ),
                 ),
               ],
             ),
@@ -110,7 +140,50 @@ class HomeScreen extends ConsumerWidget {
                 onTap: () => Navigator.of(context).pushNamed('/recovery'),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
+            _TodayPlanCard(
+              meals: meals,
+              plannedWorkouts: plannedWorkouts,
+              completedWorkoutCount: completedToday.length,
+              onMeals: () => Navigator.of(context).pushNamed('/diet'),
+              onWorkout: () => Navigator.of(context).pushNamed('/workout'),
+            ),
+            const SizedBox(height: 12),
+            FutureBuilder<List<_DeviceBattery>>(
+              future: _loadDeviceBatteries(),
+              builder: (context, snapshot) {
+                final batteries = snapshot.data ?? const <_DeviceBattery>[];
+                if (batteries.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: SalusPaper(
+                    padding: const EdgeInsets.fromLTRB(15, 13, 15, 13),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Device batteries',
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 9),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final item in batteries)
+                              _BatteryChip(item: item),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
             Row(
               children: [
                 Expanded(
@@ -120,9 +193,11 @@ class HomeScreen extends ConsumerWidget {
                       icon: Icons.bedtime_rounded,
                       label: 'Sleep',
                       value: _sleep(h.sleepMinutes),
-                      status: h.sleepMinutes <= 0 ? 'Awaiting data' : 'Last sleep',
+                      status:
+                          h.sleepMinutes <= 0 ? 'Awaiting data' : 'Last sleep',
                       color: AppTheme.blue,
-                      onTap: () => ref.read(navigationProvider.notifier).go(2),
+                      onTap: () =>
+                          ref.read(navigationProvider.notifier).go(2),
                     ),
                   ),
                 ),
@@ -136,7 +211,8 @@ class HomeScreen extends ConsumerWidget {
                       value: _number(h.hrvMs, 'ms'),
                       status: _baselineStatus(h.hrvMs, h.hrv30),
                       color: AppTheme.mint,
-                      onTap: () => Navigator.of(context).pushNamed('/trends'),
+                      onTap: () =>
+                          Navigator.of(context).pushNamed('/trends'),
                     ),
                   ),
                 ),
@@ -148,9 +224,13 @@ class HomeScreen extends ConsumerWidget {
                       icon: Icons.favorite_border_rounded,
                       label: 'Resting HR',
                       value: _number(h.restingHeartRate, 'bpm'),
-                      status: _baselineStatus(h.restingHeartRate, h.restingHeartRate30),
+                      status: _baselineStatus(
+                        h.restingHeartRate,
+                        h.restingHeartRate30,
+                      ),
                       color: AppTheme.rose,
-                      onTap: () => Navigator.of(context).pushNamed('/trends'),
+                      onTap: () =>
+                          Navigator.of(context).pushNamed('/trends'),
                     ),
                   ),
                 ),
@@ -165,10 +245,15 @@ class HomeScreen extends ConsumerWidget {
                     child: SalusGlassMetricCard(
                       icon: Icons.air_rounded,
                       label: 'Respiration',
-                      value: _number(h.respiratoryRate, '/min', decimals: 1),
-                      status: _baselineStatus(h.respiratoryRate, h.respiratoryRate30),
+                      value:
+                          _number(h.respiratoryRate, '/min', decimals: 1),
+                      status: _baselineStatus(
+                        h.respiratoryRate,
+                        h.respiratoryRate30,
+                      ),
                       color: AppTheme.cyan,
-                      onTap: () => Navigator.of(context).pushNamed('/trends'),
+                      onTap: () =>
+                          Navigator.of(context).pushNamed('/trends'),
                     ),
                   ),
                 ),
@@ -179,10 +264,17 @@ class HomeScreen extends ConsumerWidget {
                     child: SalusGlassMetricCard(
                       icon: Icons.water_drop_outlined,
                       label: 'SpO₂',
-                      value: _number(h.bloodOxygenPercent, '%', decimals: 0),
-                      status: h.bloodOxygenPercent == null ? 'Awaiting data' : 'Latest reading',
+                      value: _number(
+                        h.bloodOxygenPercent,
+                        '%',
+                        decimals: 0,
+                      ),
+                      status: h.bloodOxygenPercent == null
+                          ? 'Awaiting data'
+                          : 'Latest reading',
                       color: AppTheme.purple,
-                      onTap: () => Navigator.of(context).pushNamed('/health'),
+                      onTap: () =>
+                          Navigator.of(context).pushNamed('/health'),
                     ),
                   ),
                 ),
@@ -198,9 +290,12 @@ class HomeScreen extends ConsumerWidget {
                       icon: Icons.directions_walk_rounded,
                       label: 'Steps',
                       value: '${h.stepsToday}',
-                      status: h.stepsToday == 0 ? 'Awaiting movement data' : 'Today',
+                      status: h.stepsToday == 0
+                          ? 'Awaiting movement data'
+                          : 'Today',
                       color: AppTheme.cyan,
-                      onTap: () => ref.read(navigationProvider.notifier).go(1),
+                      onTap: () =>
+                          ref.read(navigationProvider.notifier).go(1),
                     ),
                   ),
                 ),
@@ -212,9 +307,11 @@ class HomeScreen extends ConsumerWidget {
                       icon: Icons.monitor_weight_outlined,
                       label: 'Weight',
                       value: _weight(weight),
-                      status: weight == null ? 'Awaiting scale data' : 'Current',
+                      status:
+                          weight == null ? 'Awaiting scale data' : 'Current',
                       color: AppTheme.blue,
-                      onTap: () => ref.read(navigationProvider.notifier).go(3),
+                      onTap: () =>
+                          ref.read(navigationProvider.notifier).go(3),
                     ),
                   ),
                 ),
@@ -227,39 +324,23 @@ class HomeScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(colors: [AppTheme.cyan.withValues(alpha: 0.25), AppTheme.cyan.withValues(alpha: 0.06)]),
-                          border: Border.all(color: AppTheme.cyan.withValues(alpha: 0.35)),
-                        ),
-                        child: const Icon(Icons.track_changes_rounded, color: AppTheme.cyan),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Today’s Focus', style: TextStyle(color: AppTheme.textPrimary, fontSize: 19, fontWeight: FontWeight.w700)),
-                            SizedBox(height: 2),
-                            Text('Small steps. Clear signals.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13.5)),
-                          ],
-                        ),
-                      ),
-                    ],
+                  const Text(
+                    'Today’s actions',
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 19,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  const SizedBox(height: 15),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       SalusQuickAction(
                         icon: Icons.edit_note_rounded,
                         label: 'Check-in',
                         color: AppTheme.mint,
-                        onTap: () => Navigator.of(context).pushNamed('/daily-state'),
+                        onTap: () =>
+                            Navigator.of(context).pushNamed('/daily-state'),
                       ),
                       const SizedBox(width: 8),
                       SalusQuickAction(
@@ -272,25 +353,21 @@ class HomeScreen extends ConsumerWidget {
                         icon: Icons.insights_rounded,
                         label: 'Trends',
                         color: AppTheme.blue,
-                        onTap: () => Navigator.of(context).pushNamed('/trends'),
+                        onTap: () =>
+                            Navigator.of(context).pushNamed('/trends'),
                       ),
                       const SizedBox(width: 8),
                       SalusQuickAction(
                         icon: Icons.bluetooth_searching_rounded,
                         label: 'Devices',
                         color: AppTheme.purple,
-                        onTap: () => Navigator.of(context).pushNamed('/sources'),
+                        onTap: () =>
+                            Navigator.of(context).pushNamed('/sources'),
                       ),
                     ],
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 12),
-            TextButton.icon(
-              onPressed: () => Navigator.of(context).pushNamed('/coach'),
-              icon: const Icon(Icons.auto_awesome_rounded),
-              label: const Text('Ask Salus AI about today’s data'),
             ),
           ],
         ),
@@ -298,3 +375,253 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 }
+
+class _TodayPlanCard extends StatelessWidget {
+  final Map<String, String> meals;
+  final List<ScheduledWorkout> plannedWorkouts;
+  final int completedWorkoutCount;
+  final VoidCallback onMeals;
+  final VoidCallback onWorkout;
+
+  const _TodayPlanCard({
+    required this.meals,
+    required this.plannedWorkouts,
+    required this.completedWorkoutCount,
+    required this.onMeals,
+    required this.onWorkout,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SalusPaper(
+      glow: true,
+      padding: const EdgeInsets.fromLTRB(16, 15, 16, 15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.today_rounded, color: AppTheme.cyan),
+              SizedBox(width: 9),
+              Text(
+                'Today',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          for (final slot in salusMealSlots)
+            _PlanRow(
+              icon: _mealIcon(slot),
+              tint: _mealColor(slot),
+              title: slot,
+              detail: (meals[slot] ?? '').trim().isEmpty
+                  ? 'Not planned'
+                  : meals[slot]!,
+              onTap: onMeals,
+            ),
+          const Divider(height: 20),
+          _PlanRow(
+            icon: completedWorkoutCount > 0
+                ? Icons.check_circle_rounded
+                : Icons.fitness_center_rounded,
+            tint: completedWorkoutCount > 0 ? AppTheme.mint : AppTheme.cyan,
+            title: 'Workout',
+            detail: completedWorkoutCount > 0
+                ? 'Completed today'
+                : plannedWorkouts.isEmpty
+                    ? 'No workout scheduled'
+                    : plannedWorkouts.map((item) => item.name).join(' • '),
+            onTap: onWorkout,
+          ),
+          if (plannedWorkouts.isNotEmpty && completedWorkoutCount == 0) ...[
+            const SizedBox(height: 7),
+            for (final exercise in plannedWorkouts
+                .expand((workout) => workout.exercises)
+                .take(5))
+              Padding(
+                padding: const EdgeInsets.only(left: 34, bottom: 4),
+                child: Text(
+                  '${exercise.name} • ${exercise.sets}×${exercise.reps}'
+                  '${exercise.weight == null ? '' : ' • ${_trim(exercise.weight!)} lb'}',
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 11.8,
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static IconData _mealIcon(String slot) => switch (slot) {
+        'Breakfast' => Icons.wb_sunny_outlined,
+        'Lunch' => Icons.light_mode_outlined,
+        'Dinner' => Icons.wb_twilight_outlined,
+        _ => Icons.bedtime_outlined,
+      };
+
+  static Color _mealColor(String slot) => switch (slot) {
+        'Breakfast' => AppTheme.mint,
+        'Lunch' => AppTheme.amber,
+        'Dinner' => AppTheme.rose,
+        _ => AppTheme.purple,
+      };
+}
+
+class _PlanRow extends StatelessWidget {
+  final IconData icon;
+  final Color tint;
+  final String title;
+  final String detail;
+  final VoidCallback onTap;
+
+  const _PlanRow({
+    required this.icon,
+    required this.tint,
+    required this.title,
+    required this.detail,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(
+          children: [
+            Icon(icon, color: tint, size: 20),
+            const SizedBox(width: 11),
+            SizedBox(
+              width: 76,
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                detail,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12.5,
+                  height: 1.25,
+                ),
+              ),
+            ),
+            const SizedBox(width: 5),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppTheme.textMuted,
+              size: 19,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeviceBattery {
+  final SavedDirectDevice device;
+  final double value;
+
+  const _DeviceBattery(this.device, this.value);
+}
+
+class _BatteryChip extends StatelessWidget {
+  final _DeviceBattery item;
+
+  const _BatteryChip({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        final kind = item.device.deviceKind.toLowerCase();
+        final isWatch = kind.contains('watch') || kind.contains('band');
+        if (item.device.protocolId == 'cpap-family') {
+          Navigator.of(context).pushNamed('/cpap', arguments: item.device.id);
+        } else if (isWatch) {
+          Navigator.of(context)
+              .pushNamed('/watch-device', arguments: item.device.id);
+        } else {
+          Navigator.of(context).pushNamed('/sources');
+        }
+      },
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: AppTheme.mint.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppTheme.mint.withValues(alpha: 0.20)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.battery_charging_full_rounded,
+              color: AppTheme.mint,
+              size: 16,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              '${item.device.name} ${item.value.round()}%',
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 11.7,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<List<_DeviceBattery>> _loadDeviceBatteries() async {
+  final devices = await DirectDeviceStore().load();
+  final samples = await DirectMetricService().loadSamples();
+  final values = <_DeviceBattery>[];
+  for (final device in devices) {
+    final matching = samples
+        .where(
+          (sample) =>
+              sample.deviceId == device.id && sample.metric == 'Battery',
+        )
+        .toList()
+      ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+    if (matching.isEmpty) continue;
+    values.add(
+      _DeviceBattery(
+        device,
+        matching.last.value.clamp(0.0, 100.0).toDouble(),
+      ),
+    );
+  }
+  return values;
+}
+
+bool _sameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+String _trim(double value) => value == value.roundToDouble()
+    ? value.round().toString()
+    : value.toStringAsFixed(1);

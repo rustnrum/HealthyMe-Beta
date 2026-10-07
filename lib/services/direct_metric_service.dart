@@ -59,6 +59,7 @@ class DirectMetricReadResult {
   final String reader;
   final List<String> observations;
   final Map<String, int> diagnostics;
+  final List<DirectMetricSample> history;
 
   const DirectMetricReadResult({
     required this.metrics,
@@ -66,6 +67,7 @@ class DirectMetricReadResult {
     this.reader = 'generic',
     this.observations = const [],
     this.diagnostics = const {},
+    this.history = const [],
   });
 
   bool get hasMetrics => metrics.isNotEmpty;
@@ -236,10 +238,37 @@ class DirectMetricService {
       }
     }
 
+    final sourceId = 'ble:${device.id}';
+    final history = <DirectMetricSample>[];
+    final rawHistory = map['history'];
+    if (rawHistory is List) {
+      for (final item in rawHistory.whereType<Map>()) {
+        final metric = item['metric']?.toString() ?? '';
+        final value = item['value'];
+        final capturedAtMs = item['capturedAtMs'];
+        if (metric.isEmpty || value is! num || capturedAtMs is! num) continue;
+        final numeric = value.toDouble();
+        if (!numeric.isFinite) continue;
+        history.add(
+          DirectMetricSample(
+            sourceId: sourceId,
+            deviceId: device.id,
+            deviceName: device.name,
+            metric: metric,
+            value: numeric,
+            unit: _unitForMetric(metric),
+            capturedAt: DateTime.fromMillisecondsSinceEpoch(
+              capturedAtMs.toInt(),
+            ),
+          ),
+        );
+      }
+    }
+
+    final current = <DirectMetricSample>[];
     if (metrics.isNotEmpty) {
       final now = DateTime.now();
-      final sourceId = 'ble:${device.id}';
-      await _append([
+      current.addAll([
         for (final entry in metrics.entries)
           DirectMetricSample(
             sourceId: sourceId,
@@ -252,6 +281,9 @@ class DirectMetricService {
           ),
       ]);
     }
+    if (history.isNotEmpty || current.isNotEmpty) {
+      await _append([...history, ...current]);
+    }
 
     return DirectMetricReadResult(
       metrics: metrics,
@@ -259,6 +291,7 @@ class DirectMetricService {
       reader: reader,
       observations: observations,
       diagnostics: diagnostics,
+      history: history,
     );
   }
 
@@ -323,13 +356,17 @@ class DirectMetricService {
     final prefs = await SharedPreferences.getInstance();
     final existing = await loadSamples();
     final cutoff = DateTime.now().subtract(const Duration(days: 35));
-    final next = <DirectMetricSample>[
-      for (final sample in existing)
-        if (sample.capturedAt.isAfter(cutoff)) sample,
-      ...incoming,
-    ];
-    if (next.length > 1600) {
-      next.removeRange(0, next.length - 1600);
+    final deduped = <String, DirectMetricSample>{};
+    for (final sample in [...existing, ...incoming]) {
+      if (sample.capturedAt.isBefore(cutoff)) continue;
+      final key = '${sample.sourceId}|${sample.metric}|'
+          '${sample.capturedAt.millisecondsSinceEpoch}';
+      deduped[key] = sample;
+    }
+    final next = deduped.values.toList()
+      ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+    if (next.length > 3200) {
+      next.removeRange(0, next.length - 3200);
     }
     await prefs.setString(
       _storageKey,

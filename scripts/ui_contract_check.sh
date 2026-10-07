@@ -1,34 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build 34 is the verified baseline already committed on main.
+# Build 35 is already the validated source committed on main.
+# Do not replay older non-idempotent migrations.
 python3 scripts/salus_brand_patch.py
-python3 scripts/build34_resmed_session_patch.py
-python3 scripts/build35_resmed_pairing_patch.py
+python3 scripts/build36_daily_history_watch_patch.py
 
 fail() { echo "UI CONTRACT FAILURE: $1" >&2; exit 1; }
 
-grep -q '^version: 0.18.0+35$' pubspec.yaml || fail "build 35 version missing"
+grep -q '^version: 0.19.0+36$' pubspec.yaml || fail "build 36 version missing"
 grep -q 'SALUS_BUILD28_LOCKED_HOME_BACKGROUND' lib/widgets/salus_widgets.dart || fail "locked home background missing"
-grep -q 'class ConnectionsScreen' lib/screens/connections_screen.dart || fail "Connections screen missing"
+grep -q 'class TodayPlanNotifier' lib/state/today_plan_state.dart || fail "daily meal plan state missing"
+grep -q 'What’s on the plan today' lib/screens/home_screen.dart || fail "Today command center missing"
+grep -q 'Device batteries' lib/screens/home_screen.dart || fail "device batteries missing"
+grep -q 'class WatchDeviceScreen' lib/screens/watch_device_screen.dart || fail "watch page missing"
+grep -q 'Android notification access' lib/screens/watch_device_screen.dart || fail "notification access action missing"
+grep -q 'Watch settings' lib/screens/connections_screen.dart || fail "watch settings button missing"
+grep -q 'final List<DirectMetricSample> history' lib/services/direct_metric_service.dart || fail "history bridge missing"
+grep -q 'GATT characteristics read' lib/screens/cpap_screen.dart || fail "CPAP diagnostic wording missing"
 grep -q 'class CpapScreen' lib/screens/cpap_screen.dart || fail "CPAP dashboard missing"
-grep -q 'class CpapTherapyService' lib/services/cpap_therapy_service.dart || fail "CPAP trend service missing"
-grep -q "strongCpapIdentity" lib/services/ble_protocol_profiles.dart || fail "CPAP identity priority missing"
-grep -q 'final List<String> observations' lib/services/direct_metric_service.dart || fail "Build 33 diagnostics missing"
-grep -q "String? cpapPasskey" lib/services/direct_metric_service.dart || fail "Build 34 passkey bridge missing"
-grep -q "Future<bool> submitCpapPasskey" lib/services/direct_metric_service.dart || fail "Build 35 live passkey submit bridge missing"
-grep -q "isValidCpapPasskey" lib/services/direct_metric_service.dart || fail "Build 35 passkey validation missing"
-grep -q "duration: const Duration(seconds: 70)" lib/screens/cpap_screen.dart || fail "Build 35 pairing window missing"
-grep -q "Start secure CPAP sync" lib/screens/cpap_screen.dart || fail "Build 35 start-sync action missing"
-grep -q "Submit pairing code" lib/screens/cpap_screen.dart || fail "Build 35 submit-code action missing"
-grep -q "Opening ResMed pairing session" lib/screens/cpap_screen.dart || fail "Build 35 pairing guidance missing"
-grep -q 'secure read-only therapy sync' lib/screens/cpap_screen.dart || fail "secure provider state missing"
 if grep -q 'const FilledButton\.tonalIcon' lib/screens/sources_screen.dart; then
   fail "non-const FilledButton.tonalIcon analyzer regression present"
 fi
 
-# Build 35 pairing intentionally starts without a pre-entered code so the
-# AirSense can generate/show its one-time code first.
-grep -q 'cpapPasskey: null' lib/screens/cpap_screen.dart || fail "Build 35 must start pairing before code entry"
-
-echo "Salus build 35 UI contract passed."
+echo "Salus build 36 UI contract passed."

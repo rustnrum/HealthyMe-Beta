@@ -313,7 +313,8 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            '$reads readable values • $subscriptions notification channels • '
+            '$reads GATT characteristics read • '
+            '$subscriptions notification channels • '
             '$notifications live notifications',
             style: const TextStyle(
               color: AppTheme.textSecondary,

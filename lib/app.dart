@@ -14,6 +14,7 @@ import 'screens/recovery_detail_screen.dart';
 import 'screens/sources_screen.dart';
 import 'screens/trends_screen.dart';
 import 'screens/workout_screen.dart';
+import 'screens/watch_device_screen.dart';
 import 'state/app_state.dart';
 import 'widgets/morning_checkin_gate.dart';
 
@@ -46,6 +47,7 @@ class HealthyMeApp extends ConsumerWidget {
             ? const SourcesScreen()
             : const ConnectionsScreen(),
         '/cpap': (_) => const CpapScreen(),
+        '/watch-device': (_) => const WatchDeviceScreen(),
         '/coach': (_) => const AiCoachScreen(),
       },
       home: state.profile.completed
