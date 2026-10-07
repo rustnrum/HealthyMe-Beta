@@ -70,6 +70,10 @@ class BleProtocolProfiles {
       '0000fee1-0000-1000-8000-00805f9b34fb';
   static const String no1Service =
       '000055ff-0000-1000-8000-00805f9b34fb';
+  static const String resMedAdvertisedService =
+      '0000fd56-0000-1000-8000-00805f9b34fb';
+  static const String resMedDeviceService =
+      '948652e2-d03b-11e8-a8d5-f2801f1b9fd1';
 
   static const profiles = <BleProtocolProfile>[
     BleProtocolProfile(
@@ -163,7 +167,12 @@ class BleProtocolProfiles {
       id: 'cpap-family',
       label: 'Respiratory / CPAP device',
       deviceKind: 'CPAP / respiratory',
+      anyServices: {
+        resMedAdvertisedService,
+        resMedDeviceService,
+      },
       nameHints: [
+        'resmed',
         'airsense',
         'aircurve',
         'dreamstation',

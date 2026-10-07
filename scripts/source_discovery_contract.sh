@@ -17,12 +17,17 @@ MAIN_ACTIVITY="$(find android/app/src/main/kotlin -name MainActivity.kt -print -
 PROTO_READER="$(dirname "$MAIN_ACTIVITY")/SalusProtocolReader.kt"
 [ -s "$PROTO_READER" ] || fail "SalusProtocolReader.kt missing"
 
-grep -q '^version: 0.14.0+29$' pubspec.yaml || fail "build 29 version missing"
+grep -q '^version: 0.14.0+30$' pubspec.yaml || fail "build 30 version missing"
 
 # UI/source patches must already have been applied by ui_contract_check.sh.
 grep -q 'SALUS_BUILD29_AUTO_IDENTIFY' lib/screens/sources_screen.dart || fail "Build 29 UI patch was not applied before source contract"
 grep -q 'SALUS_BUILD29_HEALTH_CANDIDATE' lib/services/source_hub_service.dart || fail "Build 29 source classification patch missing"
 grep -q 'SALUS_BUILD28_LOCKED_HOME_BACKGROUND' lib/widgets/salus_widgets.dart || fail "Build 28 locked home background missing"
+grep -q 'class ConnectionsScreen' lib/screens/connections_screen.dart || fail "Build 30 normal Connections screen missing"
+grep -q 'SALUS_BUILD30_DEBUG_BANNER' lib/screens/sources_screen.dart || fail "Build 30 debug screen marker missing"
+grep -q "'/sources-debug':" lib/app.dart || fail "Build 30 debug route missing"
+grep -q 'resMedAdvertisedService' lib/services/ble_protocol_profiles.dart || fail "Build 30 ResMed advertised fingerprint missing"
+grep -q 'resMedDeviceService' lib/services/ble_protocol_profiles.dart || fail "Build 30 ResMed proprietary fingerprint missing"
 
 for required in \
   '"scanBle" ->' \
@@ -60,4 +65,4 @@ grep -q 'SALUS_BUILD28_LOCKED_HOME_BACKGROUND' lib/widgets/salus_widgets.dart ||
 grep -q 'SALUS_BUILD29_AUTO_IDENTIFY' lib/screens/sources_screen.dart || fail "automatic device identification missing"
 grep -q 'SALUS_BUILD29_HEALTH_CANDIDATE' lib/services/source_hub_service.dart || fail "Bluetooth health classification missing"
 
-echo "Salus build 29 direct protocol + BLE scan + locked home visual contract passed."
+echo "Salus build 30 connections + direct protocol + locked home visual contract passed."

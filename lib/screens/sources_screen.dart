@@ -216,6 +216,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
       'bipap',
       'airsense',
       'aircurve',
+      'resmed',
       'dreamstation',
     ];
     return hints.any((hint) => name.contains(hint));
@@ -308,10 +309,44 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Devices & Sources')),
+      appBar: AppBar(title: const Text('Device Debug')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 30),
         children: [
+          // SALUS_BUILD30_DEBUG_BANNER
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            decoration: BoxDecoration(
+              color: AppTheme.amber.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppTheme.amber.withValues(alpha: 0.24),
+              ),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.bug_report_outlined,
+                  color: AppTheme.amber,
+                  size: 21,
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'DEVELOPMENT ONLY\nBluetooth inspection, protocol details, source routing and diagnostics live here. Normal users see the Connections screen.',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12.2,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           _buildIdentityCard(),
           // SALUS_BUILD25_DIRECT_FIRST — direct_device_patch compatibility: Use with Salus
           const SizedBox(height: 18),

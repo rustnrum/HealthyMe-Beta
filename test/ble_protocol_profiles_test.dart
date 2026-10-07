@@ -42,4 +42,33 @@ void main() {
     expect(report.allCapabilities, contains('Heart rate'));
     expect(report.deviceKind, 'Heart-rate sensor');
   });
+
+  test('ResMed name is classified as CPAP health hardware', () {
+    final report = BleProtocolProfiles.analyze(
+      const [],
+      name: 'ResMed 681683',
+    );
+    expect(report.protocolProfile?.id, 'cpap-family');
+    expect(report.deviceKind, 'CPAP / respiratory');
+    expect(report.allCapabilities, contains('Therapy data'));
+  });
+
+  test('ResMed advertised service identifies CPAP', () {
+    final report = BleProtocolProfiles.analyze(
+      const [BleProtocolProfiles.resMedAdvertisedService],
+      name: 'Unnamed BLE device',
+    );
+    expect(report.protocolProfile?.id, 'cpap-family');
+    expect(report.deviceKind, 'CPAP / respiratory');
+  });
+
+  test('ResMed proprietary GATT service identifies CPAP', () {
+    final report = BleProtocolProfiles.analyze(
+      const [BleProtocolProfiles.resMedDeviceService],
+      name: 'Unnamed BLE device',
+    );
+    expect(report.protocolProfile?.id, 'cpap-family');
+    expect(report.deviceKind, 'CPAP / respiratory');
+  });
+
 }

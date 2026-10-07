@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme/app_theme.dart';
 import 'screens/ai_coach_screen.dart';
+import 'screens/connections_screen.dart';
 import 'screens/daily_state_screen.dart';
 import 'screens/diet/diet_shell.dart';
 import 'screens/health/health_shell.dart';
@@ -14,6 +15,11 @@ import 'screens/trends_screen.dart';
 import 'screens/workout_screen.dart';
 import 'state/app_state.dart';
 import 'widgets/morning_checkin_gate.dart';
+
+const bool _showDeviceDebug = bool.fromEnvironment(
+  'SALUS_SHOW_DEVICE_DEBUG',
+  defaultValue: true,
+);
 
 class HealthyMeApp extends ConsumerWidget {
   const HealthyMeApp({super.key});
@@ -34,7 +40,10 @@ class HealthyMeApp extends ConsumerWidget {
         '/trends': (_) => const TrendsScreen(),
         '/recovery': (_) => const RecoveryDetailScreen(),
         '/daily-state': (_) => const DailyStateScreen(),
-        '/sources': (_) => const SourcesScreen(),
+        '/sources': (_) => const ConnectionsScreen(),
+        '/sources-debug': (_) => _showDeviceDebug
+            ? const SourcesScreen()
+            : const ConnectionsScreen(),
         '/coach': (_) => const AiCoachScreen(),
       },
       home: state.profile.completed
