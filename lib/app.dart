@@ -5,7 +5,7 @@ import 'core/debug_flags.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/ai_coach_screen.dart';
 import 'screens/connections_screen.dart';
-import 'screens/cpap_screen.dart';
+import 'screens/cpap_screen_v38.dart';
 import 'screens/daily_state_screen.dart';
 import 'screens/diet/diet_shell.dart';
 import 'screens/health/health_shell.dart';
@@ -42,7 +42,7 @@ class HealthyMeApp extends ConsumerWidget {
         '/sources-debug': (_) => salusShowDeviceDebug
             ? const SourcesScreen()
             : const ConnectionsScreen(),
-        '/cpap': (_) => const CpapScreen(),
+        '/cpap': (_) => const CpapScreenV38(),
         '/watch-device': (_) => const WatchDeviceScreen(),
         '/coach': (_) => const AiCoachScreen(),
       },

@@ -1,23 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mkdir -p native/android
-
-if [ ! -f native/android/SalusProtocolReader.kt ]; then
-  if [ ! -f scripts/SalusProtocolReader.kt.template ]; then
-    echo "Missing current SalusProtocolReader source"
-    exit 1
-  fi
-  cp scripts/SalusProtocolReader.kt.template native/android/SalusProtocolReader.kt
-fi
+test -f native/android/MainActivity.kt
+test -f native/android/SalusProtocolReader.kt
+test -f native/android/SalusNotificationListenerService.kt
+test -f native/android/SalusWatchNotificationStore.kt
+test -f native/android/SalusWatchNotificationSender.kt
+test -f native/android/AndroidManifest.xml
 
 PKG_DIR="android/app/src/main/kotlin/com/rustnrum/healthyme/beta03"
 rm -rf android/app/src/main/kotlin
 mkdir -p "$PKG_DIR"
 
-cp native/android/MainActivity.kt "$PKG_DIR/MainActivity.kt"
-cp native/android/SalusProtocolReader.kt "$PKG_DIR/SalusProtocolReader.kt"
-cp native/android/SalusNotificationListenerService.kt "$PKG_DIR/SalusNotificationListenerService.kt"
+cp native/android/*.kt "$PKG_DIR"/
 cp native/android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
 if [ -f android/app/build.gradle.kts ]; then
@@ -40,10 +35,3 @@ for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
     cp "$src" "$dst"
   fi
 done
-
-# One-time cleanup only: remove the old Python mutation layer after the current
-# protocol reader has been copied to permanent native source.
-find scripts -maxdepth 1 -type f -name '*.py' -delete
-rm -rf scripts/__pycache__
-rm -f scripts/SalusProtocolReader.kt.template
-rm -f scripts/ui_contract_check.sh scripts/source_discovery_contract.sh

@@ -150,7 +150,33 @@ class AppStateNotifier extends Notifier<HealthyMeState> {
   }
 
   void setHealthSnapshot(HealthSnapshot health) {
-    _set(state.copyWith(health: health));
+    _set(state.copyWith(health: _enforceSingleSleepSource(health)));
+  }
+
+  HealthSnapshot _enforceSingleSleepSource(HealthSnapshot health) {
+    final sleepSource = health.resolvedSources['Sleep'];
+    final stageSource = health.resolvedSources['Sleep Stages'];
+
+    if (sleepSource != null && stageSource == sleepSource) {
+      return health;
+    }
+
+    final resolved = Map<String, String>.from(health.resolvedSources)
+      ..remove('Sleep Stages');
+    final freshness = Map<String, DateTime>.from(health.freshness)
+      ..remove('Sleep Stages');
+
+    // A sleep session belongs to one provider. If stage attribution does not
+    // match the provider that owns Sleep, stage values are treated as missing
+    // instead of being silently blended into the session.
+    return health.copyWith(
+      sleepAwakeMinutes: 0,
+      sleepRemMinutes: 0,
+      sleepLightMinutes: 0,
+      sleepDeepMinutes: 0,
+      resolvedSources: resolved,
+      freshness: freshness,
+    );
   }
 
   void setHealthAuthorization(bool authorized) {

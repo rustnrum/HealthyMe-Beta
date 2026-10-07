@@ -12,6 +12,7 @@ import '../state/navigation_provider.dart';
 import '../state/today_plan_state.dart';
 import '../state/workout_state.dart';
 import '../widgets/salus_widgets.dart';
+import '../widgets/salus_mountain_background.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -40,7 +41,7 @@ class HomeScreen extends ConsumerWidget {
   }
 
   String _recoverySubtitle(int? score) {
-    if (score == null) return 'More overnight data will improve this score.';
+    if (score == null) return 'Building recovery from your available overnight signals.';
     if (score >= 80) return 'Your signals are in a good range today.';
     if (score >= 60) return 'A mixed day — watch the signals below.';
     return 'Several signals are outside your recent baseline.';
@@ -76,7 +77,7 @@ class HomeScreen extends ConsumerWidget {
         ? 'there'
         : app.profile.firstName.trim().split(RegExp(r'\s+')).first;
 
-    return SalusPageBackground(
+    return SalusMountainBackground(
       child: RefreshIndicator(
         color: AppTheme.cyan,
         backgroundColor: AppTheme.surfaceHigh,
@@ -141,49 +142,6 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 16),
-            _TodayPlanCard(
-              meals: meals,
-              plannedWorkouts: plannedWorkouts,
-              completedWorkoutCount: completedToday.length,
-              onMeals: () => Navigator.of(context).pushNamed('/diet'),
-              onWorkout: () => Navigator.of(context).pushNamed('/workout'),
-            ),
-            const SizedBox(height: 12),
-            FutureBuilder<List<_DeviceBattery>>(
-              future: _loadDeviceBatteries(),
-              builder: (context, snapshot) {
-                final batteries = snapshot.data ?? const <_DeviceBattery>[];
-                if (batteries.isEmpty) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: SalusPaper(
-                    padding: const EdgeInsets.fromLTRB(15, 13, 15, 13),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Device batteries',
-                          style: TextStyle(
-                            color: AppTheme.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 9),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final item in batteries)
-                              _BatteryChip(item: item),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
             Row(
               children: [
                 Expanded(
@@ -316,6 +274,50 @@ class HomeScreen extends ConsumerWidget {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            FutureBuilder<List<_DeviceBattery>>(
+              future: _loadDeviceBatteries(),
+              builder: (context, snapshot) {
+                final batteries = snapshot.data ?? const <_DeviceBattery>[];
+                if (batteries.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: SalusPaper(
+                    padding: const EdgeInsets.fromLTRB(15, 13, 15, 13),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Device batteries',
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 9),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final item in batteries)
+                              _BatteryChip(item: item),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            _TodayPlanCard(
+              meals: meals,
+              plannedWorkouts: plannedWorkouts,
+              completedWorkoutCount: completedToday.length,
+              onMeals: () => Navigator.of(context).pushNamed('/diet'),
+              onWorkout: () => Navigator.of(context).pushNamed('/workout'),
             ),
             const SizedBox(height: 18),
             SalusPaper(

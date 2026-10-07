@@ -41,23 +41,21 @@ class RecoveryReport {
   });
 }
 
-/// Salus recovery wellness estimate.
+/// Salus wellness/readiness estimate.
 ///
-/// Objective telemetry and the optional Daily State check-in are blended into
-/// a transparent app score. This does not copy a proprietary wearable formula
-/// and is not an official score from SRSS or a medical/diagnostic instrument.
-/// Missing signals are excluded rather than guessed, and [confidence] reflects
-/// how much of the configured signal set is actually available.
+/// Missing signals are excluded instead of guessed. Salus also requires useful
+/// objective coverage before it will show a numeric recovery value; one strong
+/// metric by itself must never look like a complete 98/100 recovery picture.
 class RecoveryService {
-  // Keep the original objective recovery formula intact. Daily State is
-  // blended only after an actual check-in is completed so enabling the feature
-  // cannot change recovery by itself.
   static const int _sleepWeight = 35;
   static const int _dailyStateWeight = 30;
   static const int _hrvWeight = 20;
   static const int _rhrWeight = 15;
   static const int _breathingWeight = 10;
   static const int _trainingWeight = 20;
+
+  /// Minimum objective coverage needed for an objective-only recovery number.
+  static const int _minimumObjectiveCoverage = 50;
 
   static RecoveryReport build(HealthyMeState app) {
     final contributors = <RecoveryContributor>[
@@ -84,13 +82,15 @@ class RecoveryService {
         score: null,
         confidence: 0,
         band: RecoveryBand.noData,
-        label: 'No data',
-        summary: 'Recovery needs a Daily State check-in, sleep, cardio baseline or workout telemetry.',
+        label: 'Building',
+        summary:
+            'Recovery is building. Salus needs more overnight or morning check-in data before showing a number.',
         contributors: contributors,
       );
     }
 
-    final objectiveScored = scored.where((item) => item.name != 'Daily state').toList();
+    final objectiveScored =
+        scored.where((item) => item.name != 'Daily state').toList();
     final objectiveWeight =
         objectiveScored.fold<int>(0, (sum, item) => sum + item.weight);
     final objectiveWeighted = objectiveScored.fold<int>(
@@ -108,6 +108,24 @@ class RecoveryService {
         scored.where((item) => item.name == 'Daily state').toList();
     final dailyScore = dailyItems.isEmpty ? null : dailyItems.first.score;
 
+    final objectiveConfidence =
+        objectiveWeight.clamp(0, 100).toInt();
+
+    // Without a subjective check-in, do not inflate a tiny amount of objective
+    // telemetry to a full 0–100 readiness score.
+    if (dailyScore == null &&
+        objectiveWeight < _minimumObjectiveCoverage) {
+      return RecoveryReport(
+        score: null,
+        confidence: objectiveConfidence,
+        band: RecoveryBand.noData,
+        label: 'Building',
+        summary:
+            'More overnight signals are needed before Salus shows a reliable recovery number.',
+        contributors: contributors,
+      );
+    }
+
     final int score;
     if (objectiveScore != null && dailyScore != null) {
       score = (objectiveScore * 0.70 + dailyScore * 0.30)
@@ -117,14 +135,17 @@ class RecoveryService {
     } else if (objectiveScore != null) {
       score = objectiveScore;
     } else {
+      // A completed Daily State can still provide a subjective estimate, but
+      // confidence remains visibly lower until objective telemetry arrives.
       score = dailyScore!;
     }
 
-    final objectiveConfidence =
-        (objectiveWeight / 100 * 100).round().clamp(0, 100).toInt();
     final confidence = dailyScore == null
         ? objectiveConfidence
-        : (objectiveConfidence * 0.70 + 30).round().clamp(0, 100).toInt();
+        : (objectiveConfidence * 0.70 + 30)
+            .round()
+            .clamp(0, 100)
+            .toInt();
 
     final band = score >= 80
         ? RecoveryBand.good
@@ -144,7 +165,7 @@ class RecoveryService {
     final lowest =
         ranked.where((item) => (item.score ?? 100) < 80).take(2).toList();
     final summary = lowest.isEmpty
-        ? 'Recovery signals are close to your recent baseline.'
+        ? 'Available recovery signals are close to your recent baseline.'
         : '${lowest.map((item) => item.name.toLowerCase()).join(' + ')} are pulling recovery down.';
 
     return RecoveryReport(
@@ -375,6 +396,15 @@ class RecoveryService {
         weight: _trainingWeight,
       );
     }
+    if (h.workouts.isEmpty) {
+      return const RecoveryContributor(
+        name: 'Training load',
+        score: null,
+        detail: 'No workout history yet',
+        available: false,
+        weight: _trainingWeight,
+      );
+    }
 
     final now = DateTime.now();
     var recentLoad = 0.0;
@@ -402,7 +432,7 @@ class RecoveryService {
     int score;
     String comparison;
     if (recentLoad == 0) {
-      score = 96;
+      score = 92;
       comparison = 'No recent workout strain';
     } else if (expectedThreeDayLoad > 8) {
       final ratio = recentLoad / expectedThreeDayLoad;

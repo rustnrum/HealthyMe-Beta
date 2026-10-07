@@ -10,6 +10,7 @@ import '../services/direct_metric_service.dart';
 import '../services/notification_access_service.dart';
 import '../services/source_hub_service.dart';
 import '../services/source_name_service.dart';
+import '../services/watch_notification_service.dart';
 import '../state/app_state.dart';
 import '../state/health_sync_provider.dart';
 
@@ -283,6 +284,12 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
   }
 
   Future<void> _remove(SavedDirectDevice device) async {
+    await WatchNotificationService().setMaster(
+      deviceId: device.id,
+      protocolId: device.protocolId ?? '',
+      deviceName: device.name,
+      enabled: false,
+    );
     await _store.remove(device.id);
     await _loadSaved();
   }

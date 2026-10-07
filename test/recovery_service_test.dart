@@ -4,13 +4,11 @@ import 'package:healthy_me/services/recovery_service.dart';
 import 'package:healthy_me/state/app_state.dart';
 
 void main() {
-  test('recovery uses sleep, cardio and training without inventing nutrition', () {
+  test('recovery uses real available signals without inventing nutrition', () {
     final now = DateTime.now();
     final report = RecoveryService.build(
       HealthyMeState(
-        profile: UserProfile(
-          birthday: DateTime(1972, 1, 1),
-        ),
+        profile: UserProfile(birthday: DateTime(1972, 1, 1)),
         health: HealthSnapshot(
           authorized: true,
           sleepMinutes: 420,
@@ -22,7 +20,7 @@ void main() {
           workouts: [
             WorkoutEntry(
               type: 'Walk',
-              start: now.subtract(const Duration(hours: 2, minutes: 30)),
+              start: now.subtract(const Duration(hours: 3)),
               end: now.subtract(const Duration(hours: 2)),
               source: 'Garmin Connect',
             ),
@@ -33,14 +31,14 @@ void main() {
 
     expect(report.score, isNotNull);
     expect(report.confidence, greaterThan(0));
-    final nutrition = report.contributors.firstWhere((item) => item.name == 'Nutrition');
+    final nutrition =
+        report.contributors.firstWhere((item) => item.name == 'Nutrition');
     expect(nutrition.available, isFalse);
     expect(nutrition.score, isNull);
   });
 
-  test('hard recent training lowers training recovery contribution', () {
-    final now = DateTime.now();
-    final light = RecoveryService.build(
+  test('missing workout history is missing, not a fake perfect recovery signal', () {
+    final report = RecoveryService.build(
       HealthyMeState(
         profile: UserProfile(birthday: DateTime(1972, 1, 1)),
         health: const HealthSnapshot(
@@ -50,31 +48,30 @@ void main() {
         ),
       ),
     );
-    final hard = RecoveryService.build(
+
+    final training = report.contributors
+        .firstWhere((item) => item.name == 'Training load');
+    expect(training.available, isFalse);
+    expect(training.score, isNull);
+  });
+
+  test('sleep by itself does not inflate to a near-perfect recovery score', () {
+    final report = RecoveryService.build(
       HealthyMeState(
         profile: UserProfile(birthday: DateTime(1972, 1, 1)),
-        health: HealthSnapshot(
+        health: const HealthSnapshot(
           authorized: true,
           sleepMinutes: 480,
-          restingHeartRate: 64,
-          workouts: [
-            WorkoutEntry(
-              type: 'Running',
-              start: now.subtract(const Duration(hours: 2, minutes: 90)),
-              end: now.subtract(const Duration(hours: 2)),
-              source: 'Garmin Connect',
-            ),
-          ],
         ),
       ),
     );
 
-    final lightTraining = light.contributors.firstWhere((item) => item.name == 'Training load');
-    final hardTraining = hard.contributors.firstWhere((item) => item.name == 'Training load');
-    expect(hardTraining.score!, lessThan(lightTraining.score!));
+    expect(report.score, isNull);
+    expect(report.label, 'Building');
+    expect(report.confidence, 35);
   });
 
-  test('recovery produces a numeric 0 to 100 readiness score when usable signals exist', () {
+  test('recovery produces a numeric score when objective coverage is useful', () {
     final report = RecoveryService.build(
       HealthyMeState(
         profile: UserProfile(birthday: DateTime(1972, 1, 1)),

@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -33,18 +31,19 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
         : (h.sourceLabels[sleepSourceKey] ??
             SourceNameService.friendly(sleepSourceKey));
     final stageSourceKey = h.resolvedSources['Sleep Stages'];
-    final stageSourceLabel = stageSourceKey == null
-        ? 'No stage data source'
-        : (h.sourceLabels[stageSourceKey] ??
-            SourceNameService.friendly(stageSourceKey));
+    final stagesBelongToSleep =
+        sleepSourceKey != null && stageSourceKey == sleepSourceKey;
     final sleepFreshness = h.freshness['Sleep'];
     final recent = h.sleepMinutes7.where((value) => value > 0).toList();
     final avg = recent.isEmpty
         ? 0
         : (recent.reduce((a, b) => a + b) / recent.length).round();
-    final score = guidance.minimumMinutes <= 0 || h.sleepMinutes <= 0
-        ? null
-        : min(100, ((h.sleepMinutes / guidance.minimumMinutes) * 100).round());
+
+    final stageAwake = stagesBelongToSleep ? h.sleepAwakeMinutes : 0;
+    final stageRem = stagesBelongToSleep ? h.sleepRemMinutes : 0;
+    final stageLight = stagesBelongToSleep ? h.sleepLightMinutes : 0;
+    final stageDeep = stagesBelongToSleep ? h.sleepDeepMinutes : 0;
+    final hasStages = stageAwake + stageRem + stageLight + stageDeep > 0;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 30),
@@ -120,7 +119,12 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                   ],
                 ),
               ),
-              _ScoreRing(score: score),
+              _SleepTargetBadge(
+                targetLabel: guidance.label,
+                minutes: h.sleepMinutes,
+                minimum: guidance.minimumMinutes,
+                upper: guidance.upperMinutes,
+              ),
             ],
           ),
         ),
@@ -130,46 +134,43 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    const Text(
-                      'Sleep Stages',
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (h.sleepMinutes > 0)
-                      Text(
-                        minutesLabel(h.sleepMinutes),
-                        style: const TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                  ],
+                const Text(
+                  'Sleep Stages',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  'Stages from: $stageSourceLabel',
-                  maxLines: 2,
-                  softWrap: true,
-                  style: const TextStyle(
-                    color: AppTheme.purple,
+                  hasStages
+                      ? 'Stages are from the same $sleepSourceLabel sleep session.'
+                      : sleepSourceKey == null
+                          ? 'Choose a Sleep source before stage data can be shown.'
+                          : 'Stage data is not available from $sleepSourceLabel for this sleep session.',
+                  style: TextStyle(
+                    color: hasStages ? AppTheme.purple : AppTheme.textMuted,
                     fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
+                    height: 1.35,
                   ),
                 ),
                 const SizedBox(height: 16),
-                SleepStageBar(
-                  awake: h.sleepAwakeMinutes,
-                  rem: h.sleepRemMinutes,
-                  light: h.sleepLightMinutes,
-                  deep: h.sleepDeepMinutes,
-                ),
+                if (hasStages)
+                  SleepStageBar(
+                    awake: stageAwake,
+                    rem: stageRem,
+                    light: stageLight,
+                    deep: stageDeep,
+                  )
+                else
+                  const HmEmptyState(
+                    icon: Icons.bedtime_outlined,
+                    title: 'No stages from this sleep source',
+                    detail:
+                        'Salus will not combine sleep duration from one provider with stages from another.',
+                  ),
               ],
             ),
           ),
@@ -199,7 +200,11 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        _insight(h.sleepMinutes, avg, guidance.minimumMinutes),
+                        _insight(
+                          h.sleepMinutes,
+                          avg,
+                          guidance.minimumMinutes,
+                        ),
                         style: const TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 13,
@@ -209,7 +214,6 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: AppTheme.textMuted),
               ],
             ),
           ),
@@ -244,7 +248,8 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
             child: HmEmptyState(
               icon: Icons.history_rounded,
               title: 'Longer sleep history is not available yet',
-              detail: 'Month and year views appear after enough connected sleep history has synced.',
+              detail:
+                  'Month and year views appear after enough connected sleep history has synced.',
             ),
           ),
         ],
@@ -268,7 +273,7 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
 
   String _insight(int tonight, int average, int target) {
     if (tonight <= 0) {
-      return 'No sleep data yet. Connect a sleep source through Health Connect and Salus will compare it with your own baseline.';
+      return 'No sleep data yet. Choose a sleep source and Salus will compare it with your age guidance and recent pattern.';
     }
     if (average > 0) {
       final delta = tonight - average;
@@ -297,13 +302,18 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
 
 class _DateNavigator extends StatelessWidget {
   final String label;
+
   const _DateNavigator({required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Icon(Icons.chevron_left_rounded, color: AppTheme.textSecondary, size: 25),
+        const Icon(
+          Icons.chevron_left_rounded,
+          color: AppTheme.textSecondary,
+          size: 25,
+        ),
         Expanded(
           child: Text(
             label,
@@ -315,72 +325,75 @@ class _DateNavigator extends StatelessWidget {
             ),
           ),
         ),
-        const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary, size: 25),
+        const Icon(
+          Icons.chevron_right_rounded,
+          color: AppTheme.textSecondary,
+          size: 25,
+        ),
       ],
     );
   }
 }
 
-class _ScoreRing extends StatelessWidget {
-  final int? score;
-  const _ScoreRing({required this.score});
+class _SleepTargetBadge extends StatelessWidget {
+  final String targetLabel;
+  final int minutes;
+  final int minimum;
+  final int? upper;
+
+  const _SleepTargetBadge({
+    required this.targetLabel,
+    required this.minutes,
+    required this.minimum,
+    required this.upper,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final value = score == null ? 0.0 : (score! / 100).clamp(0.0, 1.0);
-    final color = score == null
-        ? AppTheme.textMuted
-        : score! >= 85
-            ? AppTheme.mint
-            : score! >= 70
-                ? AppTheme.purple
-                : AppTheme.rose;
-    final status = score == null
-        ? 'No data'
-        : score! >= 85
-            ? 'Good'
-            : score! >= 70
-                ? 'Fair'
-                : 'Watch';
+    final String status;
+    final Color color;
+    if (minutes <= 0 || minimum <= 0) {
+      status = 'No data';
+      color = AppTheme.textMuted;
+    } else if (minutes < minimum) {
+      status = 'Below target';
+      color = AppTheme.amber;
+    } else if (upper != null && minutes > upper!) {
+      status = 'Above target';
+      color = AppTheme.purple;
+    } else {
+      status = 'Target met';
+      color = AppTheme.mint;
+    }
 
-    return SizedBox(
-      width: 88,
+    return Container(
+      width: 92,
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
       child: Column(
         children: [
-          SizedBox(
-            width: 76,
-            height: 76,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                CircularProgressIndicator(
-                  value: value,
-                  strokeWidth: 7,
-                  color: color,
-                  backgroundColor: Colors.white.withValues(alpha: 0.1),
-                  strokeCap: StrokeCap.round,
-                ),
-                Center(
-                  child: Text(
-                    score?.toString() ?? '—',
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ],
+          Text(
+            targetLabel,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 7),
-          Text(
-            'Sleep Score',
-            style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800),
-          ),
+          const SizedBox(height: 5),
           Text(
             status,
-            style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w900),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: color,
+              fontSize: 11.2,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),

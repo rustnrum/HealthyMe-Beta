@@ -1,310 +1,489 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_theme.dart';
-import '../services/ble_discovery_service.dart';
 import '../services/direct_device_store.dart';
 import '../services/direct_metric_service.dart';
+import '../services/watch_notification_service.dart';
 import '../widgets/salus_widgets.dart';
 
-class WatchDeviceScreen extends StatefulWidget {
+class WatchDeviceScreen extends ConsumerStatefulWidget {
   const WatchDeviceScreen({super.key});
 
   @override
-  State<WatchDeviceScreen> createState() => _WatchDeviceScreenState();
+  ConsumerState<WatchDeviceScreen> createState() => _WatchDeviceScreenState();
 }
 
-class _WatchDeviceScreenState extends State<WatchDeviceScreen> {
-  static const _channel =
-      MethodChannel('com.rustnrum.healthyme/source_discovery');
-  static const _categories = <String, String>{
-    'calls': 'Calls',
-    'messages': 'Text messages',
-    'calendar': 'Calendar',
-    'apps': 'Other app notifications',
-    'meals': 'Salus meal reminders',
-    'workouts': 'Workout reminders',
-    'recovery': 'Recovery / check-in reminders',
-  };
-
+class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
+    with WidgetsBindingObserver {
   final _store = DirectDeviceStore();
   final _direct = DirectMetricService();
+  final _notifications = WatchNotificationService();
 
   SavedDirectDevice? _device;
-  Map<String, bool> _settings = const {};
+  WatchNotificationState? _state;
   double? _battery;
   bool _loading = true;
-  bool _syncing = false;
+  bool _saving = false;
   bool _argsLoaded = false;
-  String? _deviceId;
-  String? _status;
+  String? _requestedId;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_argsLoaded) return;
     _argsLoaded = true;
-    final arg = ModalRoute.of(context)?.settings.arguments;
-    if (arg is String && arg.isNotEmpty) _deviceId = arg;
+    final argument = ModalRoute.of(context)?.settings.arguments;
+    if (argument is String && argument.isNotEmpty) {
+      _requestedId = argument;
+    }
     _load();
   }
 
-  String _prefKey(String id, String category) =>
-      'salus_watch_notify_v1::$id::$category';
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _device != null) {
+      _reloadNotificationState();
+    }
+  }
 
   Future<void> _load() async {
     final devices = await _store.load();
-    SavedDirectDevice? device;
-    for (final item in devices) {
-      if (item.id == _deviceId) {
-        device = item;
+    final watches = devices
+        .where(
+          (device) =>
+              device.deviceKind.toLowerCase().contains('watch') ||
+              device.deviceKind.toLowerCase().contains('band') ||
+              (device.protocolId ?? '').contains('garmin') ||
+              (device.protocolId ?? '').contains('veryfit'),
+        )
+        .toList();
+
+    SavedDirectDevice? selected;
+    for (final device in watches) {
+      if (device.id == _requestedId) {
+        selected = device;
         break;
       }
     }
-
-    final prefs = await SharedPreferences.getInstance();
-    final settings = <String, bool>{
-      for (final entry in _categories.entries)
-        entry.key:
-            prefs.getBool(_prefKey(device?.id ?? _deviceId ?? '', entry.key)) ??
-                false,
-    };
+    selected ??= watches.isEmpty ? null : watches.first;
 
     final samples = await _direct.loadSamples();
-    final batterySamples = samples
-        .where(
-          (sample) =>
-              sample.deviceId == (device?.id ?? _deviceId) &&
-              sample.metric == 'Battery',
-        )
-        .toList()
-      ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+    double? battery;
+    if (selected != null) {
+      final values = samples
+          .where(
+            (sample) =>
+                sample.deviceId == selected!.id &&
+                sample.metric == 'Battery',
+          )
+          .toList()
+        ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+      if (values.isNotEmpty) battery = values.last.value;
+    }
 
     if (!mounted) return;
     setState(() {
-      _device = device;
-      _settings = settings;
-      _battery = batterySamples.isEmpty
-          ? null
-          : batterySamples.last.value.clamp(0.0, 100.0).toDouble();
+      _device = selected;
+      _battery = battery;
       _loading = false;
     });
+    await _reloadNotificationState();
   }
 
-  Future<void> _setCategory(String category, bool value) async {
+  Future<void> _reloadNotificationState() async {
     final device = _device;
     if (device == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefKey(device.id, category), value);
+    final state = await _notifications.load(
+      deviceId: device.id,
+      protocolId: device.protocolId ?? '',
+      deviceName: device.name,
+    );
     if (!mounted) return;
-    setState(() => _settings = {..._settings, category: value});
+    setState(() => _state = state);
   }
 
-  Future<void> _openNotificationAccess() async {
-    if (!Platform.isAndroid) return;
+  Future<void> _setMaster(bool value) async {
+    final device = _device;
+    final state = _state;
+    if (device == null || state == null || _saving) return;
+
+    if (value && !state.accessEnabled) {
+      await _notifications.openNotificationAccess();
+      return;
+    }
+
+    setState(() => _saving = true);
     try {
-      await _channel.invokeMethod<bool>('openNotificationAccess');
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _status = 'Could not open notification access: $error');
+      await _notifications.setMaster(
+        deviceId: device.id,
+        protocolId: device.protocolId ?? '',
+        deviceName: device.name,
+        enabled: value,
+      );
+      await _reloadNotificationState();
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
-  BleDeviceCandidate _candidate(SavedDirectDevice device) => BleDeviceCandidate(
-        id: device.id,
-        name: device.name,
-        rssi: -127,
-        advertisedServices: const [],
-        capabilities: device.capabilities,
-        protocolProfile: device.protocolLabel,
-        protocolId: device.protocolId,
-        protocolNote: null,
-        deviceKind: device.deviceKind,
-        manufacturerDataHex: '',
-        bondState: device.bonded ? 'bonded' : device.pairState,
-      );
-
-  Future<void> _sync() async {
+  Future<void> _setApp(WatchNotificationApp app, bool value) async {
     final device = _device;
-    if (device == null || _syncing) return;
-    setState(() {
-      _syncing = true;
-      _status = null;
-    });
+    if (device == null || _saving) return;
+    setState(() => _saving = true);
     try {
-      final result = await _direct.readAndStore(
-        _candidate(device),
-        protocolId: device.protocolId,
-        duration: const Duration(seconds: 22),
+      await _notifications.setApp(
+        deviceId: device.id,
+        packageName: app.packageName,
+        enabled: value,
       );
-      if (!mounted) return;
-      setState(() => _status = result.summary);
-      await _load();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _status = 'Could not sync ${device.name}: $error');
+      await _reloadNotificationState();
     } finally {
-      if (mounted) setState(() => _syncing = false);
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _setAllAccounts(
+    WatchNotificationApp app,
+    bool value,
+  ) async {
+    final device = _device;
+    if (device == null || _saving) return;
+    setState(() => _saving = true);
+    try {
+      await _notifications.setAllAccounts(
+        deviceId: device.id,
+        packageName: app.packageName,
+        enabled: value,
+      );
+      await _reloadNotificationState();
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _setAccount(
+    WatchNotificationApp app,
+    WatchNotificationAccount account,
+    bool value,
+  ) async {
+    final device = _device;
+    if (device == null || _saving) return;
+    setState(() => _saving = true);
+    try {
+      await _notifications.setAccount(
+        deviceId: device.id,
+        packageName: app.packageName,
+        account: account.name,
+        enabled: value,
+      );
+      await _reloadNotificationState();
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final device = _device;
+    final state = _state;
+
     return Scaffold(
-      appBar: AppBar(title: Text(device?.name ?? 'Watch')),
+      appBar: AppBar(title: const Text('Watch')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : device == null
               ? const Center(
-                  child: Text('Watch is no longer connected to Salus.'),
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text(
+                      'No watch is connected yet. Add one from Connections.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
                 )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 34),
-                  children: [
-                    SalusPaper(
-                      glow: true,
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.watch_outlined,
-                            color: AppTheme.cyan,
-                            size: 34,
-                          ),
-                          const SizedBox(width: 13),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  device.name,
-                                  style: const TextStyle(
-                                    color: AppTheme.textPrimary,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  device.protocolLabel ?? device.deviceKind,
-                                  style: const TextStyle(
-                                    color: AppTheme.textSecondary,
-                                    fontSize: 12.5,
-                                  ),
-                                ),
-                              ],
+              : SalusPageBackground(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(18, 12, 18, 34),
+                    children: [
+                      _WatchHero(device: device, battery: _battery),
+                      const SizedBox(height: 14),
+                      SalusPaper(
+                        padding: EdgeInsets.zero,
+                        child: SwitchListTile.adaptive(
+                          value: state?.masterEnabled ?? false,
+                          onChanged: _saving || state == null
+                              ? null
+                              : _setMaster,
+                          title: const Text(
+                            'Phone notifications on this watch',
+                            style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
-                          if (_battery != null)
-                            _BatteryBadge(value: _battery!),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _syncing ? null : _sync,
-                        icon: _syncing
-                            ? const SizedBox(
-                                width: 17,
-                                height: 17,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.sync_rounded),
-                        label: Text(_syncing ? 'Syncing…' : 'Sync watch now'),
-                      ),
-                    ),
-                    if (_status != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        _status!,
-                        style: const TextStyle(
-                          color: AppTheme.textSecondary,
-                          fontSize: 12.5,
+                          subtitle: Text(
+                            state == null
+                                ? 'Loading notification settings…'
+                                : !state.accessEnabled
+                                    ? 'Android notification access is required. Tap to enable it.'
+                                    : state.deliverySupported
+                                        ? 'Choose which apps and accounts can appear on this watch.'
+                                        : 'Filters can be saved, but direct notification delivery is not implemented for this watch protocol yet.',
+                            style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 12.2,
+                              height: 1.35,
+                            ),
+                          ),
+                          secondary: const Icon(
+                            Icons.notifications_active_outlined,
+                            color: AppTheme.cyan,
+                          ),
                         ),
                       ),
-                    ],
-                    const SizedBox(height: 22),
-                    const SalusSectionTitle(
-                      title: 'Notifications',
-                      eyebrow: 'Choose what can reach the watch',
-                    ),
-                    const SizedBox(height: 8),
-                    SalusPaper(
-                      child: Column(
-                        children: [
-                          for (final entry in _categories.entries) ...[
-                            SwitchListTile.adaptive(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(entry.value),
-                              value: _settings[entry.key] ?? false,
-                              onChanged: (value) =>
-                                  _setCategory(entry.key, value),
-                            ),
-                            if (entry.key != _categories.keys.last)
-                              const Divider(height: 1),
-                          ],
+                      const SizedBox(height: 10),
+                      if (state != null && !state.accessEnabled)
+                        OutlinedButton.icon(
+                          onPressed: _notifications.openNotificationAccess,
+                          icon: const Icon(Icons.settings_rounded),
+                          label: const Text('Android notification access'),
+                        ),
+                      if (state != null && state.apps.isNotEmpty) ...[
+                        const SizedBox(height: 18),
+                        const Text(
+                          'Apps',
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Text messages, Messenger, Gmail, WhatsApp and other apps can be controlled separately.',
+                          style: TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 12.5,
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        for (final app in state.apps) ...[
+                          _AppCard(
+                            app: app,
+                            enabled: app.enabled,
+                            busy: _saving,
+                            onChanged: (value) => _setApp(app, value),
+                            onAllAccountsChanged: app.isGmail
+                                ? (value) => _setAllAccounts(app, value)
+                                : null,
+                            onAccountChanged: app.isGmail
+                                ? (account, value) =>
+                                    _setAccount(app, account, value)
+                                : null,
+                          ),
+                          const SizedBox(height: 8),
                         ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton.tonalIcon(
-                      onPressed: _openNotificationAccess,
-                      icon: const Icon(Icons.notifications_active_outlined),
-                      label: const Text('Android notification access'),
-                    ),
-                    const SizedBox(height: 7),
-                    const Text(
-                      'Phone notification mirroring requires Android notification access. '
-                      'Salus keeps each category preference separate for this watch.',
-                      style: TextStyle(
-                        color: AppTheme.textMuted,
-                        fontSize: 11.8,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
+                      ],
+                    ],
+                  ),
                 ),
     );
   }
 }
 
-class _BatteryBadge extends StatelessWidget {
-  final double value;
+class _WatchHero extends StatelessWidget {
+  final SavedDirectDevice device;
+  final double? battery;
 
-  const _BatteryBadge({required this.value});
+  const _WatchHero({
+    required this.device,
+    required this.battery,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: AppTheme.mint.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.mint.withValues(alpha: 0.24)),
-      ),
+    return SalusPaper(
+      glow: true,
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.battery_charging_full_rounded,
-            color: AppTheme.mint,
-            size: 17,
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: AppTheme.cyan.withValues(alpha: 0.10),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: AppTheme.cyan.withValues(alpha: 0.25),
+              ),
+            ),
+            child: const Icon(
+              Icons.watch_outlined,
+              color: AppTheme.cyan,
+              size: 28,
+            ),
           ),
-          const SizedBox(width: 5),
-          Text(
-            '${value.round()}%',
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w800,
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  device.name,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  [
+                    device.protocolLabel ?? device.deviceKind,
+                    if (battery != null) 'Battery ${battery!.round()}%',
+                  ].join(' • '),
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+class _AppCard extends StatelessWidget {
+  final WatchNotificationApp app;
+  final bool enabled;
+  final bool busy;
+  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onAllAccountsChanged;
+  final void Function(WatchNotificationAccount account, bool enabled)?
+      onAccountChanged;
+
+  const _AppCard({
+    required this.app,
+    required this.enabled,
+    required this.busy,
+    required this.onChanged,
+    this.onAllAccountsChanged,
+    this.onAccountChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SalusPaper(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          SwitchListTile.adaptive(
+            value: enabled,
+            onChanged: busy ? null : onChanged,
+            title: Text(
+              app.label,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            subtitle: Text(
+              app.isGmail && app.accounts.isNotEmpty
+                  ? '${app.accounts.length} Gmail account${app.accounts.length == 1 ? '' : 's'} found'
+                  : enabled
+                      ? 'Allowed on watch'
+                      : 'Muted on watch',
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            secondary:
+                Icon(_iconFor(app.packageName), color: AppTheme.textSecondary),
+          ),
+          if (app.isGmail && enabled) ...[
+            const Divider(height: 1),
+            ExpansionTile(
+              title: const Text('Gmail accounts'),
+              subtitle: Text(
+                app.allAccounts
+                    ? 'All accounts allowed'
+                    : 'Choose individual accounts',
+              ),
+              children: [
+                SwitchListTile.adaptive(
+                  value: app.allAccounts,
+                  onChanged: busy ? null : onAllAccountsChanged,
+                  title: const Text('All Gmail accounts'),
+                  subtitle: const Text(
+                    'Turn this off to choose individual accounts.',
+                  ),
+                ),
+                if (app.accounts.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    child: Text(
+                      'Gmail accounts will appear here after Salus sees a Gmail notification. No Gmail login is required.',
+                      style: TextStyle(
+                        color: AppTheme.textMuted,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  )
+                else
+                  for (final account in app.accounts)
+                    SwitchListTile.adaptive(
+                      value: account.enabled,
+                      onChanged: busy || app.allAccounts
+                          ? null
+                          : (value) =>
+                              onAccountChanged?.call(account, value),
+                      title: Text(account.name),
+                      dense: true,
+                    ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  IconData _iconFor(String packageName) {
+    if (packageName == 'com.google.android.gm') {
+      return Icons.mail_outline_rounded;
+    }
+    if (packageName.contains('messaging') ||
+        packageName.contains('messages')) {
+      return Icons.sms_outlined;
+    }
+    if (packageName.contains('calendar')) {
+      return Icons.calendar_month_outlined;
+    }
+    if (packageName.contains('facebook') ||
+        packageName.contains('instagram') ||
+        packageName.contains('whatsapp') ||
+        packageName.contains('snapchat') ||
+        packageName.contains('discord')) {
+      return Icons.forum_outlined;
+    }
+    return Icons.notifications_none_rounded;
   }
 }

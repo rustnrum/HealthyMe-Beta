@@ -25,6 +25,26 @@
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
+        <package android:name="com.google.android.dialer" />
+        <package android:name="com.samsung.android.dialer" />
+        <package android:name="com.google.android.apps.messaging" />
+        <package android:name="com.samsung.android.messaging" />
+        <package android:name="com.google.android.gm" />
+        <package android:name="com.facebook.orca" />
+        <package android:name="com.facebook.katana" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.instagram.android" />
+        <package android:name="com.discord" />
+        <package android:name="com.snapchat.android" />
+        <package android:name="com.google.android.calendar" />
+        <package android:name="com.samsung.android.calendar" />
+        <package android:name="com.microsoft.office.outlook" />
+        <package android:name="org.telegram.messenger" />
+        <package android:name="org.thoughtcrime.securesms" />
+        <package android:name="com.linkedin.android" />
+        <package android:name="com.twitter.android" />
+        <package android:name="com.microsoft.teams" />
+        <package android:name="com.Slack" />
         <intent>
             <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
         </intent>

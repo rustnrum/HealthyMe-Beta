@@ -105,13 +105,19 @@ class MainActivity : FlutterFragmentActivity() {
                             null,
                         )
                     } else {
+                        val protectedResult =
+                            if (protocolId == "cpap-family") {
+                                protectCpapPairing(deviceId, result)
+                            } else {
+                                result
+                            }
                         SalusProtocolReader(this, mainHandler).read(
                             deviceId,
                             deviceName,
                             protocolId,
                             durationMs,
                             cpapPasskey,
-                            result,
+                            protectedResult,
                         )
                     }
                 }
@@ -126,6 +132,112 @@ class MainActivity : FlutterFragmentActivity() {
                                 cpapPasskey,
                             )
                     )
+                }
+                "cpapHasSavedPairing" -> {
+                    val deviceId = call.argument<String>("deviceId")
+                    result.success(
+                        !deviceId.isNullOrBlank() &&
+                            hasSavedCpapPairing(deviceId)
+                    )
+                }
+                "resetCpapPairing" -> {
+                    val deviceId = call.argument<String>("deviceId")
+                    result.success(
+                        !deviceId.isNullOrBlank() &&
+                            resetCpapPairing(deviceId)
+                    )
+                }
+                "getWatchNotificationState" -> {
+                    val deviceId = call.argument<String>("deviceId") ?: ""
+                    val deviceName =
+                        call.argument<String>("deviceName") ?: "Watch"
+                    val protocolId =
+                        call.argument<String>("protocolId") ?: ""
+                    result.success(
+                        SalusWatchNotificationStore.state(
+                            this,
+                            deviceId,
+                            deviceName,
+                            protocolId,
+                            isNotificationServiceEnabled(),
+                        )
+                    )
+                }
+                "setWatchNotificationMaster" -> {
+                    val deviceId = call.argument<String>("deviceId") ?: ""
+                    val deviceName =
+                        call.argument<String>("deviceName") ?: "Watch"
+                    val protocolId =
+                        call.argument<String>("protocolId") ?: ""
+                    val enabled =
+                        call.argument<Boolean>("enabled") == true
+                    if (deviceId.isNotBlank()) {
+                        SalusWatchNotificationStore.setMaster(
+                            this,
+                            deviceId,
+                            deviceName,
+                            protocolId,
+                            enabled,
+                        )
+                    }
+                    result.success(true)
+                }
+                "setWatchNotificationApp" -> {
+                    val deviceId = call.argument<String>("deviceId") ?: ""
+                    val packageName =
+                        call.argument<String>("packageName") ?: ""
+                    val enabled =
+                        call.argument<Boolean>("enabled") == true
+                    if (deviceId.isNotBlank() &&
+                        packageName.isNotBlank()
+                    ) {
+                        SalusWatchNotificationStore.setApp(
+                            this,
+                            deviceId,
+                            packageName,
+                            enabled,
+                        )
+                    }
+                    result.success(true)
+                }
+                "setWatchNotificationAllAccounts" -> {
+                    val deviceId = call.argument<String>("deviceId") ?: ""
+                    val packageName =
+                        call.argument<String>("packageName") ?: ""
+                    val enabled =
+                        call.argument<Boolean>("enabled") == true
+                    if (deviceId.isNotBlank() &&
+                        packageName.isNotBlank()
+                    ) {
+                        SalusWatchNotificationStore.setAllAccounts(
+                            this,
+                            deviceId,
+                            packageName,
+                            enabled,
+                        )
+                    }
+                    result.success(true)
+                }
+                "setWatchNotificationAccount" -> {
+                    val deviceId = call.argument<String>("deviceId") ?: ""
+                    val packageName =
+                        call.argument<String>("packageName") ?: ""
+                    val account = call.argument<String>("account") ?: ""
+                    val enabled =
+                        call.argument<Boolean>("enabled") == true
+                    if (deviceId.isNotBlank() &&
+                        packageName.isNotBlank() &&
+                        account.isNotBlank()
+                    ) {
+                        SalusWatchNotificationStore.setAccount(
+                            this,
+                            deviceId,
+                            packageName,
+                            account,
+                            enabled,
+                        )
+                    }
+                    result.success(true)
                 }
                 "notificationAccessStatus" -> {
                     result.success(isNotificationServiceEnabled())
@@ -145,6 +257,79 @@ class MainActivity : FlutterFragmentActivity() {
                     }
                 }
                 else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun cpapPrefs() =
+        getSharedPreferences("salus_resmed_session_v1", 0)
+
+    private fun cpapKey(deviceId: String): String =
+        deviceId.replace(":", "").lowercase()
+
+    private fun hasSavedCpapPairing(deviceId: String): Boolean {
+        val key = cpapKey(deviceId)
+        val prefs = cpapPrefs()
+        val clientId = prefs.getString("${key}_clientId", null)
+        val master = prefs.getString("${key}_masterPairKey", null)
+        return !clientId.isNullOrBlank() && !master.isNullOrBlank()
+    }
+
+    private fun resetCpapPairing(deviceId: String): Boolean {
+        val key = cpapKey(deviceId)
+        cpapPrefs().edit()
+            .remove("${key}_clientId")
+            .remove("${key}_masterPairKey")
+            .apply()
+        return true
+    }
+
+    private fun protectCpapPairing(
+        deviceId: String,
+        delegate: MethodChannel.Result,
+    ): MethodChannel.Result {
+        val key = cpapKey(deviceId)
+        val prefs = cpapPrefs()
+        val savedClientId = prefs.getString("${key}_clientId", null)
+        val savedMaster = prefs.getString("${key}_masterPairKey", null)
+
+        if (savedClientId.isNullOrBlank() || savedMaster.isNullOrBlank()) {
+            return delegate
+        }
+
+        fun restoreIfReaderClearedSavedPairing() {
+            val currentClientId =
+                prefs.getString("${key}_clientId", null)
+            val currentMaster =
+                prefs.getString("${key}_masterPairKey", null)
+            if (currentClientId.isNullOrBlank() ||
+                currentMaster.isNullOrBlank()
+            ) {
+                prefs.edit()
+                    .putString("${key}_clientId", savedClientId)
+                    .putString("${key}_masterPairKey", savedMaster)
+                    .apply()
+            }
+        }
+
+        return object : MethodChannel.Result {
+            override fun success(result: Any?) {
+                restoreIfReaderClearedSavedPairing()
+                delegate.success(result)
+            }
+
+            override fun error(
+                errorCode: String,
+                errorMessage: String?,
+                errorDetails: Any?,
+            ) {
+                restoreIfReaderClearedSavedPairing()
+                delegate.error(errorCode, errorMessage, errorDetails)
+            }
+
+            override fun notImplemented() {
+                restoreIfReaderClearedSavedPairing()
+                delegate.notImplemented()
             }
         }
     }
