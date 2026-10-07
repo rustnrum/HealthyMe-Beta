@@ -20,6 +20,7 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
   final _store = DirectDeviceStore();
   final _direct = DirectMetricService();
   final _therapy = CpapTherapyService();
+  final _passkeyController = TextEditingController();
 
   List<SavedDirectDevice> _devices = const [];
   List<DirectMetricSample> _samples = const [];
@@ -36,6 +37,12 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _passkeyController.dispose();
+    super.dispose();
   }
 
   @override
@@ -123,7 +130,10 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
           bondState: device.bonded ? 'bonded' : device.pairState,
         ),
         protocolId: 'cpap-family',
-        duration: const Duration(seconds: 20),
+        duration: const Duration(seconds: 24),
+        cpapPasskey: _passkeyController.text.trim().isEmpty
+            ? null
+            : _passkeyController.text.trim(),
       );
       if (!mounted) return;
       setState(() {
@@ -176,6 +186,18 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
                   const SizedBox(height: 14),
                   _providerCard(selected),
                   const SizedBox(height: 12),
+                  TextField(
+                    controller: _passkeyController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'ResMed 4-digit code',
+                      helperText: 'First secure pairing only. Leave blank after Salus has paired.',
+                      counterText: '',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -188,7 +210,7 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
                             )
                           : const Icon(Icons.sync_rounded, size: 18),
                       label: Text(
-                        _checking ? 'Listening…' : 'Probe live CPAP data',
+                        _checking ? 'Syncing…' : 'Secure sync CPAP data',
                       ),
                     ),
                   ),
@@ -228,7 +250,7 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
                   color: AppTheme.cyan, size: 21),
               SizedBox(width: 8),
               Text(
-                'Live ResMed probe',
+                'ResMed session diagnostics',
                 style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 16,
@@ -249,7 +271,7 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
           ),
           const SizedBox(height: 5),
           const Text(
-            'Raw BLE observations are diagnostic only until Salus maps them to verified therapy fields.',
+            'Salus only sends secure-session and read-only Get requests. It does not change therapy settings.',
             style: TextStyle(
               color: AppTheme.textMuted,
               fontSize: 11.8,
@@ -316,7 +338,7 @@ class _CpapScreenState extends ConsumerState<CpapScreen> {
                 Text(
                   device == null
                       ? 'Connect a CPAP to start building nightly therapy trends.'
-                      : '${device.name} • ResMed read-only probe',
+                      : '${device.name} • secure read-only therapy sync',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13.2,

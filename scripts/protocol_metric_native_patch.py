@@ -14,7 +14,8 @@ if '"readProtocolMetrics" ->' not in text:
                     val protocolId = call.argument<String>("protocolId") ?: ""
                     val durationMs =
                         (call.argument<Number>("durationMs")?.toLong()
-                            ?: 16000L).coerceIn(5000L, 24000L)
+                            ?: 16000L).coerceIn(5000L, 30000L)
+                    val cpapPasskey = call.argument<String>("cpapPasskey")
                     if (deviceId.isNullOrBlank()) {
                         result.error(
                             "BLE_DEVICE_ID_MISSING",
@@ -23,7 +24,7 @@ if '"readProtocolMetrics" ->' not in text:
                         )
                     } else {
                         SalusProtocolReader(this, mainHandler)
-                            .read(deviceId, deviceName, protocolId, durationMs, result)
+                            .read(deviceId, deviceName, protocolId, durationMs, cpapPasskey, result)
                     }
                 }
 '''
@@ -37,4 +38,4 @@ if not source.exists():
     raise SystemExit('protocol metric native patch: Kotlin template missing')
 target = main.parent / 'SalusProtocolReader.kt'
 target.write_text(source.read_text())
-print('Salus build 33 protocol reader bridge applied.')
+print('Salus build 34 protocol reader bridge applied.')

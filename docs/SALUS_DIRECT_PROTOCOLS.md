@@ -35,3 +35,9 @@ The probe reads characteristics that explicitly advertise the Bluetooth GATT REA
 The CPAP dashboard reports how many readable characteristic values were returned, how many notification channels were subscribed, and how many live notifications arrived. Up to 12 raw observations are shown for protocol identification. These values are diagnostic until a field is positively mapped to a therapy metric.
 
 Public AirSense 11 reverse-engineering documents the advertised `0000fd56-0000-1000-8000-00805f9b34fb` BLE service and a secure FIG/RPC session model. Normal application RPC traffic requires a paired session, so Build 33 intentionally starts with passive/read-only observation before implementing credentialed therapy RPC.
+
+## Build 34 - ResMed AirSense 11 secure read-only session
+
+Build 34 adds the documented Air11 FIG transport and secure application session. First pairing uses the 4-digit code shown by the ResMed device and SRP-6a; later syncs reuse the saved client ID/master pair key through RequestSession/CheckSessionIntegrity. After authentication Salus only issues read-only `Get` requests for current/report-day therapy values. It does not issue `Set`, therapy start/stop, pressure, mode, mask-fit, erase, reset, or other mutating RPCs.
+
+Requested read-only fields include report-day usage (`_OUD`), AHI (`_AHI`), leak (`_LK9`/`_LKF`), mask pressure (`_PM9`/`_MKF`), respiratory rate (`_RR2`), DeviceControl, and MachineMetrics. Leak values are converted from L/s to L/min before entering Salus metrics.

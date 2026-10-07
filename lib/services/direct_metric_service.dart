@@ -147,6 +147,7 @@ class DirectMetricService {
     BleDeviceCandidate device, {
     String? protocolId,
     Duration duration = const Duration(seconds: 14),
+    String? cpapPasskey,
   }) async {
     final resolvedProtocolId = protocolId ?? device.protocolId;
 
@@ -165,6 +166,7 @@ class DirectMetricService {
         'deviceName': device.name,
         'protocolId': resolvedProtocolId,
         'durationMs': duration.inMilliseconds,
+        'cpapPasskey': cpapPasskey,
       },
     );
     var map = raw ?? const <dynamic, dynamic>{};

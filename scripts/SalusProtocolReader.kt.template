@@ -14,6 +14,16 @@ import android.bluetooth.BluetoothProfile
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
+import org.json.JSONArray
+import org.json.JSONObject
+import java.math.BigInteger
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.util.zip.CRC32
+import javax.crypto.Cipher
+import javax.crypto.Mac
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
 import java.util.Calendar
@@ -22,11 +32,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.sqrt
 
 /**
- * SALUS_PROTOCOL_METRICS_V033
+ * SALUS_PROTOCOL_METRICS_V034
  *
- * Local protocol readers plus a read-only ResMed BLE probe for positively
- * identified device families. A metric is returned only after a real packet carrying that
- * metric is received from the user's device.
+ * Local protocol readers plus a read-only ResMed AirSense 11 secure session reader.
+ * The ResMed path only performs pairing/session RPC plus read-only Get requests;
+ * it does not change pressure, mode, comfort, or therapy settings.
  */
 class SalusProtocolReader(
     private val activity: Activity,
@@ -58,6 +68,28 @@ class SalusProtocolReader(
             UUID.fromString("0000fd56-0000-1000-8000-00805f9b34fb")
         private val RESMED_DEVICE_SERVICE =
             UUID.fromString("948652e2-d03b-11e8-a8d5-f2801f1b9fd1")
+        private val RESMED_TX =
+            UUID.fromString("a6220002-35f1-4b20-afae-cb089d2044aa")
+        private val RESMED_RX =
+            UUID.fromString("a6220003-35f1-4b20-afae-cb089d2044aa")
+        private const val RESMED_VCID_PLAIN_TX = 0x0393
+        private const val RESMED_VCID_PLAIN_RX = 0x0392
+        private const val RESMED_VCID_ENC_TX = 0x0397
+        private const val RESMED_VCID_ENC_RX = 0x0396
+        private const val RESMED_FIG_SYNC = 0xCAFEBABE.toInt()
+        private val RESMED_SRP_N = BigInteger(
+            "AC6BDB41324A9A9BF166DE5E1389582FAF72B6651987EE07FC3192943DB56050" +
+                "A37329CBB4A099ED8193E0757767A13DD52312AB4B03310DCD7F48A9DA04FD50" +
+                "E8083969EDB767B0CF6095179A163AB3661A05FBD5FAAAE82918A9962F0B93B" +
+                "855F97993EC975EEAA80D740ADBF4FF747359D041D5C33EA71D281E446B1477" +
+                "3BCA97B43A23FB801676BD207A436C6481F1D2B9078717461A5B9D32E688F87" +
+                "748544523B524B0D57D5EA77A2775D2ECFA032CFBDBF52FB3786160279004E5" +
+                "7AE6AF874E7303CE53299CCC041C7BC308D82A5698F3A8D0C38271AE35F8E9D" +
+                "BFBB694B5C803D89F7AE435DE236D525F54759B65E372FCD68EF20FA7111F9E" +
+                "4AFF73",
+            16,
+        )
+        private val RESMED_SRP_G = BigInteger.valueOf(2L)
 
         private const val GARMIN_GFDI = 1
         private const val GARMIN_REALTIME_HR = 6
@@ -88,6 +120,7 @@ class SalusProtocolReader(
         deviceName: String,
         protocolId: String,
         durationMs: Long,
+        cpapPasskey: String?,
         result: MethodChannel.Result,
     ) {
         if (!hasBluetoothPermission()) {
@@ -121,7 +154,7 @@ class SalusProtocolReader(
             return
         }
 
-        Session(device, deviceName, protocolId, durationMs, result).start()
+        Session(device, deviceName, protocolId, durationMs, cpapPasskey, result).start()
     }
 
     @SuppressLint("MissingPermission")
@@ -130,6 +163,7 @@ class SalusProtocolReader(
         private val deviceName: String,
         private val protocolId: String,
         private val durationMs: Long,
+        private val cpapPasskey: String?,
         private val result: MethodChannel.Result,
     ) {
         private val completed = AtomicBoolean(false)
@@ -176,6 +210,26 @@ class SalusProtocolReader(
         private var cpapReadCount = 0
         private var cpapNotificationCount = 0
         private var cpapSubscriptions = 0
+
+        // AirSense 11 FIG + secure-session state. Only read-only application
+        // RPCs are issued after authentication.
+        private var cpapTx: BluetoothGattCharacteristic? = null
+        private var cpapRx: BluetoothGattCharacteristic? = null
+        private var cpapSessionStarted = false
+        private var cpapAuthenticated = false
+        private var cpapPairingRequired = false
+        private var cpapRpcId = 100
+        private var cpapPendingMethod = ""
+        private val cpapFigBuffer = ByteArrayOutputStream()
+        private val cpapRandom = SecureRandom()
+        private var cpapSrpPrivate: BigInteger? = null
+        private var cpapSrpPublic: BigInteger? = null
+        private var cpapMasterPairKey: ByteArray? = null
+        private var cpapExpectedServerProof: ByteArray? = null
+        private var cpapPendingNonce: ByteArray? = null
+        private var cpapSessionKey: ByteArray? = null
+        private val cpapWriteQueue = java.util.ArrayDeque<ByteArray>()
+        private var cpapWriteBusy = false
 
         private val callback = object : BluetoothGattCallback() {
             override fun onConnectionStateChange(
@@ -303,6 +357,21 @@ class SalusProtocolReader(
                 }
             }
 
+            override fun onCharacteristicWrite(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                status: Int,
+            ) {
+                if (mode == "cpap" && characteristic.uuid == RESMED_TX) {
+                    cpapWriteBusy = false
+                    if (status != BluetoothGatt.GATT_SUCCESS) {
+                        finish("ResMed transport write failed with status $status.")
+                        return
+                    }
+                    writeNextCpapChunk()
+                }
+            }
+
             @Deprecated("Deprecated in Java")
             override fun onCharacteristicRead(
                 gatt: BluetoothGatt,
@@ -385,6 +454,9 @@ class SalusProtocolReader(
             if (mode == "cpap") {
                 cpapNotificationCount += 1
                 recordCpapObservation("notify", uuid, value)
+                if (uuid == RESMED_RX) {
+                    handleCpapTransport(value)
+                }
                 return
             }
             when {
@@ -425,9 +497,13 @@ class SalusProtocolReader(
             }
 
             val cpapMessage = if (mode == "cpap" && message == null) {
-                "ResMed connected. Read $cpapReadCount characteristic value${if (cpapReadCount == 1) "" else "s"}; " +
-                    "received $cpapNotificationCount live notification${if (cpapNotificationCount == 1) "" else "s"}. " +
-                    "This is a read-only BLE probe; therapy values are not decoded until their fields are identified."
+                if (cpapAuthenticated) {
+                    "ResMed secure session established. Read ${metrics.size} verified therapy metric${if (metrics.size == 1) "" else "s"}."
+                } else if (cpapPairingRequired) {
+                    "Secure ResMed pairing is required. Put the AirSense in Bluetooth pairing mode, enter the 4-digit code shown on its screen, then run Secure sync again."
+                } else {
+                    "ResMed connected, but a secure application session was not established before timeout."
+                }
             } else {
                 null
             }
@@ -458,6 +534,8 @@ class SalusProtocolReader(
                                 "readCount" to cpapReadCount,
                                 "notificationCount" to cpapNotificationCount,
                                 "subscriptionCount" to cpapSubscriptions,
+                                "authenticated" to if (cpapAuthenticated) 1 else 0,
+                                "pairingRequired" to if (cpapPairingRequired) 1 else 0,
                             )
                         } else {
                             emptyMap<String, Int>()
@@ -543,7 +621,7 @@ class SalusProtocolReader(
         // -----------------------------------------------------------------
 
         private fun startCpapProbe(gatt: BluetoothGatt) {
-            readerName = "ResMed read-only BLE probe"
+            readerName = "ResMed AirSense 11 secure read-only reader"
             mode = "cpap"
             cpapReadQueue.clear()
             cpapNotifyQueue.clear()
@@ -553,9 +631,19 @@ class SalusProtocolReader(
             cpapReadCount = 0
             cpapNotificationCount = 0
             cpapSubscriptions = 0
+            cpapSessionStarted = false
+            cpapAuthenticated = false
+            cpapPairingRequired = false
+            cpapFigBuffer.reset()
+            cpapWriteQueue.clear()
+            cpapWriteBusy = false
+            cpapTx = null
+            cpapRx = null
 
             for (service in gatt.services) {
                 for (characteristic in service.characteristics) {
+                    if (characteristic.uuid == RESMED_TX) cpapTx = characteristic
+                    if (characteristic.uuid == RESMED_RX) cpapRx = characteristic
                     val properties = characteristic.properties
                     if (
                         properties and BluetoothGattCharacteristic.PROPERTY_READ != 0
@@ -655,8 +743,9 @@ class SalusProtocolReader(
             }
 
             notes.add(
-                "ResMed probe is listening for live BLE changes until timeout."
+                "ResMed BLE notifications are active; opening read-only application session."
             )
+            beginCpapSession()
         }
 
         private fun recordCpapObservation(
@@ -680,6 +769,469 @@ class SalusProtocolReader(
             while (cpapObservations.size > 24) {
                 val first = cpapObservations.keys.firstOrNull() ?: break
                 cpapObservations.remove(first)
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // ResMed AirSense 11 secure FIG session (read-only application RPC).
+        // Based on the publicly documented Air11 transport: plaintext session
+        // VCIDs 0x0393/0x0392, encrypted app VCIDs 0x0397/0x0396, SRP-6a
+        // first pairing, HMAC reconnect, and AES-256-CBC application payloads.
+        // -----------------------------------------------------------------
+
+        private fun beginCpapSession() {
+            if (completed.get() || cpapSessionStarted) return
+            cpapSessionStarted = true
+            val tx = cpapTx
+            val rx = cpapRx
+            if (tx == null || rx == null) {
+                notes.add("ResMed FIG TX/RX characteristics were not found on this firmware.")
+                return
+            }
+
+            val prefs = activity.getSharedPreferences("salus_resmed_session_v1", 0)
+            val key = device.address.replace(":", "").lowercase()
+            val clientId = prefs.getString("${key}_clientId", null)
+            val masterHex = prefs.getString("${key}_masterPairKey", null)
+            val master = masterHex?.let { hexToBytesOrNull(it) }
+            if (!clientId.isNullOrBlank() && master?.size == 32) {
+                cpapMasterPairKey = master
+                sendCpapRpc(
+                    "RequestSession",
+                    JSONObject().put("clientId", clientId),
+                    encrypted = false,
+                )
+                return
+            }
+
+            val code = cpapPasskey?.trim().orEmpty()
+            if (!Regex("^[0-9]{4}$").matches(code)) {
+                cpapPairingRequired = true
+                finish()
+                return
+            }
+            startCpapKeyExchange(code)
+        }
+
+        private fun startCpapKeyExchange(passkey: String) {
+            var a: BigInteger
+            do {
+                a = BigInteger(256, cpapRandom)
+            } while (a == BigInteger.ZERO || a >= RESMED_SRP_N)
+            val public = RESMED_SRP_G.modPow(a, RESMED_SRP_N)
+            cpapSrpPrivate = a
+            cpapSrpPublic = public
+            notes.add("Starting ResMed secure pairing exchange.")
+            sendCpapRpc(
+                "StartKeyExchange",
+                JSONObject().put("clientPk", bytesToHex(srpPad(public)).uppercase()),
+                encrypted = false,
+            )
+        }
+
+        private fun sendCpapRpc(
+            method: String,
+            params: Any?,
+            encrypted: Boolean,
+        ) {
+            val request = JSONObject()
+            request.put("id", ++cpapRpcId)
+            request.put("jsonrpc", if (method == "Get") "1.0" else "2.0")
+            request.put("method", method)
+            if (params != null) request.put("params", params)
+            val json = request.toString().toByteArray(Charsets.UTF_8)
+            val payload = if (encrypted) {
+                val key = cpapSessionKey ?: run {
+                    notes.add("Encrypted ResMed request blocked because session key is missing.")
+                    return
+                }
+                aesEncryptCpap(json, key)
+            } else {
+                json
+            }
+            cpapPendingMethod = method
+            val vcid = if (encrypted) RESMED_VCID_ENC_TX else RESMED_VCID_PLAIN_TX
+            sendCpapFig(vcid, payload)
+        }
+
+        private fun sendCpapFig(vcid: Int, payload: ByteArray) {
+            val packet = figEncode(vcid, payload)
+            // 20-byte chunks work even when Android has not negotiated a larger MTU.
+            // Acknowledged writes advance from onCharacteristicWrite; write commands
+            // are paced by the handler so the peripheral reassembles the FIG packet.
+            var offset = 0
+            while (offset < packet.size) {
+                val end = minOf(offset + 20, packet.size)
+                cpapWriteQueue.add(packet.copyOfRange(offset, end))
+                offset = end
+            }
+            writeNextCpapChunk()
+        }
+
+        @Suppress("DEPRECATION")
+        private fun writeNextCpapChunk() {
+            if (completed.get() || cpapWriteBusy) return
+            val characteristic = cpapTx ?: return
+            val activeGatt = gatt ?: return
+            val chunk = cpapWriteQueue.poll() ?: return
+            val noResponse = characteristic.properties and
+                BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0
+            characteristic.writeType = if (noResponse) {
+                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            } else {
+                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            }
+            characteristic.value = chunk
+            val started = try {
+                activeGatt.writeCharacteristic(characteristic)
+            } catch (_: Throwable) {
+                false
+            }
+            if (!started) {
+                finish("ResMed transport could not write the next FIG fragment.")
+                return
+            }
+            if (noResponse) {
+                mainHandler.postDelayed({ writeNextCpapChunk() }, 28L)
+            } else {
+                cpapWriteBusy = true
+            }
+        }
+
+        private fun handleCpapTransport(chunk: ByteArray) {
+            cpapFigBuffer.write(chunk)
+            val packets = decodeCpapFigBuffer()
+            for ((vcid, raw) in packets) {
+                val payload = if (vcid == RESMED_VCID_ENC_RX) {
+                    val key = cpapSessionKey ?: continue
+                    try {
+                        aesDecryptCpap(raw, key)
+                    } catch (error: Throwable) {
+                        notes.add("ResMed encrypted response could not be decrypted: ${error.javaClass.simpleName}.")
+                        continue
+                    }
+                } else if (vcid == RESMED_VCID_PLAIN_RX) {
+                    raw
+                } else {
+                    continue
+                }
+                val text = try {
+                    payload.toString(Charsets.UTF_8)
+                } catch (_: Throwable) {
+                    continue
+                }
+                recordCpapObservation(
+                    if (vcid == RESMED_VCID_ENC_RX) "rpc encrypted" else "rpc plain",
+                    RESMED_RX,
+                    payload,
+                )
+                val json = try {
+                    JSONObject(text)
+                } catch (_: Throwable) {
+                    continue
+                }
+                handleCpapJson(json)
+            }
+        }
+
+        private fun handleCpapJson(message: JSONObject) {
+            val method = cpapPendingMethod
+            if (message.has("error")) {
+                val error = message.optJSONObject("error")
+                if (method == "Get") {
+                    error?.optJSONObject("data")?.let { parseCpapGetResult(it) }
+                    if (metrics.isNotEmpty()) {
+                        cpapAuthenticated = true
+                        finish("ResMed secure session returned ${metrics.size} verified therapy metrics.")
+                    } else {
+                        finish("ResMed secure session opened, but the requested therapy fields were unavailable on this firmware/state.")
+                    }
+                } else {
+                    finish("ResMed $method returned ${error?.optString("message") ?: "an error"}.")
+                }
+                return
+            }
+            val resultObject = message.optJSONObject("result")
+            when (method) {
+                "StartKeyExchange" -> {
+                    if (resultObject == null) return
+                    val serverPk = resultObject.optString("serverPk")
+                    val salt = resultObject.optString("salt")
+                    val passkey = cpapPasskey?.trim().orEmpty()
+                    if (serverPk.isBlank() || salt.isBlank() || passkey.length != 4) {
+                        finish("ResMed key exchange did not return the expected pairing fields.")
+                        return
+                    }
+                    val proof = computeCpapSrpProof(serverPk, salt, passkey) ?: run {
+                        finish("Could not compute the ResMed pairing proof.")
+                        return
+                    }
+                    sendCpapRpc(
+                        "ConfirmKeyExchange",
+                        JSONObject().put("clientConfirmation", bytesToHex(proof).uppercase()),
+                        encrypted = false,
+                    )
+                }
+                "ConfirmKeyExchange" -> {
+                    if (resultObject == null) return
+                    val clientId = resultObject.optString("clientId")
+                    val serverProof = hexToBytesOrNull(resultObject.optString("serverConfirmation"))
+                    val nonce = hexToBytesOrNull(resultObject.optString("nonce"))
+                    val expected = cpapExpectedServerProof
+                    val master = cpapMasterPairKey
+                    if (clientId.isBlank() || serverProof == null || nonce == null || expected == null || master == null || !serverProof.contentEquals(expected)) {
+                        finish("ResMed secure pairing proof verification failed.")
+                        return
+                    }
+                    val prefs = activity.getSharedPreferences("salus_resmed_session_v1", 0)
+                    val key = device.address.replace(":", "").lowercase()
+                    prefs.edit()
+                        .putString("${key}_clientId", clientId)
+                        .putString("${key}_masterPairKey", bytesToHex(master))
+                        .apply()
+                    cpapSessionKey = sha256(master, nonce)
+                    cpapAuthenticated = true
+                    requestCpapReadOnlyData()
+                }
+                "RequestSession" -> {
+                    if (resultObject == null) return
+                    val challenge = hexToBytesOrNull(resultObject.optString("challenge"))
+                    val nonce = hexToBytesOrNull(resultObject.optString("nonce"))
+                    val master = cpapMasterPairKey
+                    if (challenge == null || nonce == null || master == null) {
+                        finish("ResMed reconnect challenge was incomplete.")
+                        return
+                    }
+                    cpapPendingNonce = nonce
+                    val mac = Mac.getInstance("HmacSHA256")
+                    mac.init(SecretKeySpec(master, "HmacSHA256"))
+                    val response = mac.doFinal(challenge)
+                    sendCpapRpc(
+                        "CheckSessionIntegrity",
+                        JSONObject().put("response", bytesToHex(response).uppercase()),
+                        encrypted = false,
+                    )
+                }
+                "CheckSessionIntegrity" -> {
+                    val accepted = resultObject?.optBoolean("confirmation", false) == true
+                    val master = cpapMasterPairKey
+                    val nonce = cpapPendingNonce
+                    if (!accepted || master == null || nonce == null) {
+                        finish("Stored ResMed session credentials were rejected. Enter a fresh 4-digit pairing code to pair Salus again.")
+                        return
+                    }
+                    cpapSessionKey = sha256(master, nonce)
+                    cpapAuthenticated = true
+                    requestCpapReadOnlyData()
+                }
+                "Get" -> {
+                    if (resultObject != null) parseCpapGetResult(resultObject)
+                    finish(
+                        if (metrics.isEmpty()) {
+                            "ResMed secure session opened, but no requested therapy values were available right now."
+                        } else {
+                            "ResMed secure session read ${metrics.size} verified therapy metric${if (metrics.size == 1) "" else "s"}."
+                        }
+                    )
+                }
+            }
+        }
+
+        private fun requestCpapReadOnlyData() {
+            // These are read-only Get targets documented by the AirSense 11
+            // data model. No Set/therapy-control RPC is used by Salus.
+            val fields = JSONArray()
+                .put("_OUD")   // current/previous report-day usage, minutes
+                .put("_AHI")   // summary AHI, events/hour
+                .put("_LK9")   // summary leak p95, L/s
+                .put("_PM9")   // summary mask pressure p95, cmH2O
+                .put("_MKF")   // live/two-second mask pressure, cmH2O
+                .put("_LKF")   // live/two-second leak, L/s
+                .put("_RR2")   // respiratory rate
+                .put("DeviceControl")
+                .put("MachineMetrics")
+            sendCpapRpc("Get", fields, encrypted = true)
+        }
+
+        private fun parseCpapGetResult(obj: JSONObject) {
+            fun number(vararg names: String): Double? {
+                for (name in names) {
+                    val value = obj.opt(name)
+                    if (value is Number) return value.toDouble()
+                }
+                return null
+            }
+            number("_OUD", "OUD")?.let { if (it in 0.0..1440.0) metrics["Usage time"] = it }
+            number("_AHI", "AHI", "Summary-ApneaHypopneaIndex")?.let {
+                if (it in 0.0..240.0) metrics["AHI"] = it
+            }
+            val leak = number("_LKF", "LKF", "_LK9", "LK9")
+            if (leak != null && leak in 0.0..4.0) metrics["Leak rate"] = leak * 60.0
+            number("_MKF", "MKF", "_PM9", "PM9")?.let {
+                if (it in 0.0..40.0) metrics["Therapy pressure"] = it
+            }
+            number("_RR2", "RR2")?.let {
+                if (it in 0.0..80.0) metrics["Respiratory rate"] = it
+            }
+            obj.optJSONObject("DeviceControl")?.let {
+                cpapObservations["rpc • DeviceControl"] = bytesToHex(it.toString().toByteArray(Charsets.UTF_8))
+            }
+            obj.optJSONObject("MachineMetrics")?.let {
+                cpapObservations["rpc • MachineMetrics"] = bytesToHex(it.toString().toByteArray(Charsets.UTF_8))
+            }
+        }
+
+        private fun computeCpapSrpProof(serverPkHex: String, saltHex: String, passkey: String): ByteArray? {
+            return try {
+                val a = cpapSrpPrivate ?: return null
+                val public = cpapSrpPublic ?: return null
+                val server = BigInteger(serverPkHex, 16)
+                if (server.mod(RESMED_SRP_N) == BigInteger.ZERO) return null
+                val k = BigInteger(1, sha256(srpPad(RESMED_SRP_N), srpPad(RESMED_SRP_G)))
+                val salt = hexToBytesOrNull(saltHex) ?: return null
+                val x = BigInteger(1, sha256(salt, sha256(passkey.toByteArray(Charsets.US_ASCII))))
+                val u = BigInteger(1, sha256(srpPad(public), srpPad(server)))
+                if (u == BigInteger.ZERO) return null
+                val gx = RESMED_SRP_G.modPow(x, RESMED_SRP_N)
+                val base = server.subtract(k.multiply(gx)).mod(RESMED_SRP_N)
+                val exponent = a.add(u.multiply(x))
+                val shared = base.modPow(exponent, RESMED_SRP_N)
+                val master = sha256(srpPad(shared))
+                val hn = sha256(srpPad(RESMED_SRP_N))
+                val hg = sha256(srpPad(RESMED_SRP_G))
+                val xor = ByteArray(hn.size) { index -> (hn[index].toInt() xor hg[index].toInt()).toByte() }
+                val m1 = sha256(xor, salt, srpPad(public), srpPad(server), master)
+                val m2 = sha256(srpPad(public), m1, master)
+                cpapMasterPairKey = master
+                cpapExpectedServerProof = m2
+                m1
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+        private fun srpPad(value: BigInteger): ByteArray {
+            var raw = value.toByteArray()
+            if (raw.size > 256 && raw.first() == 0.toByte()) raw = raw.copyOfRange(1, raw.size)
+            val out = ByteArray(256)
+            val count = minOf(raw.size, out.size)
+            System.arraycopy(raw, raw.size - count, out, out.size - count, count)
+            return out
+        }
+
+        private fun sha256(vararg parts: ByteArray): ByteArray {
+            val digest = MessageDigest.getInstance("SHA-256")
+            for (part in parts) digest.update(part)
+            return digest.digest()
+        }
+
+        private fun aesEncryptCpap(json: ByteArray, key: ByteArray): ByteArray {
+            val iv = ByteArray(16).also(cpapRandom::nextBytes)
+            val framedLength = 2 + json.size
+            val paddedLength = ((framedLength + 15) / 16) * 16
+            val plain = ByteArray(paddedLength)
+            plain[0] = (json.size and 0xff).toByte()
+            plain[1] = ((json.size ushr 8) and 0xff).toByte()
+            System.arraycopy(json, 0, plain, 2, json.size)
+            val cipher = Cipher.getInstance("AES/CBC/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(iv))
+            return iv + cipher.doFinal(plain)
+        }
+
+        private fun aesDecryptCpap(data: ByteArray, key: ByteArray): ByteArray {
+            require(data.size >= 32 && (data.size - 16) % 16 == 0)
+            val iv = data.copyOfRange(0, 16)
+            val encrypted = data.copyOfRange(16, data.size)
+            val cipher = Cipher.getInstance("AES/CBC/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(iv))
+            val plain = cipher.doFinal(encrypted)
+            val length = u16(plain, 0)
+            require(length <= plain.size - 2)
+            return plain.copyOfRange(2, 2 + length)
+        }
+
+        private fun figEncode(vcid: Int, payload: ByteArray): ByteArray {
+            val header = ByteArray(8)
+            putLe16(header, 0, vcid)
+            putLe16(header, 2, payload.size)
+            putLe32(header, 4, crc32(payload))
+            val out = ByteArray(16 + payload.size)
+            putLe32(out, 0, RESMED_FIG_SYNC.toLong() and 0xffffffffL)
+            System.arraycopy(header, 0, out, 4, header.size)
+            putLe32(out, 12, crc32(header))
+            System.arraycopy(payload, 0, out, 16, payload.size)
+            return out
+        }
+
+        private fun decodeCpapFigBuffer(): List<Pair<Int, ByteArray>> {
+            val output = mutableListOf<Pair<Int, ByteArray>>()
+            var bytes = cpapFigBuffer.toByteArray()
+            var cursor = 0
+            while (cursor + 16 <= bytes.size) {
+                var sync = -1
+                var i = cursor
+                while (i + 4 <= bytes.size) {
+                    if (u32(bytes, i) == (RESMED_FIG_SYNC.toLong() and 0xffffffffL)) {
+                        sync = i
+                        break
+                    }
+                    i += 1
+                }
+                if (sync < 0) break
+                if (sync + 16 > bytes.size) break
+                val vcid = u16(bytes, sync + 4)
+                val length = u16(bytes, sync + 6)
+                val payloadCrc = u32(bytes, sync + 8)
+                val headerCrc = u32(bytes, sync + 12)
+                val header = bytes.copyOfRange(sync + 4, sync + 12)
+                if (crc32(header) != headerCrc) {
+                    cursor = sync + 4
+                    continue
+                }
+                val end = sync + 16 + length
+                if (end > bytes.size) {
+                    cursor = sync
+                    break
+                }
+                val payload = bytes.copyOfRange(sync + 16, end)
+                if (crc32(payload) == payloadCrc) output.add(vcid to payload)
+                cursor = end
+            }
+            val remainder = if (cursor < bytes.size) bytes.copyOfRange(cursor, bytes.size) else byteArrayOf()
+            cpapFigBuffer.reset()
+            if (remainder.isNotEmpty()) cpapFigBuffer.write(remainder)
+            return output
+        }
+
+        private fun crc32(data: ByteArray): Long {
+            val crc = CRC32()
+            crc.update(data)
+            return crc.value
+        }
+
+        private fun putLe16(target: ByteArray, offset: Int, value: Int) {
+            target[offset] = (value and 0xff).toByte()
+            target[offset + 1] = ((value ushr 8) and 0xff).toByte()
+        }
+
+        private fun putLe32(target: ByteArray, offset: Int, value: Long) {
+            target[offset] = (value and 0xff).toByte()
+            target[offset + 1] = ((value ushr 8) and 0xff).toByte()
+            target[offset + 2] = ((value ushr 16) and 0xff).toByte()
+            target[offset + 3] = ((value ushr 24) and 0xff).toByte()
+        }
+
+        private fun bytesToHex(bytes: ByteArray): String = buildString(bytes.size * 2) {
+            for (value in bytes) append((value.toInt() and 0xff).toString(16).padStart(2, '0'))
+        }
+
+        private fun hexToBytesOrNull(value: String): ByteArray? {
+            val clean = value.trim()
+            if (clean.length % 2 != 0 || clean.isEmpty()) return null
+            return try {
+                ByteArray(clean.length / 2) { index -> clean.substring(index * 2, index * 2 + 2).toInt(16).toByte() }
+            } catch (_: Throwable) {
+                null
             }
         }
 

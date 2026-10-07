@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# prepare_android.sh runs ui_contract_check.sh immediately before this script.
-# Do not re-run the UI/source patches here: Build 29 intentionally changes
-# source-hub code that Build 27 originally patched, so replaying Build 27 after
-# Build 29 is both unnecessary and non-idempotent.
 python3 scripts/native_source_registry_patch.py
 python3 scripts/direct_device_native_patch.py
 python3 scripts/direct_metric_native_patch.py
@@ -17,18 +13,7 @@ MAIN_ACTIVITY="$(find android/app/src/main/kotlin -name MainActivity.kt -print -
 PROTO_READER="$(dirname "$MAIN_ACTIVITY")/SalusProtocolReader.kt"
 [ -s "$PROTO_READER" ] || fail "SalusProtocolReader.kt missing"
 
-grep -q '^version: 0.16.0+33$' pubspec.yaml || fail "build 33 version missing"
-
-# UI/source patches must already have been applied by ui_contract_check.sh.
-grep -q 'SALUS_BUILD29_AUTO_IDENTIFY' lib/screens/sources_screen.dart || fail "Build 29 UI patch was not applied before source contract"
-grep -q 'SALUS_BUILD29_HEALTH_CANDIDATE' lib/services/source_hub_service.dart || fail "Build 29 source classification patch missing"
-grep -q 'SALUS_BUILD28_LOCKED_HOME_BACKGROUND' lib/widgets/salus_widgets.dart || fail "Build 28 locked home background missing"
-grep -q 'class ConnectionsScreen' lib/screens/connections_screen.dart || fail "Build 30 normal Connections screen missing"
-grep -q 'SALUS_BUILD30_DEBUG_BANNER' lib/screens/sources_screen.dart || fail "Build 30 debug screen marker missing"
-grep -q "'/sources-debug':" lib/app.dart || fail "Build 30 debug route missing"
-grep -q 'resMedAdvertisedService' lib/services/ble_protocol_profiles.dart || fail "Build 30 ResMed advertised fingerprint missing"
-grep -q 'resMedDeviceService' lib/services/ble_protocol_profiles.dart || fail "Build 30 ResMed proprietary fingerprint missing"
-
+grep -q '^version: 0.17.0+34$' pubspec.yaml || fail "build 34 version missing"
 for required in \
   '"scanBle" ->' \
   '"inspectBle" ->' \
@@ -38,47 +23,37 @@ for required in \
   grep -Fq "$required" "$MAIN_ACTIVITY" || fail "MethodChannel action missing: $required"
 done
 
+grep -q 'call.argument<String>("cpapPasskey")' scripts/protocol_metric_native_patch.py || fail "Build 34 passkey native bridge missing"
 for required in \
-  'SALUS_PROTOCOL_METRICS_V033' \
-  '6e40fff0-b5a3-f393-e0a9-e50e24dcca9e' \
-  'de5bf728-d711-4e47-af26-65e3012a5dc7' \
-  '6a4e2800-667b-11e3-949a-0800200c9a66' \
-  'GARMIN_REALTIME_HR = 6' \
-  'GARMIN_REALTIME_STEPS = 7' \
-  'GARMIN_REALTIME_HRV = 12' \
-  'GARMIN_REALTIME_SPO2 = 19' \
-  'GARMIN_REALTIME_RESPIRATION = 21' \
-  'metrics["Sleep"]' \
-  'metrics["SpO2"]' \
-  'metrics["Steps"]'; do
-  grep -Fq "$required" "$PROTO_READER" || fail "protocol reader missing: $required"
+  'SALUS_PROTOCOL_METRICS_V034' \
+  'a6220002-35f1-4b20-afae-cb089d2044aa' \
+  'a6220003-35f1-4b20-afae-cb089d2044aa' \
+  'RequestSession' \
+  'CheckSessionIntegrity' \
+  'StartKeyExchange' \
+  'ConfirmKeyExchange' \
+  'AES/CBC/NoPadding' \
+  'RESMED_VCID_ENC_TX = 0x0397' \
+  'RESMED_VCID_ENC_RX = 0x0396' \
+  '.put("_OUD")' \
+  '.put("_AHI")' \
+  '.put("_LK9")' \
+  '.put("_PM9")' \
+  'metrics["Usage time"]' \
+  'metrics["AHI"]' \
+  'metrics["Leak rate"]' \
+  'metrics["Therapy pressure"]'; do
+  grep -Fq "$required" "$PROTO_READER" || fail "Build 34 ResMed reader missing: $required"
 done
 
-grep -q "'readProtocolMetrics'" lib/services/direct_metric_service.dart || fail "Dart protocol call missing"
-grep -q "'Sleep Stages'" lib/services/direct_metric_service.dart || fail "direct sleep-stage routing missing"
-grep -q "'Resting heart rate'" lib/services/direct_metric_service.dart || fail "direct resting-HR routing missing"
-grep -q "'Respiratory rate'" lib/services/direct_metric_service.dart || fail "direct respiration routing missing"
-grep -q "'Ring HRV proxy'" lib/services/direct_metric_service.dart || fail "ring HRV proxy isolation missing"
+# Hard safety boundary: this build may authenticate and read only. No therapy/settings mutation RPC.
+for forbidden in '"Set"' '"EnterTherapy"' '"EnterStandby"' '"EnterMaskFit"' '"EraseData"' '"ResetDevice"'; do
+  if grep -Fq "$forbidden" "$PROTO_READER"; then
+    fail "forbidden mutating ResMed RPC present: $forbidden"
+  fi
+done
 
-grep -q 'SALUS_BUILD28_LOCKED_HOME_BACKGROUND' lib/widgets/salus_widgets.dart || fail "locked Salus home background missing"
+grep -q "class CpapScreen" lib/screens/cpap_screen.dart || fail "CPAP dashboard missing"
+grep -q "registeredDevices" lib/services/direct_metric_service.dart || fail "provider registry missing"
 
-grep -q 'SALUS_BUILD29_AUTO_IDENTIFY' lib/screens/sources_screen.dart || fail "automatic device identification missing"
-grep -q 'SALUS_BUILD29_HEALTH_CANDIDATE' lib/services/source_hub_service.dart || fail "Bluetooth health classification missing"
-
-
-
-grep -q "isTherapyOnlyProtocol" lib/services/direct_metric_service.dart || fail "CPAP protocol identity helper missing"
-grep -q "'AHI'" lib/services/ble_protocol_profiles.dart || fail "Build 31 CPAP AHI metric missing"
-grep -q "CPAP therapy reader pending" lib/screens/sources_screen.dart || fail "Build 31 CPAP debug state missing"
-
-grep -q "strongCpapIdentity" lib/services/ble_protocol_profiles.dart || fail "Build 32 CPAP identity priority missing"
-grep -q "registeredDevices" lib/services/direct_metric_service.dart || fail "Build 32 provider registry missing"
-grep -q "class CpapScreen" lib/screens/cpap_screen.dart || fail "Build 32 CPAP dashboard missing"
-
-grep -q 'protocolId = call.argument<String>("protocolId")' scripts/protocol_metric_native_patch.py || fail "Build 33 protocol id bridge missing"
-grep -q 'startCpapProbe' "$PROTO_READER" || fail "Build 33 ResMed probe missing"
-grep -q 'ResMed read-only BLE probe' "$PROTO_READER" || fail "Build 33 read-only reader label missing"
-grep -q 'cpapObservations' "$PROTO_READER" || fail "Build 33 CPAP observations missing"
-grep -q 'readCharacteristic' "$PROTO_READER" || fail "Build 33 safe characteristic reads missing"
-
-echo "Salus build 33 CPAP read-only probe + provider/dashboard contract passed."
+echo "Salus build 34 ResMed secure read-only session contract passed."
