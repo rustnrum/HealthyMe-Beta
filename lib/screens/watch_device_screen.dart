@@ -5,6 +5,7 @@ import '../core/theme/app_theme.dart';
 import '../services/direct_device_store.dart';
 import '../services/direct_metric_service.dart';
 import '../services/watch_notification_service.dart';
+import '../services/garmin_battery_service.dart';
 import '../widgets/salus_widgets.dart';
 
 class WatchDeviceScreen extends ConsumerStatefulWidget {
@@ -19,9 +20,13 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
   final _store = DirectDeviceStore();
   final _direct = DirectMetricService();
   final _notifications = WatchNotificationService();
+  final _garminBattery = GarminBatteryService();
   SavedDirectDevice? _device;
   WatchNotificationState? _state;
   double? _battery;
+  String? _batteryStatus;
+  DateTime? _batteryMeasuredAt;
+  bool _checkingBattery = false;
   bool _loading = true;
   bool _saving = false;
   bool _argsLoaded = false;
@@ -74,20 +79,53 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
     selected ??= watches.isEmpty ? null : watches.first;
     final samples = await _direct.loadSamples();
     double? battery;
+    DateTime? batteryMeasuredAt;
     if (selected != null) {
       final selectedId = selected.id;
       final values = samples.where((sample) =>
           sample.deviceId == selectedId && sample.metric == 'Battery').toList()
         ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
-      if (values.isNotEmpty) battery = values.last.value;
+      if (values.isNotEmpty) {
+        battery = values.last.value;
+        batteryMeasuredAt = values.last.capturedAt;
+      }
     }
+    final batteryStatus = selected != null &&
+            (selected.protocolId ?? '').contains('garmin')
+        ? await _garminBattery.lastResult(selected.id)
+        : null;
     if (!mounted) return;
     setState(() {
+      _batteryStatus = batteryStatus;
+      _batteryMeasuredAt = batteryMeasuredAt;
       _device = selected;
       _battery = battery;
       _loading = false;
     });
     await _reloadNotificationState();
+  }
+
+  Future<void> _checkGarminBattery() async {
+    final device = _device;
+    if (device == null || _checkingBattery) return;
+    setState(() => _checkingBattery = true);
+    try {
+      final status = await _garminBattery.check(device.id, device.name);
+      final samples = await _direct.loadSamples();
+      final entries = samples.where((sample) =>
+          sample.deviceId == device.id && sample.metric == 'Battery').toList()
+        ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+      if (!mounted) return;
+      setState(() {
+        _batteryStatus = status;
+        if (entries.isNotEmpty) {
+          _battery = entries.last.value;
+          _batteryMeasuredAt = entries.last.capturedAt;
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _checkingBattery = false);
+    }
   }
 
   Future<void> _reloadNotificationState() async {
@@ -225,6 +263,42 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
                     padding: const EdgeInsets.fromLTRB(18, 12, 18, 34),
                     children: [
                       _WatchHero(device: device, battery: _battery),
+                      if ((device.protocolId ?? '').contains('garmin')) ...[
+                        const SizedBox(height: 10),
+                        SalusPaper(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Watch charge', style: TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 6),
+                              Text(
+                                _battery == null ? 'Battery: not available yet' :
+                                  'Battery: ${_battery!.round()}% • last read ${_when(_batteryMeasuredAt)}',
+                                style: const TextStyle(color: AppTheme.textSecondary),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text('Battery charge is different from Garmin Body Battery.',
+                                style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                              if (_batteryStatus != null) ...[
+                                const SizedBox(height: 8),
+                                Text(_batteryStatus!, style: const TextStyle(
+                                  color: AppTheme.textSecondary, fontSize: 12)),
+                              ],
+                              const SizedBox(height: 10),
+                              OutlinedButton.icon(
+                                onPressed: _checkingBattery ? null : _checkGarminBattery,
+                                icon: _checkingBattery
+                                    ? const SizedBox(width: 16, height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2))
+                                    : const Icon(Icons.battery_std_rounded),
+                                label: Text(_checkingBattery ? 'Checking…' : 'Check Garmin battery'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 14),
                       SalusPaper(
                         padding: EdgeInsets.zero,

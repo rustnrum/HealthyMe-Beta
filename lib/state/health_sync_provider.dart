@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../services/ble_discovery_service.dart';
 import '../services/direct_device_store.dart';
 import '../services/direct_metric_service.dart';
+import '../services/garmin_battery_service.dart';
 import '../services/health_connect_service.dart';
 import '../services/source_name_service.dart';
 import 'app_state.dart';
@@ -13,6 +14,8 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
   final _service = HealthConnectService();
   final _directService = DirectMetricService();
   final _savedDevices = DirectDeviceStore();
+  final _garminBattery = GarminBatteryService();
+  final Map<String, DateTime> _lastBatteryAttempt = {};
   final Map<String, DateTime> _lastDirectAttempt = {};
 
   @override
@@ -87,6 +90,18 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
           _candidate(device),
           protocolId: device.protocolId,
         );
+        // Only poll Garmin hardware battery automatically if a previous
+        // user-requested check proved its standard GATT battery is readable.
+        // Unsupported firmware should not suffer repeated extra BLE sessions.
+        if ((device.protocolId ?? '').contains('garmin') &&
+            await _garminBattery.knownStandardBattery(device.id)) {
+          final last = _lastBatteryAttempt[device.id];
+          if (last == null || now.difference(last) >=
+              const Duration(minutes: 30)) {
+            _lastBatteryAttempt[device.id] = now;
+            await _garminBattery.check(device.id, device.name);
+          }
+        }
       } catch (_) {
         // Offline/low-battery devices do not block other devices or HC.
         // Existing timestamped data stays available with its true age.
