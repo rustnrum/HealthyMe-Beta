@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/debug_flags.dart';
 import 'core/theme/app_theme.dart';
-import 'screens/ai_coach_screen.dart';
 import 'screens/connections_screen.dart';
 import 'screens/cpap_screen_v38.dart';
 import 'screens/daily_state_screen.dart';
@@ -39,12 +37,25 @@ class HealthyMeApp extends ConsumerWidget {
         '/recovery': (_) => const RecoveryDetailScreen(),
         '/daily-state': (_) => const DailyStateScreen(),
         '/sources': (_) => const ConnectionsScreen(),
-        '/sources-debug': (_) => salusShowDeviceDebug
-            ? const SourcesScreen()
-            : const ConnectionsScreen(),
+        // Only an explicit beta diagnostics action should navigate here.
+        // Do not silently send the user back to Connections.
+        '/sources-debug': (_) => const SourcesScreen(),
         '/cpap': (_) => const CpapScreenV38(),
         '/watch-device': (_) => const WatchDeviceScreen(),
-        '/coach': (_) => const AiCoachScreen(),
+        // AI is deferred. Do not present a fake interactive chat.
+        '/coach': (_) => Scaffold(
+          appBar: AppBar(title: const Text('Salus AI')),
+          body: const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'Salus AI is not available in this beta. Your health data and '
+                'manual tracking still work without an AI connection.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
       },
       home: state.profile.completed
           ? const MorningCheckInGate(child: HomeShell())

@@ -7,11 +7,13 @@ import '../services/source_name_service.dart';
 import '../state/app_state.dart';
 import '../widgets/command_card.dart';
 import '../widgets/design_widgets.dart';
+import 'activity_screen.dart';
+import 'connections_screen.dart';
 import 'goals_screen.dart';
 import 'photos_screen.dart';
 import 'plan_screen.dart';
 import 'profile_screen.dart';
-import 'sources_screen.dart';
+import 'sleep_screen.dart';
 
 class MoreScreen extends ConsumerWidget {
   const MoreScreen({super.key});
@@ -30,11 +32,11 @@ class MoreScreen extends ConsumerWidget {
         HmSectionHeader(
           title: 'Data Sources',
           action: 'Manage',
-          onAction: () => _push(context, const SourcesScreen()),
+          onAction: () => _push(context, const ConnectionsScreen()),
         ),
         const SizedBox(height: 10),
         CommandCard(
-          onTap: () => _push(context, const SourcesScreen()),
+          onTap: () => _push(context, const ConnectionsScreen()),
           child: Row(
             children: [
               const HmIconBadge(
@@ -48,7 +50,7 @@ class MoreScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Health Connect',
+                      'Connections',
                       style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 15,
@@ -58,8 +60,8 @@ class MoreScreen extends ConsumerWidget {
                     const SizedBox(height: 4),
                     Text(
                       app.health.authorized
-                          ? '${_lastRefresh(app)} • $sourceCount source${sourceCount == 1 ? '' : 's'} available'
-                          : 'Connect once, then choose one simple source per metric.',
+                          ? '${_lastRefresh(app)} • $sourceCount Health Connect source${sourceCount == 1 ? '' : 's'} available'
+                          : 'Manage Health Connect and Bluetooth devices, then choose one source per metric.',
                       style: const TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 12.5,
@@ -89,7 +91,7 @@ class MoreScreen extends ConsumerWidget {
             padding: const EdgeInsets.only(bottom: 10),
             child: _PlanRow(
               item: item,
-              onTap: () => _push(context, const PlanScreen()),
+              onTap: () => _openPlanItem(context, item),
             ),
           ),
         const SizedBox(height: 14),
@@ -137,6 +139,40 @@ class MoreScreen extends ConsumerWidget {
     );
   }
 
+  void _openPlanItem(BuildContext context, PlanItem item) {
+    switch (item.category) {
+      case 'Sleep':
+        _push(context, const Scaffold(
+          appBar: _MoreSectionBar('Sleep'),
+          body: SleepScreen(),
+        ));
+        break;
+      case 'Activity':
+        _push(context, const Scaffold(
+          appBar: _MoreSectionBar('Activity'),
+          body: ActivityScreen(),
+        ));
+        break;
+      case 'Training':
+        Navigator.of(context).pushNamed('/workout');
+        break;
+      case 'Nutrition':
+        Navigator.of(context).pushNamed('/diet');
+        break;
+      case 'Recovery':
+        Navigator.of(context).pushNamed('/recovery');
+        break;
+      case 'Labs':
+        Navigator.of(context).pushNamed('/health');
+        break;
+      case 'Data':
+        Navigator.of(context).pushNamed('/sources');
+        break;
+      default:
+        _push(context, const PlanScreen());
+    }
+  }
+
   String _lastRefresh(HealthyMeState app) {
     final sync = app.health.lastSync;
     if (sync == null) return 'Not refreshed yet';
@@ -156,6 +192,17 @@ class MoreScreen extends ConsumerWidget {
   void _push(BuildContext context, Widget screen) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
+}
+
+class _MoreSectionBar extends StatelessWidget implements PreferredSizeWidget {
+  final String title;
+  const _MoreSectionBar(this.title);
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+
+  @override
+  Widget build(BuildContext context) => AppBar(title: Text(title));
 }
 
 class _PlanRow extends StatelessWidget {
@@ -215,6 +262,8 @@ class _PlanRow extends StatelessWidget {
         'Sleep' => AppTheme.purple,
         'Activity' => AppTheme.cyan,
         'Body' => AppTheme.mint,
+        'Training' => AppTheme.mint,
+        'Nutrition' => AppTheme.amber,
         'Recovery' => AppTheme.amber,
         _ => AppTheme.cyan,
       };
@@ -223,6 +272,8 @@ class _PlanRow extends StatelessWidget {
         'Sleep' => Icons.bedtime_rounded,
         'Activity' => Icons.directions_walk_rounded,
         'Body' => Icons.monitor_weight_outlined,
+        'Training' => Icons.fitness_center_rounded,
+        'Nutrition' => Icons.restaurant_rounded,
         'Recovery' => Icons.bolt_rounded,
         _ => Icons.track_changes_rounded,
       };

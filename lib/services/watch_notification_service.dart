@@ -6,17 +6,13 @@ class WatchNotificationAccount {
   final String name;
   final bool enabled;
 
-  const WatchNotificationAccount({
-    required this.name,
-    required this.enabled,
-  });
+  const WatchNotificationAccount({required this.name, required this.enabled});
 
-  factory WatchNotificationAccount.fromMap(Map<dynamic, dynamic> map) {
-    return WatchNotificationAccount(
-      name: map['name']?.toString() ?? '',
-      enabled: map['enabled'] == true,
-    );
-  }
+  factory WatchNotificationAccount.fromMap(Map<dynamic, dynamic> map) =>
+      WatchNotificationAccount(
+        name: map['name']?.toString() ?? '',
+        enabled: map['enabled'] == true,
+      );
 }
 
 class WatchNotificationApp {
@@ -36,19 +32,18 @@ class WatchNotificationApp {
 
   bool get isGmail => packageName == 'com.google.android.gm';
 
-  factory WatchNotificationApp.fromMap(Map<dynamic, dynamic> map) {
-    return WatchNotificationApp(
-      packageName: map['packageName']?.toString() ?? '',
-      label: map['label']?.toString() ?? 'App',
-      enabled: map['enabled'] == true,
-      allAccounts: map['allAccounts'] != false,
-      accounts: (map['accounts'] as List<dynamic>? ?? const [])
-          .whereType<Map<dynamic, dynamic>>()
-          .map(WatchNotificationAccount.fromMap)
-          .where((item) => item.name.isNotEmpty)
-          .toList(),
-    );
-  }
+  factory WatchNotificationApp.fromMap(Map<dynamic, dynamic> map) =>
+      WatchNotificationApp(
+        packageName: map['packageName']?.toString() ?? '',
+        label: map['label']?.toString() ?? 'App',
+        enabled: map['enabled'] == true,
+        allAccounts: map['allAccounts'] != false,
+        accounts: (map['accounts'] as List<dynamic>? ?? const [])
+            .whereType<Map<dynamic, dynamic>>()
+            .map(WatchNotificationAccount.fromMap)
+            .where((item) => item.name.isNotEmpty)
+            .toList(),
+      );
 }
 
 class WatchNotificationState {
@@ -56,26 +51,41 @@ class WatchNotificationState {
   final bool masterEnabled;
   final bool deliverySupported;
   final List<WatchNotificationApp> apps;
+  final DateTime? lastObservedAt;
+  final DateTime? lastEligibleAt;
+  final String lastEligibleApp;
 
   const WatchNotificationState({
     required this.accessEnabled,
     required this.masterEnabled,
     required this.deliverySupported,
     required this.apps,
+    this.lastObservedAt,
+    this.lastEligibleAt,
+    this.lastEligibleApp = '',
   });
 
-  factory WatchNotificationState.fromMap(Map<dynamic, dynamic> map) {
-    return WatchNotificationState(
-      accessEnabled: map['accessEnabled'] == true,
-      masterEnabled: map['masterEnabled'] == true,
-      deliverySupported: map['deliverySupported'] == true,
-      apps: (map['apps'] as List<dynamic>? ?? const [])
-          .whereType<Map<dynamic, dynamic>>()
-          .map(WatchNotificationApp.fromMap)
-          .where((item) => item.packageName.isNotEmpty)
-          .toList(),
-    );
+  int get enabledAppCount => apps.where((app) => app.enabled).length;
+
+  static DateTime? _fromEpoch(dynamic value) {
+    if (value is! num || value <= 0) return null;
+    return DateTime.fromMillisecondsSinceEpoch(value.toInt());
   }
+
+  factory WatchNotificationState.fromMap(Map<dynamic, dynamic> map) =>
+      WatchNotificationState(
+        accessEnabled: map['accessEnabled'] == true,
+        masterEnabled: map['masterEnabled'] == true,
+        deliverySupported: map['deliverySupported'] == true,
+        lastObservedAt: _fromEpoch(map['lastObservedAt']),
+        lastEligibleAt: _fromEpoch(map['lastEligibleAt']),
+        lastEligibleApp: map['lastEligibleApp']?.toString() ?? '',
+        apps: (map['apps'] as List<dynamic>? ?? const [])
+            .whereType<Map<dynamic, dynamic>>()
+            .map(WatchNotificationApp.fromMap)
+            .where((item) => item.packageName.isNotEmpty)
+            .toList(),
+      );
 }
 
 class WatchNotificationService {
@@ -95,7 +105,6 @@ class WatchNotificationService {
         apps: [],
       );
     }
-
     final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
       'getWatchNotificationState',
       <String, dynamic>{
@@ -104,7 +113,6 @@ class WatchNotificationService {
         'deviceName': deviceName,
       },
     );
-
     return WatchNotificationState.fromMap(
       raw ?? const <dynamic, dynamic>{},
     );

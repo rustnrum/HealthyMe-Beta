@@ -11,6 +11,7 @@ class SalusNotificationListenerService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val item = sbn ?: return
         if (item.packageName == packageName) return
+        if (item.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
 
         val label = try {
             @Suppress("DEPRECATION")
@@ -19,12 +20,7 @@ class SalusNotificationListenerService : NotificationListenerService() {
         } catch (_: Throwable) {
             item.packageName
         }
-
-        SalusWatchNotificationStore.recordObservedApp(
-            this,
-            item.packageName,
-            label,
-        )
+        SalusWatchNotificationStore.recordObservedApp(this, item.packageName, label)
 
         val gmailAccount =
             if (item.packageName == SalusWatchNotificationStore.GMAIL_PACKAGE) {
@@ -34,9 +30,7 @@ class SalusNotificationListenerService : NotificationListenerService() {
                         it ?: SalusWatchNotificationStore.UNKNOWN_GMAIL_ACCOUNT,
                     )
                 }
-            } else {
-                null
-            }
+            } else null
 
         for (target in SalusWatchNotificationStore.targets(this)) {
             if (!SalusWatchNotificationStore.isAllowed(
@@ -44,11 +38,13 @@ class SalusNotificationListenerService : NotificationListenerService() {
                     target,
                     item.packageName,
                     gmailAccount,
-                )
-            ) {
-                continue
-            }
-
+                )) continue
+            if (target.protocolId != "ido-veryfit-family") continue
+            // 'Eligible' means this alert passed listener and app filters;
+            // it does NOT claim that the watch received the BLE packets.
+            SalusWatchNotificationStore.recordEligibleNotification(
+                this, item.packageName,
+            )
             senderExecutor.execute {
                 SalusWatchNotificationSender.send(this, target, item)
             }
@@ -60,9 +56,7 @@ class SalusNotificationListenerService : NotificationListenerService() {
         super.onDestroy()
     }
 
-    private fun extractGmailAccount(
-        sbn: StatusBarNotification,
-    ): String? {
+    private fun extractGmailAccount(sbn: StatusBarNotification): String? {
         val extras = sbn.notification.extras
         val candidates = listOfNotNull(
             extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString(),
@@ -70,7 +64,6 @@ class SalusNotificationListenerService : NotificationListenerService() {
             extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
             extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
         )
-
         val pattern = Regex(
             "[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}",
             RegexOption.IGNORE_CASE,
