@@ -43,13 +43,14 @@ class WatchNotificationState {
   final bool masterEnabled;
   /// A verified implemented packet sender exists; this does not prove receipt.
   final bool deliverySupported;
-  /// Salus can publish a phone notification for a watch companion to mirror.
+  /// Historical field retained for state compatibility; Salus no longer
+  /// uses companion-app relay for watch delivery.
   final bool companionRelay;
   final List<WatchNotificationApp> apps;
   final DateTime? lastObservedAt;
   final DateTime? lastEligibleAt;
   final String lastEligibleApp;
-  bool get canAttempt => deliverySupported || companionRelay;
+  bool get canAttempt => deliverySupported;
   int get enabledAppCount => apps.where((app) => app.enabled).length;
   static DateTime? _time(dynamic value) => value is num && value > 0
       ? DateTime.fromMillisecondsSinceEpoch(value.toInt()) : null;
@@ -82,10 +83,20 @@ class WatchNotificationService {
       'getWatchNotificationState', {
         'deviceId': deviceId, 'protocolId': protocolId, 'deviceName': deviceName,
       });
-    // An unsupported proprietary BLE sender is NEVER treated as available.
-    // Android relay works only if the user's watch companion mirrors Salus alerts.
-    final companion = protocolId != 'ido-veryfit-family' && protocolId != 'cpap-family';
-    return WatchNotificationState.fromMap(raw ?? const {}, companionRelay: companion);
+    // No vendor companion-app dependency: only installed direct transport
+    // senders may be enabled. Unknown proprietary writers remain unsupported.
+    final data = raw ?? const <dynamic, dynamic>{};
+    if (data['masterEnabled'] == true && data['deliverySupported'] != true) {
+      // Migrate previously enabled Build 44 relay settings to OFF. Keep app
+      // filters saved, but do not re-enable future protocols without consent.
+      await _channel.invokeMethod<void>('setWatchNotificationMaster', {
+        'deviceId': deviceId, 'protocolId': protocolId,
+        'deviceName': deviceName, 'enabled': false,
+      });
+      return WatchNotificationState.fromMap(
+        {...data, 'masterEnabled': false}, companionRelay: false);
+    }
+    return WatchNotificationState.fromMap(data, companionRelay: false);
   }
 
   Future<void> setMaster({required String deviceId, required String protocolId,

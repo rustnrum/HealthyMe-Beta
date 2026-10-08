@@ -50,7 +50,7 @@ class _DeviceGalleryScreenState extends State<DeviceGalleryScreen> {
             const Text('Unable to load saved devices.',
                 style: TextStyle(color: AppTheme.textSecondary))
           else if (data == null || data.devices.isEmpty)
-            SalusPaper(onTap: () => Navigator.of(context).pushNamed('/sources'),
+            SalusPaper(onTap: () => Navigator.of(context).pushNamed('/auto-discover'),
               child: const Row(children: [
                 Icon(Icons.bluetooth_searching_rounded, color: AppTheme.cyan),
                 SizedBox(width: 10),
@@ -64,7 +64,7 @@ class _DeviceGalleryScreenState extends State<DeviceGalleryScreen> {
               const SizedBox(height: 10),
             ],
           const SizedBox(height: 16),
-          SalusPaper(onTap: () => Navigator.of(context).pushNamed('/sources'),
+          SalusPaper(onTap: () => Navigator.of(context).pushNamed('/auto-discover'),
             child: const Row(children: [
               Icon(Icons.bluetooth_searching_rounded, color: AppTheme.mint),
               SizedBox(width: 12),
@@ -93,7 +93,7 @@ class _DeviceGalleryScreenState extends State<DeviceGalleryScreen> {
       } else if (device.protocolId == 'cpap-family') {
         Navigator.of(context).pushNamed('/cpap', arguments: device.id);
       } else {
-        Navigator.of(context).pushNamed('/sources');
+        Navigator.of(context).pushNamed('/auto-discover');
       }
     }, child: Row(children: [
       DeviceImage(deviceKind: device.deviceKind, size: 76),

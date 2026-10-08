@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme/app_theme.dart';
 import 'screens/connections_screen.dart';
+import 'screens/auto_discovery_screen.dart';
 import 'screens/cpap_screen_v38.dart';
 import 'screens/daily_state_screen.dart';
 import 'screens/diet/diet_shell.dart';
@@ -64,6 +65,8 @@ class HealthyMeApp extends ConsumerWidget {
         '/recovery': (_) => const RecoveryDetailScreen(),
         '/daily-state': (_) => const DailyStateScreen(),
         '/sources': (_) => const ConnectionsScreen(),
+        '/auto-discover': (_) => const AutoDiscoveryScreen(),
+        '/connections-advanced': (_) => const ConnectionsScreen(),
         '/sources-debug': (_) => const SourcesScreen(),
         '/cpap': (_) => const CpapScreenV38(),
         '/watch-device': (_) => const WatchDeviceScreen(),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../core/theme/app_theme.dart';
 import '../services/direct_device_store.dart';
@@ -132,19 +131,12 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
     final state = _state;
     if (device == null || state == null || _busy) return;
     if (!state.canAttempt) {
-      _toast('No supported direct or companion notification route for this device.');
+      _toast('No installed direct notification driver supports this watch yet.');
       return;
     }
     if (enabled && !state.accessEnabled) {
       await _notifications.openNotificationAccess();
       return;
-    }
-    if (enabled && state.companionRelay) {
-      final permission = await Permission.notification.request();
-      if (!permission.isGranted) {
-        _toast('Allow Android notifications for Salus before enabling companion relay.');
-        return;
-      }
     }
     setState(() => _busy = true);
     try {
@@ -155,9 +147,6 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
         enabled: enabled,
       );
       await _reload();
-      if (enabled && state.companionRelay) {
-        _toast('Salus phone relay enabled. Allow Salus notifications in your watch companion app too.');
-      }
     } catch (error) {
       _toast('Could not update notifications: $error');
     } finally {
@@ -294,19 +283,17 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
                           subtitle: Text(state == null
                               ? 'Loading notification settings…'
                               : !state.canAttempt
-                                  ? 'No installed direct sender or companion route is available.'
+                                  ? 'No compatible local Bluetooth notification sender is installed for this device.'
                                   : !state.accessEnabled
                                       ? 'Enable Android notification access first.'
-                                      : state.companionRelay
-                                          ? 'Companion relay • ${state.enabledAppCount} apps allowed. Your watch companion must also allow Salus alerts.'
-                                          : 'Direct IDO/VeryFit sender • ${state.enabledAppCount} apps allowed.',
+                                      : 'Direct local sender • ${state.enabledAppCount} apps allowed.',
                               style: const TextStyle(color: AppTheme.textSecondary,
                                   fontSize: 12.5)),
                           secondary: const Icon(Icons.notifications_active_outlined,
                               color: AppTheme.cyan),
-                          value: state?.masterEnabled ?? false,
+                          value: state?.canAttempt == true && state?.masterEnabled == true,
                           onChanged: state == null || _busy ||
-                                  (!state.canAttempt && !state.masterEnabled)
+                                  !state.canAttempt
                               ? null : _setMaster,
                         ),
                       ),
@@ -319,36 +306,6 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
                         ),
                       ],
                       const SizedBox(height: 12),
-                      if (state?.companionRelay == true) SalusPaper(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Companion app relay', style: TextStyle(
-                                color: AppTheme.textPrimary,
-                                fontWeight: FontWeight.w800, fontSize: 17)),
-                            const SizedBox(height: 8),
-                            const Text('Salus creates a normal Android notification '
-                                'from an allowed phone alert. A companion app such as Garmin Connect '
-                                'may mirror that Salus notification to the watch. '
-                                'This does not directly send Bluetooth packets to Garmin.',
-                                style: TextStyle(color: AppTheme.textSecondary,
-                                    height: 1.4, fontSize: 13)),
-                            const SizedBox(height: 8),
-                            const Text('In the watch companion app, enable notifications '
-                                'from Salus. If the companion cannot mirror phone notifications '
-                                'at all, Salus cannot bypass that connection.',
-                                style: TextStyle(color: AppTheme.textSecondary,
-                                    fontSize: 13)),
-                            const SizedBox(height: 10),
-                            OutlinedButton.icon(
-                              onPressed: openAppSettings,
-                              icon: const Icon(Icons.open_in_new_rounded),
-                              label: const Text('Salus Android app settings'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
                       if (state != null) SalusPaper(child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -360,8 +317,6 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
                               style: const TextStyle(color: AppTheme.textSecondary)),
                           Text('Direct protocol sender: ${state.deliverySupported ? 'Available (IDO / VeryFit)' : 'Not available'}',
                               style: const TextStyle(color: AppTheme.textSecondary)),
-                          Text('Companion relay: ${state.companionRelay ? 'Available when authorized' : 'Not used'}',
-                              style: const TextStyle(color: AppTheme.textSecondary)),
                           Text('Last notification seen: ${_when(state.lastObservedAt)}',
                               style: const TextStyle(color: AppTheme.textSecondary)),
                           Text('Last allowed for forwarding: ${_when(state.lastEligibleAt)}',
@@ -372,7 +327,7 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
                           const SizedBox(height: 7),
                           const Text('Allowed means the phone approved the alert. '
                               'It does not confirm the watch received it. '
-                              'Companion mirroring and direct BLE writes need physical-watch testing.',
+                              'Direct Bluetooth delivery requires an installed protocol driver and real-watch validation.',
                               style: TextStyle(color: AppTheme.textMuted, fontSize: 12.5)),
                         ],
                       )),
