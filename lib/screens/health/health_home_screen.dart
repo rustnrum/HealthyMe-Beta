@@ -14,7 +14,6 @@ class HealthHomeScreen extends ConsumerWidget {
     final labs = [...app.labs]..sort((a,b) => (b.date ?? DateTime(1900)).compareTo(a.date ?? DateTime(1900)));
     final latestLabDate = labs.where((e) => e.date != null).isEmpty ? null : labs.where((e) => e.date != null).first.date;
     final updated = h.lastSync == null ? 'Not synced yet' : 'Updated ${h.lastSync!.hour.toString().padLeft(2,'0')}:${h.lastSync!.minute.toString().padLeft(2,'0')}';
-
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
       children: [
@@ -27,7 +26,11 @@ class HealthHomeScreen extends ConsumerWidget {
           const SizedBox(height: 14),
           Row(children: [Expanded(child: _VitalCard(label: 'Resting HR', value: h.restingHeartRate == null ? '—' : '${h.restingHeartRate!.round()} bpm', icon: Icons.favorite_border_rounded, tint: AppTheme.rose)), const SizedBox(width: 9), Expanded(child: _VitalCard(label: 'HRV', value: h.hrvMs == null ? '—' : '${h.hrvMs!.round()} ms', icon: Icons.insights_rounded, tint: AppTheme.mint))]),
           const SizedBox(height: 9),
-          Row(children: [Expanded(child: _VitalCard(label: 'Blood Oxygen', value: h.bloodOxygenPercent == null ? '—' : '${h.bloodOxygenPercent!.toStringAsFixed(1)}%', icon: Icons.air_rounded, tint: AppTheme.blue)), const SizedBox(width: 9), Expanded(child: _VitalCard(label: 'Breathing', value: h.respiratoryRate == null ? '—' : '${h.respiratoryRate!.toStringAsFixed(1)}/min', icon: Icons.air_rounded, tint: AppTheme.teal))]),
+          Row(children: [Expanded(child: InkWell(
+            onTap: () => Navigator.of(context).pushNamed('/spo2-history'),
+            child: _VitalCard(label: 'Blood Oxygen', value: h.bloodOxygenPercent == null ? '—' : '${h.bloodOxygenPercent!.toStringAsFixed(1)}%', icon: Icons.air_rounded, tint: AppTheme.blue))), const SizedBox(width: 9), Expanded(child: _VitalCard(label: 'Breathing', value: h.respiratoryRate == null ? '—' : '${h.respiratoryRate!.toStringAsFixed(1)}/min', icon: Icons.air_rounded, tint: AppTheme.teal))]),
+          const SizedBox(height: 6),
+          const Text('Tap Blood Oxygen to see your stored history and source.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
         ])),
         const SizedBox(height: 11),
         GestureDetector(

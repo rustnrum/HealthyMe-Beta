@@ -9,7 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import 'ble_discovery_service.dart';
 import 'direct_device_store.dart';
+import 'local_device_driver.dart';
 
+/// Source-preserving direct measurement record; serialized schema unchanged.
 class DirectMetricSample {
   final String sourceId;
   final String deviceId;
@@ -18,7 +20,6 @@ class DirectMetricSample {
   final double value;
   final String unit;
   final DateTime capturedAt;
-
   const DirectMetricSample({
     required this.sourceId,
     required this.deviceId,
@@ -28,17 +29,11 @@ class DirectMetricSample {
     required this.unit,
     required this.capturedAt,
   });
-
   Map<String, dynamic> toJson() => {
-        'sourceId': sourceId,
-        'deviceId': deviceId,
-        'deviceName': deviceName,
-        'metric': metric,
-        'value': value,
-        'unit': unit,
-        'capturedAt': capturedAt.toIso8601String(),
-      };
-
+    'sourceId': sourceId, 'deviceId': deviceId, 'deviceName': deviceName,
+    'metric': metric, 'value': value, 'unit': unit,
+    'capturedAt': capturedAt.toIso8601String(),
+  };
   factory DirectMetricSample.fromJson(Map<String, dynamic> json) =>
       DirectMetricSample(
         sourceId: json['sourceId']?.toString() ?? '',
@@ -47,9 +42,8 @@ class DirectMetricSample {
         metric: json['metric']?.toString() ?? '',
         value: (json['value'] as num?)?.toDouble() ?? 0,
         unit: json['unit']?.toString() ?? '',
-        capturedAt:
-            DateTime.tryParse(json['capturedAt']?.toString() ?? '') ??
-                DateTime.now(),
+        capturedAt: DateTime.tryParse(json['capturedAt']?.toString() ?? '') ??
+            DateTime.now(),
       );
 }
 
@@ -69,46 +63,27 @@ class DirectMetricReadResult {
     this.diagnostics = const {},
     this.history = const [],
   });
-
   bool get hasMetrics => metrics.isNotEmpty;
 
   static String _unit(String metric) => switch (metric) {
-        'Heart rate' || 'Resting heart rate' => ' bpm',
-        'HRV' => ' ms',
-        'SpO2' => '%',
-        'Respiratory rate' => ' br/min',
-        'Steps' => ' steps',
-        'Sleep' ||
-        'Sleep light' ||
-        'Sleep deep' ||
-        'Sleep REM' ||
-        'Sleep awake' => ' min',
-        'Battery' => '%',
-        'Active calories' => ' kcal',
-        'Usage time' => ' min',
-        'AHI' => ' events/hour',
-        'Leak rate' => ' L/min',
-        'Therapy pressure' => ' cmH₂O',
-        _ => '',
-      };
+    'Heart rate' || 'Resting heart rate' => ' bpm',
+    'HRV' => ' ms', 'SpO2' => '%',
+    'Respiratory rate' => ' br/min',
+    'Steps' => ' steps',
+    'Sleep' || 'Sleep light' || 'Sleep deep' || 'Sleep REM' ||
+    'Sleep awake' => ' min',
+    'Battery' => '%', 'Active calories' => ' kcal',
+    'Usage time' => ' min', 'AHI' => ' events/hour',
+    'Leak rate' => ' L/min', 'Therapy pressure' => ' cmH₂O',
+    _ => '',
+  };
 
   String get summary {
     if (metrics.isEmpty) return message;
     const preferred = <String>[
-      'Steps',
-      'Sleep',
-      'Heart rate',
-      'Resting heart rate',
-      'HRV',
-      'SpO2',
-      'Respiratory rate',
-      'Usage time',
-      'AHI',
-      'Leak rate',
-      'Therapy pressure',
-      'Battery',
-      'Body battery',
-      'Stress',
+      'Steps', 'Sleep', 'Heart rate', 'Resting heart rate', 'HRV',
+      'SpO2', 'Respiratory rate', 'Usage time', 'AHI', 'Leak rate',
+      'Therapy pressure', 'Battery', 'Body battery', 'Stress',
       'Ring HRV proxy',
     ];
     final keys = <String>[
@@ -126,19 +101,18 @@ class DirectMetricReadResult {
 class DirectMetricService {
   static const _channel =
       MethodChannel('com.rustnrum.healthyme/source_discovery');
+  // NEVER change this key: existing user history must survive upgrades.
   static const _storageKey = 'salus_direct_metric_samples_v1';
+  const DirectMetricService();
 
   Future<void> _requestPermissions() async {
     if (!Platform.isAndroid) return;
     final statuses = await <Permission>[
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
+      Permission.bluetoothScan, Permission.bluetoothConnect,
     ].request();
     if (statuses[Permission.bluetoothScan] != PermissionStatus.granted ||
         statuses[Permission.bluetoothConnect] != PermissionStatus.granted) {
-      throw StateError(
-        'Bluetooth scan/connect permission is required to read a direct device.',
-      );
+      throw StateError('Bluetooth scan/connect permission is required to read a direct device.');
     }
   }
 
@@ -148,14 +122,9 @@ class DirectMetricService {
   Future<bool> submitCpapPasskey(String deviceId, String passkey) async {
     final code = passkey.trim();
     if (deviceId.isEmpty || !isValidCpapPasskey(code)) return false;
-    final accepted = await _channel.invokeMethod<bool>(
-      'submitCpapPasskey',
-      <String, dynamic>{
-        'deviceId': deviceId,
-        'cpapPasskey': code,
-      },
-    );
-    return accepted ?? false;
+    return await _channel.invokeMethod<bool>('submitCpapPasskey', {
+      'deviceId': deviceId, 'cpapPasskey': code,
+    }) ?? false;
   }
 
   static bool isTherapyOnlyProtocol(String? protocolId) =>
@@ -168,7 +137,6 @@ class DirectMetricService {
     String? cpapPasskey,
   }) async {
     final resolvedProtocolId = protocolId ?? device.protocolId;
-
     if (!Platform.isAndroid) {
       return const DirectMetricReadResult(
         metrics: {},
@@ -176,32 +144,16 @@ class DirectMetricService {
       );
     }
     await _requestPermissions();
-
-    var raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
-      'readProtocolMetrics',
-      <String, dynamic>{
-        'deviceId': device.id,
-        'deviceName': device.name,
-        'protocolId': resolvedProtocolId,
-        'durationMs': duration.inMilliseconds,
-        'cpapPasskey': cpapPasskey,
-      },
+    final map = await const SalusLocalDeviceDrivers().read(
+      deviceId: device.id,
+      deviceName: device.name,
+      protocolId: resolvedProtocolId,
+      deviceKind: device.deviceKind,
+      advertisedServices: device.advertisedServices,
+      duration: duration,
+      cpapPasskey: cpapPasskey,
     );
-    var map = raw ?? const <dynamic, dynamic>{};
 
-    // Unknown devices stay manufacturer-independent: if the protocol reader
-    // does not recognize a supported family, fall back to standard BLE health
-    // services instead of returning a fake/empty proprietary result.
-    if (map['fallbackStandard'] == true) {
-      raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
-        'readStandardMetrics',
-        <String, dynamic>{
-          'deviceId': device.id,
-          'durationMs': duration.inMilliseconds,
-        },
-      );
-      map = raw ?? const <dynamic, dynamic>{};
-    }
     final metrics = <String, double>{};
     final rawMetrics = map['metrics'];
     if (rawMetrics is Map) {
@@ -212,12 +164,10 @@ class DirectMetricService {
         }
       }
     }
-
     final reader = map['reader']?.toString() ?? 'generic';
     final message = map['message']?.toString() ??
-        (metrics.isEmpty
-            ? 'No readable direct-device metric was returned.'
-            : 'Direct device data read successfully.');
+        (metrics.isEmpty ? 'No readable direct-device metric was returned.' :
+          'Direct device data read successfully.');
     final observations = <String>[];
     final rawObservations = map['observations'];
     if (rawObservations is List) {
@@ -237,7 +187,6 @@ class DirectMetricService {
         if (value is num) diagnostics[entry.key.toString()] = value.toInt();
       }
     }
-
     final sourceId = 'ble:${device.id}';
     final history = <DirectMetricSample>[];
     final rawHistory = map['history'];
@@ -249,85 +198,56 @@ class DirectMetricService {
         if (metric.isEmpty || value is! num || capturedAtMs is! num) continue;
         final numeric = value.toDouble();
         if (!numeric.isFinite) continue;
-        history.add(
-          DirectMetricSample(
-            sourceId: sourceId,
-            deviceId: device.id,
-            deviceName: device.name,
-            metric: metric,
-            value: numeric,
-            unit: _unitForMetric(metric),
-            capturedAt: DateTime.fromMillisecondsSinceEpoch(
-              capturedAtMs.toInt(),
-            ),
-          ),
-        );
+        history.add(DirectMetricSample(
+          sourceId: sourceId, deviceId: device.id,
+          deviceName: device.name, metric: metric, value: numeric,
+          unit: _unitForMetric(metric),
+          capturedAt: DateTime.fromMillisecondsSinceEpoch(capturedAtMs.toInt()),
+        ));
       }
     }
-
     final current = <DirectMetricSample>[];
     if (metrics.isNotEmpty) {
       final now = DateTime.now();
-      current.addAll([
-        for (final entry in metrics.entries)
-          DirectMetricSample(
-            sourceId: sourceId,
-            deviceId: device.id,
-            deviceName: device.name,
-            metric: entry.key,
-            value: entry.value,
-            unit: _unitForMetric(entry.key),
-            capturedAt: now,
-          ),
-      ]);
+      for (final entry in metrics.entries) {
+        current.add(DirectMetricSample(
+          sourceId: sourceId, deviceId: device.id,
+          deviceName: device.name, metric: entry.key,
+          value: entry.value, unit: _unitForMetric(entry.key), capturedAt: now,
+        ));
+      }
     }
     if (history.isNotEmpty || current.isNotEmpty) {
       await _append([...history, ...current]);
     }
-
     return DirectMetricReadResult(
-      metrics: metrics,
-      message: message,
-      reader: reader,
-      observations: observations,
-      diagnostics: diagnostics,
-      history: history,
+      metrics: metrics, message: message, reader: reader,
+      observations: observations, diagnostics: diagnostics, history: history,
     );
   }
 
   static double rmssd(List<double> rrIntervalsMs) {
     if (rrIntervalsMs.length < 2) return 0;
     var sumSquares = 0.0;
-    var count = 0;
     for (var index = 1; index < rrIntervalsMs.length; index++) {
       final delta = rrIntervalsMs[index] - rrIntervalsMs[index - 1];
       sumSquares += delta * delta;
-      count += 1;
     }
-    return count == 0 ? 0 : math.sqrt(sumSquares / count);
+    return math.sqrt(sumSquares / (rrIntervalsMs.length - 1));
   }
 
   static String _unitForMetric(String metric) => switch (metric) {
-        'Heart rate' || 'Resting heart rate' => 'bpm',
-        'HRV' => 'ms',
-        'SpO2' => '%',
-        'Respiratory rate' => 'br/min',
-        'Steps' => 'count',
-        'Sleep' ||
-        'Sleep light' ||
-        'Sleep deep' ||
-        'Sleep REM' ||
-        'Sleep awake' => 'min',
-        'Battery' => '%',
-        'Active calories' => 'kcal',
-        'Usage time' => 'min',
-        'AHI' => 'events/hour',
-        'Leak rate' => 'L/min',
-        'Therapy pressure' => 'cmH₂O',
-        'Mask on/off' => 'state',
-        'Ring HRV proxy' => 'firmware-proxy',
-        _ => '',
-      };
+    'Heart rate' || 'Resting heart rate' => 'bpm',
+    'HRV' => 'ms', 'SpO2' => '%',
+    'Respiratory rate' => 'br/min', 'Steps' => 'count',
+    'Sleep' || 'Sleep light' || 'Sleep deep' || 'Sleep REM' ||
+      'Sleep awake' => 'min',
+    'Battery' => '%', 'Active calories' => 'kcal',
+    'Usage time' => 'min', 'AHI' => 'events/hour',
+    'Leak rate' => 'L/min', 'Therapy pressure' => 'cmH₂O',
+    'Mask on/off' => 'state', 'Ring HRV proxy' => 'firmware-proxy',
+    _ => '',
+  };
 
   Future<List<DirectMetricSample>> loadSamples() async {
     final prefs = await SharedPreferences.getInstance();
@@ -335,15 +255,9 @@ class DirectMetricService {
     if (raw == null || raw.isEmpty) return const [];
     try {
       final decoded = jsonDecode(raw) as List<dynamic>;
-      final values = decoded
-          .whereType<Map<String, dynamic>>()
+      final values = decoded.whereType<Map<String, dynamic>>()
           .map(DirectMetricSample.fromJson)
-          .where(
-            (sample) =>
-                sample.sourceId.isNotEmpty &&
-                sample.metric.isNotEmpty &&
-                sample.value.isFinite,
-          )
+          .where((s) => s.sourceId.isNotEmpty && s.metric.isNotEmpty && s.value.isFinite)
           .toList()
         ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
       return values;
@@ -369,8 +283,7 @@ class DirectMetricService {
       next.removeRange(0, next.length - 3200);
     }
     await prefs.setString(
-      _storageKey,
-      jsonEncode(next.map((sample) => sample.toJson()).toList()),
+      _storageKey, jsonEncode(next.map((s) => s.toJson()).toList()),
     );
   }
 
@@ -412,38 +325,21 @@ class DirectMetricService {
       final sourceId = 'ble:${device.id}';
       detected.add(sourceId);
       labels[sourceId] = device.name;
-
       final providerMetrics = device.protocolId == 'cpap-family'
-          ? const [
-              'Usage time',
-              'AHI',
-              'Leak rate',
-              'Therapy pressure',
-              'Mask on/off',
-            ]
+          ? const ['Usage time', 'AHI', 'Leak rate', 'Therapy pressure', 'Mask on/off']
           : device.capabilities;
       for (final rawMetric in providerMetrics) {
         final metric = rawMetric == 'SpO₂' ? 'SpO2' : rawMetric;
-        if (metric.isEmpty ||
-            metric == 'Raw motion' ||
-            metric == 'Battery' ||
-            metric == 'Device information') {
-          continue;
-        }
-        final sourceList =
-            available.putIfAbsent(metric, () => <String>[]);
+        if (metric.isEmpty || metric == 'Raw motion' ||
+            metric == 'Battery' || metric == 'Device information') continue;
+        final sourceList = available.putIfAbsent(metric, () => <String>[]);
         if (!sourceList.contains(sourceId)) sourceList.add(sourceId);
-        final metricCounts =
-            counts.putIfAbsent(metric, () => <String, int>{});
-        metricCounts.putIfAbsent(sourceId, () => 0);
+        counts.putIfAbsent(metric, () => <String, int>{})
+            .putIfAbsent(sourceId, () => 0);
       }
     }
-
-    final direct = samples
-        .where((sample) => sample.sourceId.startsWith('ble:'))
-        .toList()
+    final direct = samples.where((s) => s.sourceId.startsWith('ble:')).toList()
       ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
-
     for (final sample in direct) {
       detected.add(sample.sourceId);
       labels[sample.sourceId] = sample.deviceName;
@@ -451,57 +347,32 @@ class DirectMetricService {
       if (prior == null || sample.capturedAt.isAfter(prior)) {
         lastSeen[sample.sourceId] = sample.capturedAt;
       }
-
-      final sourceList =
-          available.putIfAbsent(sample.metric, () => <String>[]);
-      if (!sourceList.contains(sample.sourceId)) {
-        sourceList.add(sample.sourceId);
-      }
-      final metricCounts =
-          counts.putIfAbsent(sample.metric, () => <String, int>{});
-      metricCounts[sample.sourceId] =
-          (metricCounts[sample.sourceId] ?? 0) + 1;
-
+      final sources = available.putIfAbsent(sample.metric, () => <String>[]);
+      if (!sources.contains(sample.sourceId)) sources.add(sample.sourceId);
+      final sourceCounts = counts.putIfAbsent(sample.metric, () => <String, int>{});
+      sourceCounts[sample.sourceId] = (sourceCounts[sample.sourceId] ?? 0) + 1;
       if (_isSleepStageMetric(sample.metric)) {
-        final stageSources =
-            available.putIfAbsent('Sleep Stages', () => <String>[]);
-        if (!stageSources.contains(sample.sourceId)) {
-          stageSources.add(sample.sourceId);
-        }
-        final stageCounts =
-            counts.putIfAbsent('Sleep Stages', () => <String, int>{});
-        stageCounts[sample.sourceId] =
-            (stageCounts[sample.sourceId] ?? 0) + 1;
+        final stageSources = available.putIfAbsent('Sleep Stages', () => <String>[]);
+        if (!stageSources.contains(sample.sourceId)) stageSources.add(sample.sourceId);
+        final stageCounts = counts.putIfAbsent('Sleep Stages', () => <String, int>{});
+        stageCounts[sample.sourceId] = (stageCounts[sample.sourceId] ?? 0) + 1;
       }
     }
-
-    DirectMetricSample? chosen(
-      String sampleMetric, {
-      String? routeMetric,
-    }) {
+    DirectMetricSample? chosen(String sampleMetric, {String? routeMetric}) {
       final routingMetric = routeMetric ?? sampleMetric;
-      final matching = direct
-          .where((sample) => sample.metric == sampleMetric)
-          .toList();
+      final matching = direct.where((s) => s.metric == sampleMetric).toList();
       if (matching.isEmpty) return null;
-
       final selected = metricSources[routingMetric];
       if (selected != null && selected != 'Auto') {
         if (!selected.startsWith('ble:')) return null;
-        final selectedSamples =
-            matching.where((sample) => sample.sourceId == selected).toList();
+        final selectedSamples = matching.where((s) => s.sourceId == selected).toList();
         return selectedSamples.isEmpty ? null : selectedSamples.last;
       }
-
       final latest = matching.last;
       final currentFreshness = base.freshness[routingMetric];
-      if (currentFreshness == null ||
-          latest.capturedAt.isAfter(currentFreshness)) {
-        return latest;
-      }
-      return null;
+      return currentFreshness == null || latest.capturedAt.isAfter(currentFreshness)
+          ? latest : null;
     }
-
     final steps = chosen('Steps');
     final sleep = chosen('Sleep');
     final heart = chosen('Heart rate');
@@ -520,7 +391,6 @@ class DirectMetricService {
       resolved[metric] = sample.sourceId;
       freshness[metric] = sample.capturedAt;
     }
-
     resolve('Steps', steps);
     resolve('Sleep', sleep);
     resolve('Heart rate', heart);
@@ -528,35 +398,26 @@ class DirectMetricService {
     resolve('HRV', hrv);
     resolve('SpO2', oxygen);
     resolve('Respiratory rate', respiratory);
-
-    final stageSamples = [sleepLight, sleepDeep, sleepRem, sleepAwake]
-        .whereType<DirectMetricSample>()
-        .toList();
-    if (stageSamples.isNotEmpty) {
-      final newest = stageSamples.reduce(
+    final stages = [sleepLight, sleepDeep, sleepRem, sleepAwake]
+        .whereType<DirectMetricSample>().toList();
+    if (stages.isNotEmpty) {
+      final newest = stages.reduce(
         (a, b) => a.capturedAt.isAfter(b.capturedAt) ? a : b,
       );
       resolve('Sleep Stages', newest);
     }
-
     var heartSeries = List<HeartPoint>.from(base.heartSeries);
     if (heart != null) {
-      final duplicate = heartSeries.any(
-        (point) =>
-            point.date == heart.capturedAt &&
-            (point.bpm - heart.value).abs() < 0.01,
-      );
+      final duplicate = heartSeries.any((p) =>
+          p.date == heart.capturedAt && (p.bpm - heart.value).abs() < 0.01);
       if (!duplicate) {
-        heartSeries.add(
-          HeartPoint(date: heart.capturedAt, bpm: heart.value),
-        );
+        heartSeries.add(HeartPoint(date: heart.capturedAt, bpm: heart.value));
         heartSeries.sort((a, b) => a.date.compareTo(b.date));
         if (heartSeries.length > 1000) {
           heartSeries = heartSeries.sublist(heartSeries.length - 1000);
         }
       }
     }
-
     return base.copyWith(
       stepsToday: steps?.value.round(),
       sleepMinutes: sleep?.value.round(),
@@ -582,8 +443,6 @@ class DirectMetricService {
   }
 
   static bool _isSleepStageMetric(String metric) =>
-      metric == 'Sleep light' ||
-      metric == 'Sleep deep' ||
-      metric == 'Sleep REM' ||
-      metric == 'Sleep awake';
+      metric == 'Sleep light' || metric == 'Sleep deep' ||
+      metric == 'Sleep REM' || metric == 'Sleep awake';
 }

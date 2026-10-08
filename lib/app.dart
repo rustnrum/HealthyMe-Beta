@@ -11,6 +11,7 @@ import 'screens/home_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/recovery_detail_screen.dart';
 import 'screens/sources_screen.dart';
+import 'screens/spo2_history_screen.dart';
 import 'screens/trends_screen.dart';
 import 'screens/workout_screen.dart';
 import 'screens/watch_device_screen.dart';
@@ -34,15 +35,13 @@ class HealthyMeApp extends ConsumerWidget {
         '/health': (_) => const HealthShell(),
         '/workout': (_) => const WorkoutScreen(),
         '/trends': (_) => const TrendsScreen(),
+        '/spo2-history': (_) => const SpO2HistoryScreen(),
         '/recovery': (_) => const RecoveryDetailScreen(),
         '/daily-state': (_) => const DailyStateScreen(),
         '/sources': (_) => const ConnectionsScreen(),
-        // Only an explicit beta diagnostics action should navigate here.
-        // Do not silently send the user back to Connections.
         '/sources-debug': (_) => const SourcesScreen(),
         '/cpap': (_) => const CpapScreenV38(),
         '/watch-device': (_) => const WatchDeviceScreen(),
-        // AI is deferred. Do not present a fake interactive chat.
         '/coach': (_) => Scaffold(
           appBar: AppBar(title: const Text('Salus AI')),
           body: const Center(
