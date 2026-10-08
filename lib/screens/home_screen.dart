@@ -171,7 +171,7 @@ class HomeScreen extends ConsumerWidget {
                       status: _baselineStatus(h.hrvMs, h.hrv30),
                       color: AppTheme.mint,
                       onTap: () =>
-                          Navigator.of(context).pushNamed('/trends'),
+                          Navigator.of(context).pushNamed('/metric-hrv'),
                     ),
                   ),
                 ),
@@ -189,7 +189,7 @@ class HomeScreen extends ConsumerWidget {
                       ),
                       color: AppTheme.rose,
                       onTap: () =>
-                          Navigator.of(context).pushNamed('/trends'),
+                          Navigator.of(context).pushNamed('/metric-resting-heart-rate'),
                     ),
                   ),
                 ),
@@ -212,7 +212,7 @@ class HomeScreen extends ConsumerWidget {
                       ),
                       color: AppTheme.cyan,
                       onTap: () =>
-                          Navigator.of(context).pushNamed('/trends'),
+                          Navigator.of(context).pushNamed('/metric-respiratory-rate'),
                     ),
                   ),
                 ),
@@ -365,7 +365,7 @@ class HomeScreen extends ConsumerWidget {
                         label: 'Devices',
                         color: AppTheme.purple,
                         onTap: () =>
-                            Navigator.of(context).pushNamed('/sources'),
+                            Navigator.of(context).pushNamed('/device-gallery'),
                       ),
                     ],
                   ),

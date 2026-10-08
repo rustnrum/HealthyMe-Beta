@@ -8,6 +8,12 @@ import 'screens/daily_state_screen.dart';
 import 'screens/diet/diet_shell.dart';
 import 'screens/health/health_shell.dart';
 import 'screens/home_shell.dart';
+import 'screens/device_gallery_screen.dart';
+import 'screens/sleep_screen.dart';
+import 'screens/activity_screen.dart';
+import 'screens/metric_detail_screen.dart';
+import 'screens/labs_screen.dart';
+import 'screens/body_visual_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/recovery_detail_screen.dart';
 import 'screens/sources_screen.dart';
@@ -35,6 +41,25 @@ class HealthyMeApp extends ConsumerWidget {
         '/health': (_) => const HealthShell(),
         '/workout': (_) => const WorkoutScreen(),
         '/trends': (_) => const TrendsScreen(),
+        '/metric-heart-rate': (_) => const MetricDetailScreen(metric: 'Heart rate'),
+        '/metric-resting-heart-rate': (_) => const MetricDetailScreen(metric: 'Resting heart rate'),
+        '/metric-hrv': (_) => const MetricDetailScreen(metric: 'HRV'),
+        '/metric-respiratory-rate': (_) => const MetricDetailScreen(metric: 'Respiratory rate'),
+        '/metric-steps': (_) => const MetricDetailScreen(metric: 'Steps'),
+        '/metric-active-calories': (_) => const MetricDetailScreen(metric: 'Active calories'),
+        '/metric-distance': (_) => const MetricDetailScreen(metric: 'Distance'),
+        '/metric-weight': (_) => const MetricDetailScreen(metric: 'Weight'),
+        '/labs': (_) => const LabsScreen(),
+        '/body-visual': (_) => const BodyVisualScreen(),
+        '/device-gallery': (_) => const DeviceGalleryScreen(),
+        '/sleep-detail': (_) => Scaffold(
+          appBar: AppBar(title: const Text('Sleep')),
+          body: const SleepScreen(),
+        ),
+        '/activity-detail': (_) => Scaffold(
+          appBar: AppBar(title: const Text('Activity')),
+          body: const ActivityScreen(),
+        ),
         '/spo2-history': (_) => const SpO2HistoryScreen(),
         '/recovery': (_) => const RecoveryDetailScreen(),
         '/daily-state': (_) => const DailyStateScreen(),

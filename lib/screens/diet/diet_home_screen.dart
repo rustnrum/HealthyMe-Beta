@@ -1,50 +1,123 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_theme.dart';
-import '../../widgets/salus_widgets.dart';
-import 'diet_shell.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class DietHomeScreen extends StatelessWidget {
+import '../../core/theme/app_theme.dart';
+import '../../state/diet_log_state.dart';
+import '../../state/today_plan_state.dart';
+import '../../widgets/salus_widgets.dart';
+import 'food_entry_dialog.dart';
+
+class DietHomeScreen extends ConsumerWidget {
   const DietHomeScreen({super.key});
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final log = ref.watch(dietLogStateProvider);
+    final today = DateTime.now();
+    final foods = log.forDay(today);
+    final meals = ref.watch(todayPlanStateProvider).mealsFor(today);
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
       children: [
-        const SalusSectionTitle(title: 'Today', eyebrow: 'Nourish with intention'),
-        const SizedBox(height: 4),
-        const Text('Food data stays empty until you actually log it. Salus will never invent calories or nutrients.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13.5, height: 1.4)),
-        const SizedBox(height: 14),
+        const SalusSectionTitle(title: 'Today', eyebrow: 'Nutrition journal'),
+        const SizedBox(height: 6),
+        const Text('Only food you actually log is counted. Missing nutrients are never estimated.',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13.5)),
+        const SizedBox(height: 15),
         SalusPaper(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Row(children: [Icon(Icons.eco_outlined, color: DietPalette.green), SizedBox(width: 8), Text('Daily nutrition', style: TextStyle(color: DietPalette.textPrimary, fontSize: 21, fontWeight: FontWeight.w700)), Spacer(), Text('No food logged yet', style: TextStyle(color: DietPalette.textMuted, fontSize: 12))]),
-          const SizedBox(height: 16),
-          Row(children: [for (final item in const [('—','Calories'),('—','Protein'),('—','Carbs'),('—','Fat'),('—','Fiber')]) Expanded(child: _Nutrient(value: item.$1, label: item.$2))]),
+          const Text('Recorded nutrients', style: TextStyle(
+              color: AppTheme.textPrimary, fontSize: 20, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 5),
+          Text('${foods.length} food entries today • known values only',
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          const SizedBox(height: 13),
+          Wrap(spacing: 10, runSpacing: 12, children: [
+            _total('Calories', log.knownTotal(today, (f) => f.calories), 'kcal',
+                log.incomplete(today, (f) => f.calories)),
+            _total('Protein', log.knownTotal(today, (f) => f.protein), 'g',
+                log.incomplete(today, (f) => f.protein)),
+            _total('Carbs', log.knownTotal(today, (f) => f.carbs), 'g',
+                log.incomplete(today, (f) => f.carbs)),
+            _total('Fat', log.knownTotal(today, (f) => f.fat), 'g',
+                log.incomplete(today, (f) => f.fat)),
+            _total('Fiber', log.knownTotal(today, (f) => f.fiber), 'g',
+                log.incomplete(today, (f) => f.fiber)),
+          ]),
         ])),
-        const SizedBox(height: 11),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
-          decoration: BoxDecoration(color: const Color(0xFF2A1B11), image: const DecorationImage(image: AssetImage(SalusAssets.leatherTexture), fit: BoxFit.cover, opacity: 0.82), borderRadius: BorderRadius.circular(14), border: Border.all(color: DietPalette.border)),
-          child: const Row(children: [CircleAvatar(radius: 24, backgroundColor: Color(0x335F4A21), child: Icon(Icons.add_a_photo_outlined, color: AppTheme.cyan, size: 25)), SizedBox(width: 13), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Add Food', style: TextStyle(color: AppTheme.creamText, fontSize: 21, fontWeight: FontWeight.w700)), SizedBox(height: 2), Text('Photo, barcode, search, describe or voice', style: TextStyle(color: Color(0xFFD7C7A7), fontSize: 13))])), Icon(Icons.chevron_right_rounded, color: AppTheme.creamText)]),
-        ),
-        const SizedBox(height: 11),
-        SalusPaper(child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [Icon(Icons.flag_outlined, color: DietPalette.accent), SizedBox(width: 8), Text('Focus Today', style: TextStyle(color: DietPalette.textPrimary, fontSize: 20, fontWeight: FontWeight.w700))]),
-          SizedBox(height: 9), Text('Choose whole, nourishing foods and stay hydrated.', style: TextStyle(color: DietPalette.textSecondary, fontSize: 15, fontStyle: FontStyle.italic)),
-        ])),
-        const SizedBox(height: 14),
-        const SalusSectionTitle(title: 'Meals', eyebrow: 'Today'),
-        const SizedBox(height: 9),
-        for (final meal in const [('Breakfast', Icons.wb_sunny_outlined, AppTheme.mint), ('Lunch', Icons.light_mode_outlined, AppTheme.amber), ('Dinner', Icons.wb_twilight_outlined, AppTheme.rose), ('Snacks', Icons.bedtime_outlined, AppTheme.purple)]) ...[
-          SalusPaper(padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11), child: Row(children: [Container(width: 42, height: 42, decoration: BoxDecoration(shape: BoxShape.circle, color: meal.$3.withValues(alpha: 0.15)), child: Icon(meal.$2, color: meal.$3, size: 21)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(meal.$1, style: const TextStyle(color: DietPalette.textPrimary, fontSize: 17, fontWeight: FontWeight.w700)), const Text('No food logged yet', style: TextStyle(color: DietPalette.textMuted, fontSize: 12.5))])), const Icon(Icons.chevron_right_rounded, color: DietPalette.textSecondary)])),
+        const SizedBox(height: 12),
+        SalusPaper(onTap: () => showFoodEntryDialog(context),
+            child: const Row(children: [
+              Icon(Icons.add_circle_outline_rounded, color: AppTheme.mint, size: 36),
+              SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text('Log food', style: TextStyle(color: AppTheme.textPrimary,
+                    fontSize: 20, fontWeight: FontWeight.w800)),
+                Text('Enter a serving and any known nutrients',
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12.5)),
+              ])),
+              Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+            ])),
+        const SizedBox(height: 16),
+        const SalusSectionTitle(title: 'Meals', eyebrow: 'Recorded today'),
+        const SizedBox(height: 8),
+        for (final slot in salusMealSlots) ...[
+          SalusPaper(onTap: () => showFoodEntryDialog(context, slot: slot),
+            child: Row(children: [
+              Icon(_icon(slot), color: AppTheme.mint),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(slot, style: const TextStyle(color: AppTheme.textPrimary,
+                      fontSize: 17, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text(foods.where((f) => f.slot == slot).isEmpty
+                      ? 'Nothing logged • tap to add'
+                      : foods.where((f) => f.slot == slot)
+                          .map((f) => f.name).join(' • '),
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppTheme.textSecondary)),
+                  if ((meals[slot] ?? '').trim().isNotEmpty)
+                    Text('Planned: ${meals[slot]}',
+                      style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                ])),
+              const Icon(Icons.add_rounded, color: AppTheme.mint),
+            ])),
+          const SizedBox(height: 9),
+        ],
+        if (foods.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          const SalusSectionTitle(title: 'Food log', eyebrow: 'Today'),
           const SizedBox(height: 8),
+          for (final food in foods.reversed)
+            ListTile(
+              title: Text(food.name, style: const TextStyle(color: AppTheme.textPrimary)),
+              subtitle: Text('${food.slot}${food.portion.isEmpty ? '' : ' • ${food.portion}'}',
+                  style: const TextStyle(color: AppTheme.textSecondary)),
+              trailing: IconButton(tooltip: 'Delete food entry',
+                icon: const Icon(Icons.delete_outline_rounded),
+                onPressed: () => ref.read(dietLogStateProvider.notifier)
+                    .deleteFood(food.id)),
+            ),
         ],
       ],
     );
   }
-}
 
-class _Nutrient extends StatelessWidget {
-  final String value, label;
-  const _Nutrient({required this.value, required this.label});
-  @override
-  Widget build(BuildContext context) => Column(children: [Container(width: 48, height: 48, alignment: Alignment.center, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: DietPalette.border.withValues(alpha: 0.55), width: 5)), child: Text(value, style: const TextStyle(color: DietPalette.textPrimary, fontSize: 17, fontWeight: FontWeight.w700))), const SizedBox(height: 5), Text(label, style: const TextStyle(color: DietPalette.textSecondary, fontSize: 12))]);
+  Widget _total(String label, double? value, String unit, bool incomplete) =>
+      SizedBox(width: 105, child: Column(children: [
+        Text(value == null ? '—' : '${value.toStringAsFixed(0)} $unit',
+            style: const TextStyle(color: AppTheme.textPrimary,
+                fontSize: 17, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 3),
+        Text('$label${incomplete ? '*' : ''}', style: const TextStyle(
+            color: AppTheme.textSecondary, fontSize: 12)),
+      ]));
+
+  IconData _icon(String slot) => switch (slot) {
+    'Breakfast' => Icons.wb_sunny_outlined,
+    'Lunch' => Icons.light_mode_outlined,
+    'Dinner' => Icons.restaurant_rounded,
+    _ => Icons.cookie_outlined,
+  };
 }
