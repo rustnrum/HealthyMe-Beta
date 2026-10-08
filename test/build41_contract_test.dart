@@ -23,9 +23,19 @@ void main() {
   test('history screen is routed and does not generate synthetic observations', () {
     final routes = File('lib/app.dart').readAsStringSync();
     final source = File('lib/screens/spo2_history_screen.dart').readAsStringSync();
+    final home = File('lib/screens/home_screen.dart').readAsStringSync();
     expect(routes, contains("'/spo2-history'"));
-    expect(source, contains('DirectMetricService().loadSamples()'));
+    expect(home, contains("pushNamed('/spo2-history')"));
+    expect(source, contains('SpO2HistoryService().load('));
     expect(source, contains('s.sourceId == selected'));
+  });
+
+  test('home battery chips render generic type and level indicators', () {
+    final home = File('lib/screens/home_screen.dart').readAsStringSync();
+    expect(home, contains('SalusDeviceBatteryIndicator('));
+    expect(home, contains('deviceKind: item.device.deviceKind'));
+    expect(home, contains('percentage: item.value'));
+    expect(home, isNot(contains(r'${item.device.name}')));
   });
 
   test('all runtime direct reads pass through local driver dispatcher', () {

@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_theme.dart';
 import '../services/direct_metric_service.dart';
+import '../services/spo2_history_service.dart';
+import '../services/source_name_service.dart';
 import '../state/app_state.dart';
 
 /// Stored measurements only. Never invent earlier readings or blend sources.
@@ -15,15 +17,20 @@ class SpO2HistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _SpO2HistoryScreenState extends ConsumerState<SpO2HistoryScreen> {
-  late Future<List<DirectMetricSample>> _future;
+  late Future<SpO2HistoryResult> _future;
   String _range = '7 days';
   String? _sourceId;
 
   @override
   void initState() {
     super.initState();
-    _future = DirectMetricService().loadSamples();
+    _future = _load();
   }
+
+  Future<SpO2HistoryResult> _load() =>
+      const SpO2HistoryService().load(
+        healthConnectAuthorized: ref.read(appStateProvider).health.authorized,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -34,27 +41,24 @@ class _SpO2HistoryScreenState extends ConsumerState<SpO2HistoryScreen> {
         IconButton(
           tooltip: 'Refresh stored readings',
           onPressed: () => setState(() =>
-              _future = DirectMetricService().loadSamples()),
+              _future = _load()),
           icon: const Icon(Icons.refresh_rounded),
         ),
       ]),
-      body: FutureBuilder<List<DirectMetricSample>>(
+      body: FutureBuilder<SpO2HistoryResult>(
         future: _future,
         builder: (context, snapshot) {
-          final all = (snapshot.data ?? const <DirectMetricSample>[])
-              .where((s) => (s.metric == 'SpO2' || s.metric == 'SpO₂') &&
-                  s.value >= 0 && s.value <= 100)
-              .toList()
-            ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+          final all = snapshot.data?.readings ?? const <DirectMetricSample>[];
           final sources = <String, String>{};
           for (final s in all) {
             sources[s.sourceId] = s.deviceName;
           }
-          final selected = _sourceId != null && sources.containsKey(_sourceId)
-              ? _sourceId
-              : configured != null && sources.containsKey(configured)
-                  ? configured
-                  : all.isEmpty ? null : all.last.sourceId;
+          final selected = _sourceId ??
+              ((configured != null && configured != 'Auto')
+                  ? sources.keys.where((source) =>
+                      SourceNameService.sameProvider(source, configured))
+                      .firstOrNull ?? configured
+                  : all.isEmpty ? null : all.last.sourceId);
           final days = _range == '24 hours' ? 1 : _range == '7 days' ? 7 : 30;
           final cutoff = DateTime.now().subtract(Duration(days: days));
           final filtered = all.where((s) =>
@@ -70,12 +74,18 @@ class _SpO2HistoryScreenState extends ConsumerState<SpO2HistoryScreen> {
                   fontWeight: FontWeight.w700)),
               const SizedBox(height: 7),
               const Text(
-                'Actual stored readings only. One device at a time; no invented history.',
+                'Actual direct-device and Health Connect readings only. One source at a time; no invented history.',
                 style: TextStyle(color: AppTheme.textSecondary),
               ),
               const SizedBox(height: 16),
+              if (snapshot.data?.warning != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(snapshot.data!.warning!,
+                      style: const TextStyle(color: AppTheme.amber)),
+                ),
               if (sources.isNotEmpty) DropdownButtonFormField<String>(
-                initialValue: selected,
+                initialValue: sources.containsKey(selected) ? selected : null,
                 decoration: const InputDecoration(labelText: 'Measurement source'),
                 dropdownColor: AppTheme.surface,
                 items: [
@@ -95,7 +105,10 @@ class _SpO2HistoryScreenState extends ConsumerState<SpO2HistoryScreen> {
                   ),
               ]),
               const SizedBox(height: 14),
-              if (snapshot.connectionState == ConnectionState.waiting)
+              if (snapshot.hasError)
+                const Text('Could not load recorded SpO₂ history.',
+                    style: TextStyle(color: AppTheme.textSecondary))
+              else if (snapshot.connectionState == ConnectionState.waiting)
                 const Center(child: CircularProgressIndicator())
               else if (latest == null)
                 const Padding(

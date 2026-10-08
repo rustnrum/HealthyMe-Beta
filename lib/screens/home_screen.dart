@@ -11,6 +11,7 @@ import '../state/health_sync_provider.dart';
 import '../state/navigation_provider.dart';
 import '../state/today_plan_state.dart';
 import '../state/workout_state.dart';
+import '../widgets/device_battery_indicator.dart';
 import '../widgets/salus_widgets.dart';
 import '../widgets/salus_mountain_background.dart';
 
@@ -232,7 +233,7 @@ class HomeScreen extends ConsumerWidget {
                           : 'Latest reading',
                       color: AppTheme.purple,
                       onTap: () =>
-                          Navigator.of(context).pushNamed('/health'),
+                          Navigator.of(context).pushNamed('/spo2-history'),
                     ),
                   ),
                 ),
@@ -577,18 +578,11 @@ class _BatteryChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.battery_charging_full_rounded,
-              color: AppTheme.mint,
-              size: 16,
-            ),
-            const SizedBox(width: 5),
-            Text(
-              '${item.device.name} ${item.value.round()}%',
-              style: const TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 11.7,
-                fontWeight: FontWeight.w700,
+            Tooltip(
+              message: item.device.name,
+              child: SalusDeviceBatteryIndicator(
+                deviceKind: item.device.deviceKind,
+                percentage: item.value,
               ),
             ),
           ],
