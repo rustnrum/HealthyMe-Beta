@@ -85,8 +85,15 @@ class WatchNotificationService {
       });
     // No vendor companion-app dependency: only installed direct transport
     // senders may be enabled. Unknown proprietary writers remain unsupported.
-    final data = raw ?? const <dynamic, dynamic>{};
-    if (data['masterEnabled'] == true && data['deliverySupported'] != true) {
+    // Only protocols with native sender code can be enabled. Garmin's native
+    // sender is dispatched by SalusNotificationListenerService; no vendor app.
+    final installed = protocolId == 'ido-veryfit-family' ||
+        protocolId == 'garmin-family';
+    final data = <dynamic, dynamic>{
+      ...?raw,
+      'deliverySupported': installed,
+    };
+    if (data['masterEnabled'] == true && !installed) {
       // Migrate previously enabled Build 44 relay settings to OFF. Keep app
       // filters saved, but do not re-enable future protocols without consent.
       await _channel.invokeMethod<void>('setWatchNotificationMaster', {

@@ -35,7 +35,7 @@ class SalusNotificationListenerService : NotificationListenerService() {
         } else null
 
         val approved = SalusWatchNotificationStore.targets(this).filter { target ->
-            target.protocolId == "ido-veryfit-family" &&
+            (target.protocolId == "ido-veryfit-family" || target.protocolId == "garmin-family") &&
                 SalusWatchNotificationStore.isAllowed(
                     this, target, item.packageName, account)
         }
@@ -43,7 +43,12 @@ class SalusNotificationListenerService : NotificationListenerService() {
         SalusWatchNotificationStore.recordEligibleNotification(this, item.packageName)
 
         for (target in approved) {
-            executor.execute { SalusWatchNotificationSender.send(this, target, item) }
+            executor.execute {
+                when (target.protocolId) {
+                    "ido-veryfit-family" -> SalusWatchNotificationSender.send(this, target, item)
+                    "garmin-family" -> SalusGarminNotificationSender.send(this, target, item)
+                }
+            }
         }
     }
 

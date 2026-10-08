@@ -27,6 +27,8 @@ void main() {
         .readAsStringSync();
     expect(source, contains('SalusWatchNotificationSender.send(this, target, item)'));
     expect(source, contains('target.protocolId == "ido-veryfit-family"'));
+    expect(source, contains('target.protocolId == "garmin-family"'));
+    expect(source, contains('SalusGarminNotificationSender.send(this, target, item)'));
     expect(source, contains('recordObservedApp'));
     expect(source, contains('recordEligibleNotification'));
     expect(source, isNot(contains('postCompanionAlert')));

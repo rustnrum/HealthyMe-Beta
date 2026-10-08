@@ -315,7 +315,7 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
                           const SizedBox(height: 9),
                           Text('Android access: ${state.accessEnabled ? 'On' : 'Off'}',
                               style: const TextStyle(color: AppTheme.textSecondary)),
-                          Text('Direct protocol sender: ${state.deliverySupported ? 'Available (IDO / VeryFit)' : 'Not available'}',
+                          Text('Direct protocol sender: ${state.deliverySupported ? ((device.protocolId ?? '') == 'garmin-family' ? 'Garmin GFDI installed (experimental)' : 'IDO / VeryFit installed') : 'Not installed'}',
                               style: const TextStyle(color: AppTheme.textSecondary)),
                           Text('Last notification seen: ${_when(state.lastObservedAt)}',
                               style: const TextStyle(color: AppTheme.textSecondary)),
@@ -327,7 +327,7 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
                           const SizedBox(height: 7),
                           const Text('Allowed means the phone approved the alert. '
                               'It does not confirm the watch received it. '
-                              'Direct Bluetooth delivery requires an installed protocol driver and real-watch validation.',
+                              'Garmin and IDO drivers send directly; delivery requires physical-watch validation. No companion apps.',
                               style: TextStyle(color: AppTheme.textMuted, fontSize: 12.5)),
                         ],
                       )),

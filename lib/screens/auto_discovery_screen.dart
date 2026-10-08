@@ -298,7 +298,7 @@ class _AutoDiscoveryScreenState extends ConsumerState<AutoDiscoveryScreen>
         return b.candidate.rssi.compareTo(a.candidate.rssi);
       });
     return Scaffold(
-      appBar: AppBar(title: const Text('Automatic device discovery'), actions: [
+      appBar: AppBar(title: const Text('Auto discovery'), actions: [
         IconButton(
           tooltip: 'Scan again',
           onPressed: _scanning || _probing ? null : _discover,
@@ -353,6 +353,14 @@ class _AutoDiscoveryScreenState extends ConsumerState<AutoDiscoveryScreen>
                             fontSize: 12)),
                   ],
                 )),
+                if (device.protocolId == 'garmin-family' ||
+                    device.protocolId == 'ido-veryfit-family')
+                  IconButton(
+                    tooltip: 'Watch notification switch',
+                    icon: const Icon(Icons.notifications_outlined),
+                    onPressed: () => Navigator.of(context).pushNamed(
+                      '/watch-device', arguments: device.id),
+                  ),
                 IconButton(
                   tooltip: device.protocolId == 'cpap-family'
                       ? 'Manage CPAP in advanced device controls'
@@ -485,7 +493,7 @@ class _NearbyResult extends StatelessWidget {
         Text('Health reader: ${decision.status == SalusDriverStatus.ready ? 'Installed; not yet verified on this device' : decision.status == SalusDriverStatus.standardOnly ? 'Standard GATT reader' : 'No compatible decoder installed'}',
             style: const TextStyle(color: AppTheme.textSecondary,
                 fontSize: 12)),
-        Text('Direct notification writer: ${protocolId == 'ido-veryfit-family' ? 'Local IDO sender available; delivery unverified' : 'No matching installed driver'}',
+        Text('Direct notification writer: ${protocolId == 'ido-veryfit-family' ? 'Local IDO writer installed; delivery unverified' : protocolId == 'garmin-family' ? 'Garmin GFDI writer installed; delivery unverified' : 'No matching installed writer'}',
             style: const TextStyle(color: AppTheme.textMuted,
                 fontSize: 12)),
         if (standards.isNotEmpty) ...[

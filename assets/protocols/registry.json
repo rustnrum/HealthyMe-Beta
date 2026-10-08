@@ -1,126 +1,28 @@
 {
-  "version": 1,
+  "version": 2,
+  "notes": "Discovery signatures only. A matched family is NOT proof of working health-data or notification commands. Native senders are independently tracked.",
   "packs": [
-    {
-      "id": "ido-veryfit-family",
-      "label": "IDO / VeryFit",
-      "deviceKind": "Watch / band",
-      "services": [
-        "00000af0-0000-1000-8000-00805f9b34fb"
-      ],
-      "nameTokens": [
-        "veryfit",
-        "toobur",
-        "idw16",
-        "idw19"
-      ],
-      "capabilities": [],
-      "builtInReader": false,
-      "note": "Compatibility family recognized locally. Proprietary health-history decoding is not enabled yet."
-    },
-    {
-      "id": "huami-zepp-family",
-      "label": "Xiaomi / Amazfit / Huami",
-      "deviceKind": "Watch / band",
-      "services": [
-        "0000fee0-0000-1000-8000-00805f9b34fb",
-        "0000fee1-0000-1000-8000-00805f9b34fb"
-      ],
-      "nameTokens": [
-        "amazfit",
-        "xiaomi",
-        "zepp"
-      ],
-      "capabilities": [],
-      "builtInReader": false,
-      "note": "Compatibility family recognized locally. Model authentication may still be required."
-    },
-    {
-      "id": "fitcloud-family",
-      "label": "FitCloud",
-      "deviceKind": "Watch / band",
-      "services": [],
-      "nameTokens": [
-        "fitcloud"
-      ],
-      "capabilities": [],
-      "builtInReader": false,
-      "note": "Compatibility family recognized locally."
-    },
-    {
-      "id": "moyoung-dafit-family",
-      "label": "Moyoung / Da Fit",
-      "deviceKind": "Watch / band",
-      "services": [],
-      "nameTokens": [
-        "moyoung",
-        "dafit"
-      ],
-      "capabilities": [],
-      "builtInReader": false,
-      "note": "Compatibility family recognized locally."
-    },
-    {
-      "id": "gloryfit-family",
-      "label": "GloryFit",
-      "deviceKind": "Watch / band",
-      "services": [],
-      "nameTokens": [
-        "gloryfit"
-      ],
-      "capabilities": [],
-      "builtInReader": false,
-      "note": "Compatibility family recognized locally."
-    },
-    {
-      "id": "fitpro-family",
-      "label": "FitPro / Lefun",
-      "deviceKind": "Watch / band",
-      "services": [],
-      "nameTokens": [
-        "fitpro",
-        "lefun"
-      ],
-      "capabilities": [],
-      "builtInReader": false,
-      "note": "Compatibility family recognized locally."
-    },
-    {
-      "id": "wearfit-family",
-      "label": "WearFit",
-      "deviceKind": "Watch / band",
-      "services": [],
-      "nameTokens": [
-        "wearfit"
-      ],
-      "capabilities": [],
-      "builtInReader": false,
-      "note": "Compatibility family recognized locally."
-    },
-    {
-      "id": "huawei-family",
-      "label": "Huawei / Honor",
-      "deviceKind": "Watch / band",
-      "services": [],
-      "nameTokens": [
-        "huawei",
-        "honor"
-      ],
-      "capabilities": [],
-      "builtInReader": false,
-      "note": "Compatibility family recognized locally."
-    },
-    {
-      "id": "polar-family",
-      "label": "Polar",
-      "deviceKind": "Watch / sensor",
-      "services": [],
-      "nameTokens": [
-        "polar"
-      ],
-      "capabilities": [],
-      "builtInReader": false,
-      "note": "Standard Bluetooth health services are used when exposed."
-    }
+    {"id":"ido-veryfit-family","label":"IDO / VeryFit","deviceKind":"Watch / band","services":["00000af0-0000-1000-8000-00805f9b34fb"],"nameTokens":["veryfit","toobur","idw16","idw19","idw13","idw15"],"capabilities":[],"builtInReader":false,"note":"Local notification sender installed; health data parser not verified for every model."},
+    {"id":"huami-zepp-family","label":"Huami / Amazfit / Zepp","deviceKind":"Watch / band","services":["0000fee0-0000-1000-8000-00805f9b34fb","0000fee1-0000-1000-8000-00805f9b34fb"],"nameTokens":["amazfit","xiaomi","zepp","huami"],"capabilities":[],"builtInReader":false,"note":"Published protocol implementation exists; Salus-native notification sender not installed."},
+    {"id":"fitcloud-family","label":"FitCloud watch family","deviceKind":"Watch / band","services":[],"nameTokens":["fitcloud"],"capabilities":[],"builtInReader":false,"note":"Identity only, protocol driver not installed."},
+    {"id":"moyoung-dafit-family","label":"Moyoung / Da Fit","deviceKind":"Watch / band","services":[],"nameTokens":["moyoung","dafit"],"capabilities":[],"builtInReader":false,"note":"Identity only; local notification sender not installed."},
+    {"id":"gloryfit-family","label":"GloryFit","deviceKind":"Watch / band","services":[],"nameTokens":["gloryfit"],"capabilities":[],"builtInReader":false,"note":"Identity only; local notification sender not installed."},
+    {"id":"fitpro-family","label":"FitPro / Lefun","deviceKind":"Watch / band","services":[],"nameTokens":["fitpro","lefun","lefunhealth"],"capabilities":[],"builtInReader":false,"note":"Published notification protocol exists; not installed in Salus."},
+    {"id":"wearfit-family","label":"WearFit","deviceKind":"Watch / band","services":[],"nameTokens":["wearfit"],"capabilities":[],"builtInReader":false,"note":"Identity only; local notification sender not installed."},
+    {"id":"huawei-family","label":"Huawei / Honor","deviceKind":"Watch / band","services":[],"nameTokens":["huawei","honor"],"capabilities":[],"builtInReader":false,"note":"Published protocol implementation exists; Salus-native sender not installed."},
+    {"id":"polar-family","label":"Polar","deviceKind":"Watch / sensor","services":[],"nameTokens":["polar"],"capabilities":[],"builtInReader":false,"note":"Standard Bluetooth health data only where exposed; no proprietary notification writer."},
+    {"id":"banglejs-family","label":"Bangle.js / Espruino","deviceKind":"Watch / band","services":[],"nameTokens":["bangle","banglejs","espruino"],"capabilities":[],"builtInReader":false,"note":"Nordic UART / Espruino protocol exists publicly; no Salus notification writer installed."},
+    {"id":"pinetime-family","label":"PineTime / InfiniTime","deviceKind":"Watch / band","services":[],"nameTokens":["pinetime","infinitime"],"capabilities":[],"builtInReader":false,"note":"Open firmware; ANS/health interfaces require capability-verified integration."},
+    {"id":"pebble-family","label":"Pebble","deviceKind":"Watch / band","services":[],"nameTokens":["pebble","rebble"],"capabilities":[],"builtInReader":false,"note":"Public Pebble protocol exists; sender not installed in Salus."},
+    {"id":"cmf-watch-pro-family","label":"CMF Watch Pro","deviceKind":"Watch / band","services":["02f00000-0000-0000-0000-00000000ffe0","77d4e67c-2fe2-2334-0d35-9ccd078f529c"],"nameTokens":["cmf","cmfwatch"],"capabilities":[],"builtInReader":false,"note":"Known unique Bluetooth services from published implementation; no Salus command driver."},
+    {"id":"xiaomi-smartband-family","label":"Xiaomi Smart Band","deviceKind":"Watch / band","services":[],"nameTokens":["miband","smartband","redmiband"],"capabilities":[],"builtInReader":false,"note":"Protocol family recognized; pairing/authentication and notifications not installed."},
+    {"id":"fossil-qhybrid-family","label":"Fossil Q / Hybrid","deviceKind":"Watch / band","services":[],"nameTokens":["qhybrid","fossil"],"capabilities":[],"builtInReader":false,"note":"Published protocol exists; Salus implementation not installed."},
+    {"id":"withings-watch-family","label":"Withings","deviceKind":"Watch / band","services":[],"nameTokens":["withings","steelhr"],"capabilities":[],"builtInReader":false,"note":"Recognized identity only; no notification driver."},
+    {"id":"casio-watch-family","label":"Casio watches","deviceKind":"Watch / band","services":[],"nameTokens":["casio","gshock","g-shock"],"capabilities":[],"builtInReader":false,"note":"Model-specific local protocol not installed."},
+    {"id":"sony-swr-family","label":"Sony SmartBand","deviceKind":"Watch / band","services":[],"nameTokens":["swr12","smartband2"],"capabilities":[],"builtInReader":false,"note":"Identity only; no notification sender."},
+    {"id":"id115-family","label":"ID115 / compatible bands","deviceKind":"Watch / band","services":[],"nameTokens":["id115","id115plus"],"capabilities":[],"builtInReader":false,"note":"Protocol implementation exists publicly; not installed in Salus."},
+    {"id":"asteroidos-family","label":"AsteroidOS","deviceKind":"Watch / band","services":[],"nameTokens":["asteroidos"],"capabilities":[],"builtInReader":false,"note":"Open-watch OS protocol; driver not installed."},
+    {"id":"lenovo-band-family","label":"Lenovo bands","deviceKind":"Watch / band","services":[],"nameTokens":["lenovo"],"capabilities":[],"builtInReader":false,"note":"Recognition only; local sender not installed."},
+    {"id":"zeetime-family","label":"MyKronoz ZeTime","deviceKind":"Watch / band","services":[],"nameTokens":["zetime","mykronoz"],"capabilities":[],"builtInReader":false,"note":"Published protocol exists; local sender not installed."}
   ]
 }
