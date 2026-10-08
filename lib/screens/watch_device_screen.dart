@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../core/theme/app_theme.dart';
 import '../services/direct_device_store.dart';
 import '../services/direct_metric_service.dart';
-import '../services/watch_notification_service.dart';
 import '../services/garmin_battery_service.dart';
+import '../services/watch_notification_service.dart';
 import '../widgets/salus_widgets.dart';
 
 class WatchDeviceScreen extends ConsumerStatefulWidget {
   const WatchDeviceScreen({super.key});
-
   @override
   ConsumerState<WatchDeviceScreen> createState() => _WatchDeviceScreenState();
 }
@@ -18,19 +18,19 @@ class WatchDeviceScreen extends ConsumerStatefulWidget {
 class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
     with WidgetsBindingObserver {
   final _store = DirectDeviceStore();
-  final _direct = DirectMetricService();
+  final _metrics = DirectMetricService();
   final _notifications = WatchNotificationService();
   final _garminBattery = GarminBatteryService();
   SavedDirectDevice? _device;
   WatchNotificationState? _state;
-  double? _battery;
-  String? _batteryStatus;
-  DateTime? _batteryMeasuredAt;
-  bool _checkingBattery = false;
-  bool _loading = true;
-  bool _saving = false;
-  bool _argsLoaded = false;
   String? _requestedId;
+  bool _argsLoaded = false;
+  bool _loading = true;
+  bool _busy = false;
+  bool _checkingBattery = false;
+  double? _battery;
+  DateTime? _batteryAt;
+  String? _batteryStatus;
 
   @override
   void initState() {
@@ -49,60 +49,61 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
     super.didChangeDependencies();
     if (_argsLoaded) return;
     _argsLoaded = true;
-    final argument = ModalRoute.of(context)?.settings.arguments;
-    if (argument is String && argument.isNotEmpty) _requestedId = argument;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is String) _requestedId = args;
     _load();
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _device != null) {
-      _reloadNotificationState();
-    }
+  void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
+    if (lifecycle == AppLifecycleState.resumed) _reload();
   }
 
   Future<void> _load() async {
-    final devices = await _store.load();
-    final watches = devices.where((device) {
+    final saved = await _store.load();
+    final watches = saved.where((device) {
       final kind = device.deviceKind.toLowerCase();
-      final protocol = device.protocolId ?? '';
       return kind.contains('watch') || kind.contains('band') ||
-          protocol.contains('garmin') || protocol.contains('veryfit');
+          (device.protocolId ?? '').contains('garmin') ||
+          (device.protocolId ?? '').contains('veryfit');
     }).toList();
     SavedDirectDevice? selected;
     for (final device in watches) {
-      if (device.id == _requestedId) {
-        selected = device;
-        break;
-      }
+      if (device.id == _requestedId) selected = device;
     }
     selected ??= watches.isEmpty ? null : watches.first;
-    final samples = await _direct.loadSamples();
-    double? battery;
-    DateTime? batteryMeasuredAt;
-    if (selected != null) {
-      final selectedId = selected.id;
-      final values = samples.where((sample) =>
-          sample.deviceId == selectedId && sample.metric == 'Battery').toList()
-        ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
-      if (values.isNotEmpty) {
-        battery = values.last.value;
-        batteryMeasuredAt = values.last.capturedAt;
-      }
+    final samples = await _metrics.loadSamples();
+    final values = samples.where((sample) =>
+        sample.deviceId == selected?.id && sample.metric == 'Battery').toList()
+      ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+    String? status;
+    if (selected != null && (selected.protocolId ?? '').contains('garmin')) {
+      status = await _garminBattery.lastResult(selected.id);
     }
-    final batteryStatus = selected != null &&
-            (selected.protocolId ?? '').contains('garmin')
-        ? await _garminBattery.lastResult(selected.id)
-        : null;
     if (!mounted) return;
     setState(() {
-      _batteryStatus = batteryStatus;
-      _batteryMeasuredAt = batteryMeasuredAt;
       _device = selected;
-      _battery = battery;
+      _battery = values.isEmpty ? null : values.last.value;
+      _batteryAt = values.isEmpty ? null : values.last.capturedAt;
+      _batteryStatus = status;
       _loading = false;
     });
-    await _reloadNotificationState();
+    await _reload();
+  }
+
+  Future<void> _reload() async {
+    final device = _device;
+    if (device == null) return;
+    try {
+      final state = await _notifications.load(
+        deviceId: device.id,
+        deviceName: device.name,
+        protocolId: device.protocolId ?? '',
+      );
+      if (mounted) setState(() => _state = state);
+    } catch (error) {
+      _toast('Could not load notification settings: $error');
+    }
   }
 
   Future<void> _checkGarminBattery() async {
@@ -111,126 +112,109 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
     setState(() => _checkingBattery = true);
     try {
       final status = await _garminBattery.check(device.id, device.name);
-      final samples = await _direct.loadSamples();
-      final entries = samples.where((sample) =>
-          sample.deviceId == device.id && sample.metric == 'Battery').toList()
-        ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
       if (!mounted) return;
-      setState(() {
-        _batteryStatus = status;
-        if (entries.isNotEmpty) {
-          _battery = entries.last.value;
-          _batteryMeasuredAt = entries.last.capturedAt;
-        }
-      });
+      setState(() => _batteryStatus = status);
+      await _load();
+    } catch (error) {
+      _toast('Could not check watch battery: $error');
     } finally {
       if (mounted) setState(() => _checkingBattery = false);
     }
   }
 
-  Future<void> _reloadNotificationState() async {
-    final device = _device;
-    if (device == null) return;
-    try {
-      final state = await _notifications.load(
-        deviceId: device.id,
-        protocolId: device.protocolId ?? '',
-        deviceName: device.name,
-      );
-      if (mounted) setState(() => _state = state);
-    } catch (error) {
-      if (mounted) _show('Could not read notification settings: $error');
-    }
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _show(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
-  Future<void> _setMaster(bool value) async {
+  Future<void> _setMaster(bool enabled) async {
     final device = _device;
     final state = _state;
-    if (device == null || state == null || _saving) return;
-    if (!state.deliverySupported) {
-      _show('Salus does not have a verified notification sender for this watch protocol.');
+    if (device == null || state == null || _busy) return;
+    if (!state.canAttempt) {
+      _toast('No supported direct or companion notification route for this device.');
       return;
     }
-    if (value && !state.accessEnabled) {
+    if (enabled && !state.accessEnabled) {
       await _notifications.openNotificationAccess();
       return;
     }
-    setState(() => _saving = true);
+    if (enabled && state.companionRelay) {
+      final permission = await Permission.notification.request();
+      if (!permission.isGranted) {
+        _toast('Allow Android notifications for Salus before enabling companion relay.');
+        return;
+      }
+    }
+    setState(() => _busy = true);
     try {
       await _notifications.setMaster(
         deviceId: device.id,
-        protocolId: device.protocolId ?? '',
         deviceName: device.name,
-        enabled: value,
+        protocolId: device.protocolId ?? '',
+        enabled: enabled,
       );
-      await _reloadNotificationState();
+      await _reload();
+      if (enabled && state.companionRelay) {
+        _toast('Salus phone relay enabled. Allow Salus notifications in your watch companion app too.');
+      }
     } catch (error) {
-      if (mounted) _show('Could not save notification setting: $error');
+      _toast('Could not update notifications: $error');
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _setApp(WatchNotificationApp app, bool value) async {
+  Future<void> _changeApp(WatchNotificationApp app, bool value) async {
     final device = _device;
-    if (device == null || _saving) return;
-    setState(() => _saving = true);
+    if (device == null || _busy) return;
+    setState(() => _busy = true);
     try {
       await _notifications.setApp(
-        deviceId: device.id,
-        packageName: app.packageName,
-        enabled: value,
-      );
-      await _reloadNotificationState();
+          deviceId: device.id, packageName: app.packageName, enabled: value);
+      await _reload();
     } catch (error) {
-      if (mounted) _show('Could not save app filter: $error');
+      _toast('Could not save app selection: $error');
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _setAllAccounts(WatchNotificationApp app, bool value) async {
+  Future<void> _changeAllAccounts(WatchNotificationApp app, bool value) async {
     final device = _device;
-    if (device == null || _saving) return;
-    setState(() => _saving = true);
+    if (device == null || _busy) return;
+    setState(() => _busy = true);
     try {
       await _notifications.setAllAccounts(
-        deviceId: device.id,
-        packageName: app.packageName,
-        enabled: value,
-      );
-      await _reloadNotificationState();
-    } catch (error) {
-      if (mounted) _show('Could not save Gmail filter: $error');
+          deviceId: device.id, packageName: app.packageName, enabled: value);
+      await _reload();
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _setAccount(WatchNotificationApp app,
+  Future<void> _changeAccount(WatchNotificationApp app,
       WatchNotificationAccount account, bool value) async {
     final device = _device;
-    if (device == null || _saving) return;
-    setState(() => _saving = true);
+    if (device == null || _busy) return;
+    setState(() => _busy = true);
     try {
       await _notifications.setAccount(
-        deviceId: device.id,
-        packageName: app.packageName,
-        account: account.name,
-        enabled: value,
+        deviceId: device.id, packageName: app.packageName,
+        account: account.name, enabled: value,
       );
-      await _reloadNotificationState();
-    } catch (error) {
-      if (mounted) _show('Could not save Gmail account: $error');
+      await _reload();
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) setState(() => _busy = false);
     }
+  }
+
+  String _when(DateTime? at) {
+    if (at == null) return 'Never';
+    final value = at.toLocal();
+    return '${value.month}/${value.day} '
+        '${value.hour.toString().padLeft(2, '0')}:'
+        '${value.minute.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -240,289 +224,208 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Watch settings'),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh notification status',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _reloadNotificationState,
-          ),
-        ],
+        actions: [IconButton(
+          tooltip: 'Refresh notification status',
+          icon: const Icon(Icons.refresh_rounded), onPressed: _load,
+        )],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : device == null
               ? const Center(child: Padding(
                   padding: EdgeInsets.all(24),
-                  child: Text(
-                    'No watch is connected yet. Add one from Connections.',
-                    textAlign: TextAlign.center,
-                  ),
+                  child: Text('No watch connected yet. Add a watch from Connections.',
+                      textAlign: TextAlign.center),
                 ))
               : SalusPageBackground(
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(18, 12, 18, 34),
                     children: [
-                      _WatchHero(device: device, battery: _battery),
-                      if ((device.protocolId ?? '').contains('garmin')) ...[
-                        const SizedBox(height: 10),
-                        SalusPaper(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Watch charge', style: TextStyle(
-                                  color: AppTheme.textPrimary,
-                                  fontWeight: FontWeight.w800)),
-                              const SizedBox(height: 6),
-                              Text(
-                                _battery == null ? 'Battery: not available yet' :
-                                  'Battery: ${_battery!.round()}% • last read ${_when(_batteryMeasuredAt)}',
-                                style: const TextStyle(color: AppTheme.textSecondary),
-                              ),
-                              const SizedBox(height: 6),
-                              const Text('Battery charge is different from Garmin Body Battery.',
-                                style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-                              if (_batteryStatus != null) ...[
-                                const SizedBox(height: 8),
-                                Text(_batteryStatus!, style: const TextStyle(
-                                  color: AppTheme.textSecondary, fontSize: 12)),
-                              ],
-                              const SizedBox(height: 10),
-                              OutlinedButton.icon(
-                                onPressed: _checkingBattery ? null : _checkGarminBattery,
-                                icon: _checkingBattery
-                                    ? const SizedBox(width: 16, height: 16,
-                                        child: CircularProgressIndicator(strokeWidth: 2))
-                                    : const Icon(Icons.battery_std_rounded),
-                                label: Text(_checkingBattery ? 'Checking…' : 'Check Garmin battery'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 14),
-                      SalusPaper(
-                        padding: EdgeInsets.zero,
+                      SalusPaper(glow: true, child: Row(children: [
+                        const Icon(Icons.watch_rounded, size: 38, color: AppTheme.cyan),
+                        const SizedBox(width: 14),
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(device.name, style: const TextStyle(
+                                color: AppTheme.textPrimary, fontSize: 21,
+                                fontWeight: FontWeight.w800)),
+                            Text(device.protocolLabel ?? device.deviceKind,
+                                style: const TextStyle(color: AppTheme.textSecondary)),
+                          ],
+                        )),
+                      ])),
+                      const SizedBox(height: 12),
+                      SalusPaper(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Watch charge', style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 6),
+                          Text(_battery == null ? 'Battery: not available yet'
+                              : 'Battery: ${_battery!.round()}% • last read ${_when(_batteryAt)}',
+                              style: const TextStyle(color: AppTheme.textSecondary)),
+                          const SizedBox(height: 4),
+                          const Text('Battery charge is different from Garmin Body Battery.',
+                              style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                          if (_batteryStatus != null) ...[
+                            const SizedBox(height: 8),
+                            Text(_batteryStatus!, style: const TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 12)),
+                          ],
+                          if ((device.protocolId ?? '').contains('garmin')) ...[
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _checkingBattery ? null : _checkGarminBattery,
+                              icon: const Icon(Icons.battery_std_rounded),
+                              label: Text(_checkingBattery
+                                  ? 'Checking…' : 'Check Garmin battery'),
+                            ),
+                          ],
+                        ],
+                      )),
+                      const SizedBox(height: 12),
+                      SalusPaper(padding: EdgeInsets.zero,
                         child: SwitchListTile.adaptive(
-                          value: state?.masterEnabled ?? false,
-                          onChanged: state == null || _saving ||
-                                  (!state.deliverySupported && !state.masterEnabled)
-                              ? null
-                              : _setMaster,
                           title: const Text('Phone notifications on this watch',
-                              style: TextStyle(
-                                  color: AppTheme.textPrimary,
+                              style: TextStyle(color: AppTheme.textPrimary,
                                   fontWeight: FontWeight.w800)),
-                          subtitle: Text(
-                            state == null
-                                ? 'Checking settings…'
-                                : !state.deliverySupported
-                                    ? 'Not supported by the current Salus driver for this watch. App filters alone cannot deliver alerts.'
-                                    : !state.accessEnabled
-                                        ? 'First enable Android notification access, then return and switch notifications on.'
-                                        : state.masterEnabled
-                                            ? '${state.enabledAppCount} app${state.enabledAppCount == 1 ? '' : 's'} allowed. Toggle any app below to mute it.'
-                                            : 'Off. Switching on opts into the apps listed below; you can turn them off individually.',
-                            style: const TextStyle(
-                                color: AppTheme.textSecondary,
-                                fontSize: 12.2,
-                                height: 1.35),
-                          ),
-                          secondary: const Icon(
-                              Icons.notifications_active_outlined,
+                          subtitle: Text(state == null
+                              ? 'Loading notification settings…'
+                              : !state.canAttempt
+                                  ? 'No installed direct sender or companion route is available.'
+                                  : !state.accessEnabled
+                                      ? 'Enable Android notification access first.'
+                                      : state.companionRelay
+                                          ? 'Companion relay • ${state.enabledAppCount} apps allowed. Your watch companion must also allow Salus alerts.'
+                                          : 'Direct IDO/VeryFit sender • ${state.enabledAppCount} apps allowed.',
+                              style: const TextStyle(color: AppTheme.textSecondary,
+                                  fontSize: 12.5)),
+                          secondary: const Icon(Icons.notifications_active_outlined,
                               color: AppTheme.cyan),
+                          value: state?.masterEnabled ?? false,
+                          onChanged: state == null || _busy ||
+                                  (!state.canAttempt && !state.masterEnabled)
+                              ? null : _setMaster,
                         ),
                       ),
                       if (state != null && !state.accessEnabled) ...[
                         const SizedBox(height: 10),
                         OutlinedButton.icon(
-                          onPressed: _notifications.openNotificationAccess,
                           icon: const Icon(Icons.settings_rounded),
+                          onPressed: _notifications.openNotificationAccess,
                           label: const Text('Android notification access'),
                         ),
                       ],
                       const SizedBox(height: 12),
-                      if (state != null) SalusPaper(
+                      if (state?.companionRelay == true) SalusPaper(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Notification diagnostics',
-                                style: TextStyle(
-                                    color: AppTheme.textPrimary,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w900)),
-                            const SizedBox(height: 10),
-                            Text('Android access: ${state.accessEnabled ? 'On' : 'Off'}',
-                                style: const TextStyle(color: AppTheme.textSecondary)),
-                            Text('Direct protocol sender: ${state.deliverySupported ? 'Available (IDO / VeryFit)' : 'Not available'}',
-                                style: const TextStyle(color: AppTheme.textSecondary)),
-                            Text('Last notification seen: ${_when(state.lastObservedAt)}',
-                                style: const TextStyle(color: AppTheme.textSecondary)),
-                            Text('Last allowed for forwarding: ${_when(state.lastEligibleAt)}',
-                                style: const TextStyle(color: AppTheme.textSecondary)),
+                            const Text('Companion app relay', style: TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontWeight: FontWeight.w800, fontSize: 17)),
                             const SizedBox(height: 8),
-                            const Text(
-                              'Allowed means the phone saw and approved an alert. It does not confirm the watch received it. Watch delivery requires a supported Bluetooth protocol and connection.',
-                              style: TextStyle(color: AppTheme.textMuted,
-                                  fontSize: 12, height: 1.35),
+                            const Text('Salus creates a normal Android notification '
+                                'from an allowed phone alert. A companion app such as Garmin Connect '
+                                'may mirror that Salus notification to the watch. '
+                                'This does not directly send Bluetooth packets to Garmin.',
+                                style: TextStyle(color: AppTheme.textSecondary,
+                                    height: 1.4, fontSize: 13)),
+                            const SizedBox(height: 8),
+                            const Text('In the watch companion app, enable notifications '
+                                'from Salus. If the companion cannot mirror phone notifications '
+                                'at all, Salus cannot bypass that connection.',
+                                style: TextStyle(color: AppTheme.textSecondary,
+                                    fontSize: 13)),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: openAppSettings,
+                              icon: const Icon(Icons.open_in_new_rounded),
+                              label: const Text('Salus Android app settings'),
                             ),
                           ],
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      if (state != null) SalusPaper(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Notification diagnostics', style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w900, fontSize: 17)),
+                          const SizedBox(height: 9),
+                          Text('Android access: ${state.accessEnabled ? 'On' : 'Off'}',
+                              style: const TextStyle(color: AppTheme.textSecondary)),
+                          Text('Direct protocol sender: ${state.deliverySupported ? 'Available (IDO / VeryFit)' : 'Not available'}',
+                              style: const TextStyle(color: AppTheme.textSecondary)),
+                          Text('Companion relay: ${state.companionRelay ? 'Available when authorized' : 'Not used'}',
+                              style: const TextStyle(color: AppTheme.textSecondary)),
+                          Text('Last notification seen: ${_when(state.lastObservedAt)}',
+                              style: const TextStyle(color: AppTheme.textSecondary)),
+                          Text('Last allowed for forwarding: ${_when(state.lastEligibleAt)}',
+                              style: const TextStyle(color: AppTheme.textSecondary)),
+                          if (state.lastEligibleApp.isNotEmpty)
+                            Text('Last allowed app: ${state.lastEligibleApp}',
+                                style: const TextStyle(color: AppTheme.textSecondary)),
+                          const SizedBox(height: 7),
+                          const Text('Allowed means the phone approved the alert. '
+                              'It does not confirm the watch received it. '
+                              'Companion mirroring and direct BLE writes need physical-watch testing.',
+                              style: TextStyle(color: AppTheme.textMuted, fontSize: 12.5)),
+                        ],
+                      )),
                       if (state != null && state.apps.isNotEmpty) ...[
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 16),
                         const Text('Apps', style: TextStyle(
-                            color: AppTheme.textPrimary,
-                            fontSize: 18, fontWeight: FontWeight.w900)),
-                        const SizedBox(height: 5),
-                        const Text('Text messages, Messenger, Gmail, and other installed or observed apps can be selected individually.',
-                            style: TextStyle(
-                                color: AppTheme.textSecondary,
+                            color: AppTheme.textPrimary, fontSize: 19,
+                            fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        const Text('Text messages, Messenger, Gmail and other '
+                            'observed apps can be enabled individually.',
+                            style: TextStyle(color: AppTheme.textSecondary,
                                 fontSize: 12.5)),
                         const SizedBox(height: 10),
                         for (final app in state.apps) ...[
-                          _AppCard(
-                            app: app,
-                            busy: _saving,
-                            onChanged: (value) => _setApp(app, value),
-                            onAllAccountsChanged: app.isGmail
-                                ? (value) => _setAllAccounts(app, value) : null,
-                            onAccountChanged: app.isGmail
-                                ? (account, value) => _setAccount(app, account, value)
-                                : null,
-                          ),
-                          const SizedBox(height: 8),
+                          SalusPaper(padding: EdgeInsets.zero, child: Column(children: [
+                            SwitchListTile.adaptive(
+                              title: Text(app.label, style: const TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.w700)),
+                              subtitle: Text(app.packageName,
+                                  style: const TextStyle(
+                                      color: AppTheme.textMuted, fontSize: 11)),
+                              value: app.enabled,
+                              onChanged: _busy ? null : (value) => _changeApp(app, value),
+                            ),
+                            if (app.isGmail && app.enabled) ...[
+                              SwitchListTile.adaptive(
+                                title: const Text('All Gmail accounts',
+                                    style: TextStyle(color: AppTheme.textSecondary)),
+                                value: app.allAccounts,
+                                onChanged: _busy ? null :
+                                    (value) => _changeAllAccounts(app, value),
+                              ),
+                              if (!app.allAccounts)
+                                for (final account in app.accounts)
+                                  SwitchListTile.adaptive(
+                                    title: Text(account.name,
+                                        style: const TextStyle(
+                                            color: AppTheme.textSecondary,
+                                            fontSize: 12)),
+                                    value: account.enabled,
+                                    onChanged: _busy ? null : (value) =>
+                                        _changeAccount(app, account, value),
+                                  ),
+                            ],
+                          ])),
+                          const SizedBox(height: 7),
                         ],
                       ],
                     ],
                   ),
                 ),
     );
-  }
-
-  String _when(DateTime? date) {
-    if (date == null) return 'Never';
-    final local = date.toLocal();
-    return '${local.month}/${local.day} ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-  }
-}
-
-class _WatchHero extends StatelessWidget {
-  final SavedDirectDevice device;
-  final double? battery;
-
-  const _WatchHero({required this.device, required this.battery});
-
-  @override
-  Widget build(BuildContext context) => SalusPaper(
-    glow: true,
-    child: Row(children: [
-      Container(
-        width: 52, height: 52,
-        decoration: BoxDecoration(
-          color: AppTheme.cyan.withValues(alpha: 0.10),
-          shape: BoxShape.circle,
-          border: Border.all(color: AppTheme.cyan.withValues(alpha: 0.25)),
-        ),
-        child: const Icon(Icons.watch_outlined,
-            color: AppTheme.cyan, size: 28),
-      ),
-      const SizedBox(width: 13),
-      Expanded(child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(device.name, style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 20, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 3),
-          Text([
-            device.protocolLabel ?? device.deviceKind,
-            if (battery != null) 'Battery ${battery!.round()}%',
-          ].join(' • '), style: const TextStyle(
-              color: AppTheme.textSecondary, fontSize: 12.5)),
-        ],
-      )),
-    ]),
-  );
-}
-
-class _AppCard extends StatelessWidget {
-  final WatchNotificationApp app;
-  final bool busy;
-  final ValueChanged<bool> onChanged;
-  final ValueChanged<bool>? onAllAccountsChanged;
-  final void Function(WatchNotificationAccount account, bool enabled)?
-      onAccountChanged;
-
-  const _AppCard({
-    required this.app,
-    required this.busy,
-    required this.onChanged,
-    this.onAllAccountsChanged,
-    this.onAccountChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) => SalusPaper(
-    padding: EdgeInsets.zero,
-    child: Column(children: [
-      SwitchListTile.adaptive(
-        value: app.enabled,
-        onChanged: busy ? null : onChanged,
-        title: Text(app.label, style: const TextStyle(
-            color: AppTheme.textPrimary, fontWeight: FontWeight.w800)),
-        subtitle: Text(
-          app.isGmail && app.accounts.isNotEmpty
-              ? '${app.accounts.length} Gmail accounts found'
-              : app.enabled ? 'Allowed on watch' : 'Muted on watch',
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-        ),
-        secondary: Icon(_iconFor(app.packageName), color: AppTheme.textSecondary),
-      ),
-      if (app.isGmail && app.enabled) ...[
-        const Divider(height: 1),
-        ExpansionTile(
-          title: const Text('Gmail accounts'),
-          subtitle: Text(app.allAccounts
-              ? 'All accounts allowed' : 'Choose individual accounts'),
-          children: [
-            SwitchListTile.adaptive(
-              value: app.allAccounts,
-              onChanged: busy ? null : onAllAccountsChanged,
-              title: const Text('All Gmail accounts'),
-            ),
-            if (app.accounts.isEmpty)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 4, 16, 16),
-                child: Text('Accounts appear after Salus observes a Gmail notification. No Gmail mailbox access is required.',
-                  style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-              )
-            else
-              for (final account in app.accounts)
-                SwitchListTile.adaptive(
-                  value: account.enabled,
-                  onChanged: busy || app.allAccounts
-                      ? null : (value) => onAccountChanged?.call(account, value),
-                  title: Text(account.name),
-                  dense: true,
-                ),
-          ],
-        ),
-      ],
-    ]),
-  );
-
-  IconData _iconFor(String packageName) {
-    if (packageName == 'com.google.android.gm') {
-      return Icons.mail_outline_rounded;
-    }
-    if (packageName.contains('messaging') ||
-        packageName.contains('messages')) return Icons.sms_outlined;
-    if (packageName.contains('calendar')) return Icons.calendar_month_outlined;
-    if (packageName.contains('facebook') ||
-        packageName.contains('instagram') ||
-        packageName.contains('whatsapp') ||
-        packageName.contains('snapchat') ||
-        packageName.contains('discord')) return Icons.forum_outlined;
-    return Icons.notifications_none_rounded;
   }
 }
