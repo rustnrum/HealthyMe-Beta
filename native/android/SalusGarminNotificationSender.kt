@@ -560,29 +560,26 @@ object SalusGarminNotificationSender {
         }
 
         private fun sendAttributes(alert: Alert, request: ByteArray) {
-            val options = linkedMapOf(
-                0 to alert.sourcePackage,
-                1 to alert.title.ifBlank { alert.sourcePackage.substringAfterLast('.') },
-                2 to "", 3 to alert.text, 4 to alert.text.length.toString(),
-                5 to SalusGarminGfdiCodec.timestamp(alert.time),
+            val encoded = SalusGarminNotificationAttributes.build(
+                alert.id,
+                alert.sourcePackage,
+                alert.title.ifBlank { alert.sourcePackage.substringAfterLast('.') },
+                "",
+                alert.text,
+                SalusGarminGfdiCodec.timestamp(alert.time),
+                request,
             )
-            val attributes = mutableListOf<Pair<Int, String>>()
-            var i = 0
-            while (i < request.size) {
-                val kind = request[i++].toInt() and 255
-                var limit = 255
-                if (kind in 1..3 || kind == 7) {
-                    if (i + 2 > request.size) break
-                    limit = SalusGarminGfdiCodec.read16(request, i).coerceIn(0, 255)
-                    i += 2
-                } else if (kind == 127) {
-                    if (i + 3 > request.size) break
-                    i += 3
-                }
-                attributes.add(kind to (options[kind] ?: "").take(limit))
+            if (encoded == null) {
+                stage("Garmin attribute request unsupported", "Watch requested a malformed or unknown attribute; do not fabricate payload")
+                notificationTransfer.reset()
+                current = null; updateSent = false
+                main.postDelayed({ maybeSend() }, 250L)
+                return
             }
-            val bytes = SalusGarminGfdiCodec.notificationAttributes(alert.id, attributes)
-            notificationTransfer.begin(bytes).let { sendNextAttributeChunk(it) }
+            stage("Garmin attributes encoded",
+                "Requested attribute IDs=${encoded.requestedIds.joinToString(",")}; " +
+                    "serialized bytes=${encoded.bytes.size}; Gadgetbridge ordering applied")
+            notificationTransfer.begin(encoded.bytes).let { sendNextAttributeChunk(it) }
         }
 
         private fun sendNextAttributeChunk(chunk: SalusGarminNotificationTransfer.Chunk) {

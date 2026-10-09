@@ -177,6 +177,20 @@ object SalusGarminGfdiCodec {
             put(0) // no custom actions / attachments
         }.array())
 
+    /** Byte-exact 5035 attribute serialization; preserves empty binary action payloads. */
+    fun notificationAttributesRaw(id: Int, fields: List<Pair<Int, ByteArray>>): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.write(0) // GET_NOTIFICATION_ATTRIBUTES response
+        out.write(leInt(id))
+        for ((attribute, value) in fields) {
+            require(value.size <= 65535)
+            out.write(attribute)
+            out.write(leShort(value.size))
+            out.write(value)
+        }
+        return out.toByteArray()
+    }
+
     fun notificationAttributes(id: Int, fields: List<Pair<Int, String>>): ByteArray {
         val out = ByteArrayOutputStream()
         out.write(0) // get-attributes response command
