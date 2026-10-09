@@ -39,7 +39,11 @@ class WatchNotificationState {
     required this.apps, this.lastObservedAt, this.lastEligibleAt,
     this.lastEligibleApp = '', this.transportStage = 'Not attempted',
     this.transportDetails = '', this.transportUpdatedAt,
-    this.transportHistory = '', 
+    this.transportHistory = '',
+    this.securityBond = 'Unknown', this.securityEncryption = 'Not queried',
+    this.securityEncryptionEvent = 'Not observed',
+    this.securityGatt = 'Not recorded', this.securityLastError = 'None observed',
+    this.securityProtocol = 'Not confirmed',
   });
   final bool accessEnabled;
   final bool masterEnabled;
@@ -56,6 +60,12 @@ class WatchNotificationState {
   final String transportDetails;
   final DateTime? transportUpdatedAt;
   final String transportHistory;
+  final String securityBond;
+  final String securityEncryption;
+  final String securityEncryptionEvent;
+  final String securityGatt;
+  final String securityLastError;
+  final String securityProtocol;
   bool get canAttempt => deliverySupported;
   int get enabledAppCount => apps.where((app) => app.enabled).length;
   static DateTime? _time(dynamic value) => value is num && value > 0
@@ -73,6 +83,12 @@ class WatchNotificationState {
     transportDetails: json['transportDetails']?.toString() ?? '',
     transportUpdatedAt: _time(json['transportUpdatedAt']),
     transportHistory: json['transportHistory']?.toString() ?? '',
+    securityBond: json['securityBond']?.toString() ?? 'Unknown',
+    securityEncryption: json['securityEncryption']?.toString() ?? 'Not queried',
+    securityEncryptionEvent: json['securityEncryptionEvent']?.toString() ?? 'Not observed',
+    securityGatt: json['securityGatt']?.toString() ?? 'Not recorded',
+    securityLastError: json['securityLastError']?.toString() ?? 'None observed',
+    securityProtocol: json['securityProtocol']?.toString() ?? 'Not confirmed',
     apps: (json['apps'] as List<dynamic>? ?? const [])
         .whereType<Map<dynamic, dynamic>>().map(WatchNotificationApp.fromMap)
         .where((app) => app.packageName.isNotEmpty).toList(),

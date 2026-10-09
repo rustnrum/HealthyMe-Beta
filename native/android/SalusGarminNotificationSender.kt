@@ -143,6 +143,7 @@ object SalusGarminNotificationSender {
                 stage("Bluetooth unavailable", "Enable Bluetooth on the phone")
                 return
             }
+            SalusBluetoothDiagnostics.watch(app, deviceId)
             val device = try { adapter.getRemoteDevice(deviceId) } catch (_: Throwable) {
                 stage("Invalid device address", "Rescan and reconnect this watch")
                 return
@@ -209,6 +210,7 @@ object SalusGarminNotificationSender {
             enabled = false
             ++attemptId
             bondManager.cancel(); bonding = false
+            SalusBluetoothDiagnostics.unwatch(app, deviceId)
             disconnect()
             outgoing.clear(); pending.clear(); current = null
             notificationTransfer.reset(); ++dataAckToken
@@ -218,6 +220,7 @@ object SalusGarminNotificationSender {
         @SuppressLint("MissingPermission")
         private fun disconnect() {
             val old = gatt
+            if (old != null) SalusWatchTransportStatus.metadata(app, deviceId, "gatt", "Disconnected; session closed")
             gatt = null; rx = null; tx = null
             connecting = false; writing = false
             handle = 0; registered = false; subscribed = false; subscriptionSeen = false
@@ -249,10 +252,16 @@ object SalusGarminNotificationSender {
                     if (!enabled || gatt !== g) return@post
                     if (status == BluetoothGatt.GATT_SUCCESS && state == BluetoothProfile.STATE_CONNECTED) {
                         connecting = false
+                        SalusWatchTransportStatus.metadata(app, deviceId, "gatt", "GATT connected; status=0")
+                        SalusWatchTransportStatus.note(app, deviceId, "GATT connection", "CONNECTED / status=0")
                         stage("Bluetooth connected", "Discovering Garmin GFDI services")
                         if (!g.discoverServices()) fail("Service discovery failed", "Android refused discoverServices")
                     } else if (state == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS) {
-                        fail("Bluetooth disconnected", "GATT status=$status; state=$state")
+                        val reason = SalusBluetoothDiagnostics.gattStatus(status)
+                        SalusWatchTransportStatus.metadata(app, deviceId, "gatt", "Disconnected / $reason")
+                        if (status == 5 || status == 8 || status == 15)
+                            SalusWatchTransportStatus.metadata(app, deviceId, "securityError", "GATT connection: $reason")
+                        fail("Bluetooth disconnected", "GATT $reason; state=$state")
                     }
                 }
             }
@@ -262,20 +271,35 @@ object SalusGarminNotificationSender {
                 main.post {
                     if (!enabled || gatt !== g) return@post
                     if (status != BluetoothGatt.GATT_SUCCESS || !setupGatt(g)) {
-                        fail("Garmin transport unavailable", "GFDI notify/write characteristics could not be opened")
+                        val reason = SalusBluetoothDiagnostics.gattStatus(status)
+                        if (status == 5 || status == 8 || status == 15)
+                            SalusWatchTransportStatus.metadata(app, deviceId, "securityError", "Service discovery: $reason")
+                        fail("Garmin transport unavailable", "Service discovery $reason; GFDI characteristics unavailable")
                     }
                 }
             }
 
             override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
-                main.post { if (status == BluetoothGatt.GATT_SUCCESS) mtuPayload = (mtu - 4).coerceIn(19, 244) }
+                main.post {
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        mtuPayload = (mtu - 4).coerceIn(19, 244)
+                        SalusWatchTransportStatus.note(app, deviceId, "GATT MTU", "Negotiated MTU=$mtu")
+                    } else SalusWatchTransportStatus.note(app, deviceId, "GATT MTU failed", SalusBluetoothDiagnostics.gattStatus(status))
+                }
             }
 
             override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
                 main.post {
                     if (!enabled || gatt !== g) return@post
-                    if (status == BluetoothGatt.GATT_SUCCESS) beginHandshake()
-                    else fail("Subscribe failed", "Descriptor write status=$status")
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        SalusWatchTransportStatus.note(app, deviceId, "GATT notifications enabled", "CCCD accepted (GATT status=0)")
+                        beginHandshake()
+                    } else {
+                        val reason = SalusBluetoothDiagnostics.gattStatus(status)
+                        if (status == 5 || status == 8 || status == 15)
+                            SalusWatchTransportStatus.metadata(app, deviceId, "securityError", "CCCD write: $reason")
+                        fail("Subscribe failed", "Descriptor write $reason")
+                    }
                 }
             }
 
@@ -291,8 +315,12 @@ object SalusGarminNotificationSender {
             override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
                 main.post {
                     if (!enabled || gatt !== g) return@post
-                    if (status != BluetoothGatt.GATT_SUCCESS) fail("Bluetooth write failed", "GATT status=$status")
-                    else { writing = false; drain() }
+                    if (status != BluetoothGatt.GATT_SUCCESS) {
+                        val reason = SalusBluetoothDiagnostics.gattStatus(status)
+                        if (status == 5 || status == 8 || status == 15)
+                            SalusWatchTransportStatus.metadata(app, deviceId, "securityError", "GATT data write: $reason")
+                        fail("Bluetooth write failed", reason)
+                    } else { writing = false; drain() }
                 }
             }
         }
@@ -308,6 +336,7 @@ object SalusGarminNotificationSender {
                     send.properties and (BluetoothGattCharacteristic.PROPERTY_WRITE or
                         BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0) {
                     rx = receive; tx = send
+                    SalusWatchTransportStatus.metadata(app, deviceId, "protocol", "Garmin Multi-Link V2 (GFDI) characteristics discovered")
                     stage("GFDI discovered", "Found Garmin Multi-Link receive/send characteristics")
                     if (!g.setCharacteristicNotification(receive, true)) return false
                     val descriptor = receive.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
@@ -387,6 +416,7 @@ object SalusGarminNotificationSender {
                             registered = handle > 0
                             if (registered) {
                                 retryCount = 0
+                                SalusWatchTransportStatus.metadata(app, deviceId, "protocol", "Garmin ML V2 / GFDI handle registered; awaiting app negotiation")
                                 stage("GFDI registered", "Waiting for Garmin device-info/configuration exchange")
                                 val currentAttempt = attemptId
                                 main.postDelayed({
@@ -502,6 +532,7 @@ object SalusGarminNotificationSender {
                         it.deviceId.equals(deviceId, ignoreCase = true) && it.protocolId == "garmin-family"
                     }
                     subscribed = enabledOnWatch && hostAllowed
+                    if (subscribed) SalusWatchTransportStatus.metadata(app, deviceId, "protocol", "Garmin GFDI confirmed; 5036 subscription enabled")
                     sendGfdi(SalusGarminGfdiCodec.notificationSubscriptionResponse(
                         enabledOnWatch, hostAllowed, sequence))
                     if (enabledOnWatch) {
@@ -518,6 +549,7 @@ object SalusGarminNotificationSender {
                     sendGfdi(SalusGarminGfdiCodec.notificationControlAck(sequence))
                     val alert = current
                     if (alert != null && requested == alert.id) {
+                        SalusWatchTransportStatus.metadata(app, deviceId, "protocol", "Garmin GFDI confirmed; 5034 attribute request received")
                         stage("Watch requested content", "Garmin requested notification attributes")
                         sendAttributes(alert, payload.copyOfRange(5, payload.size))
                     }
@@ -535,6 +567,7 @@ object SalusGarminNotificationSender {
                             ++dataAckToken
                             // Gadgetbridge sends a final 5035 ACK after Garmin accepts the last chunk.
                             sendGfdi(SalusGarminGfdiCodec.notificationDataAck(sequence))
+                            SalusWatchTransportStatus.metadata(app, deviceId, "protocol", "Garmin GFDI confirmed; 5035 data ACK received (display NOT verified)")
                             stage("Garmin accepted notification data",
                                 "Watch acknowledged all 5035 data chunks; on-screen display still unverified")
                             current = null; updateSent = false
