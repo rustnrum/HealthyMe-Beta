@@ -13,6 +13,14 @@ import java.util.concurrent.Executors
 class SalusNotificationListenerService : NotificationListenerService() {
     private val executor = Executors.newSingleThreadExecutor()
 
+    override fun onCreate() {
+        super.onCreate()
+        // Restore independently enabled Garmin sessions when Android binds the listener.
+        SalusWatchNotificationStore.targets(this)
+            .filter { it.protocolId == "garmin-family" }
+            .forEach { SalusGarminNotificationSender.watch(this, it.deviceId) }
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val item = sbn ?: return
         if (item.packageName == packageName) return // prevent relay loops
@@ -54,6 +62,7 @@ class SalusNotificationListenerService : NotificationListenerService() {
 
     override fun onDestroy() {
         executor.shutdownNow()
+        SalusGarminNotificationSender.stopAll()
         super.onDestroy()
     }
 

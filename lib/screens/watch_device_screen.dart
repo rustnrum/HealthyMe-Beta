@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -27,6 +28,8 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
   bool _loading = true;
   bool _busy = false;
   bool _checkingBattery = false;
+  bool _testing = false;
+  Timer? _statusRefresh;
   double? _battery;
   DateTime? _batteryAt;
   String? _batteryStatus;
@@ -35,10 +38,12 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _statusRefresh = Timer.periodic(const Duration(seconds: 4), (_) => _reload());
   }
 
   @override
   void dispose() {
+    _statusRefresh?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -151,6 +156,25 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
       _toast('Could not update notifications: $error');
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _sendTest() async {
+    final device = _device;
+    final state = _state;
+    if (device == null || state == null || _testing || !state.masterEnabled) return;
+    setState(() => _testing = true);
+    try {
+      final accepted = await _notifications.sendTest(deviceId: device.id);
+      _toast(accepted
+          ? 'Test queued. Check transport diagnostics for the Bluetooth result.'
+          : 'Test unavailable. Enable notifications and Android access first.');
+      await Future<void>.delayed(const Duration(seconds: 2));
+      await _reload();
+    } catch (error) {
+      _toast('Could not start notification test: $error');
+    } finally {
+      if (mounted) setState(() => _testing = false);
     }
   }
 
@@ -324,6 +348,25 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
                           if (state.lastEligibleApp.isNotEmpty)
                             Text('Last allowed app: ${state.lastEligibleApp}',
                                 style: const TextStyle(color: AppTheme.textSecondary)),
+                          const SizedBox(height: 10),
+                          Text('Bluetooth transport: ${state.transportStage}',
+                              style: const TextStyle(color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.w700)),
+                          if (state.transportDetails.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(state.transportDetails,
+                                style: const TextStyle(color: AppTheme.textSecondary)),
+                          ],
+                          Text('Transport updated: ${_when(state.transportUpdatedAt)}',
+                              style: const TextStyle(color: AppTheme.textSecondary)),
+                          if (state.transportHistory.isNotEmpty)
+                            ExpansionTile(
+                              title: const Text('Bluetooth event history'),
+                              tilePadding: EdgeInsets.zero,
+                              children: [Text(state.transportHistory,
+                                  style: const TextStyle(color: AppTheme.textSecondary,
+                                      fontSize: 11))],
+                            ),
                           const SizedBox(height: 7),
                           const Text('Allowed means the phone approved the alert. '
                               'It does not confirm the watch received it. '
@@ -331,6 +374,14 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
                               style: TextStyle(color: AppTheme.textMuted, fontSize: 12.5)),
                         ],
                       )),
+                      if (state != null && device.protocolId == 'garmin-family') ...[
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: _testing || !state.masterEnabled ? null : _sendTest,
+                          icon: const Icon(Icons.notifications_active_outlined),
+                          label: Text(_testing ? 'Testing…' : 'Send test notification'),
+                        ),
+                      ],
                       if (state != null && state.apps.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         const Text('Apps', style: TextStyle(

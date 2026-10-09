@@ -37,7 +37,9 @@ class WatchNotificationState {
     required this.accessEnabled, required this.masterEnabled,
     required this.deliverySupported, required this.companionRelay,
     required this.apps, this.lastObservedAt, this.lastEligibleAt,
-    this.lastEligibleApp = '',
+    this.lastEligibleApp = '', this.transportStage = 'Not attempted',
+    this.transportDetails = '', this.transportUpdatedAt,
+    this.transportHistory = '', 
   });
   final bool accessEnabled;
   final bool masterEnabled;
@@ -50,6 +52,10 @@ class WatchNotificationState {
   final DateTime? lastObservedAt;
   final DateTime? lastEligibleAt;
   final String lastEligibleApp;
+  final String transportStage;
+  final String transportDetails;
+  final DateTime? transportUpdatedAt;
+  final String transportHistory;
   bool get canAttempt => deliverySupported;
   int get enabledAppCount => apps.where((app) => app.enabled).length;
   static DateTime? _time(dynamic value) => value is num && value > 0
@@ -63,6 +69,10 @@ class WatchNotificationState {
     lastObservedAt: _time(json['lastObservedAt']),
     lastEligibleAt: _time(json['lastEligibleAt']),
     lastEligibleApp: json['lastEligibleApp']?.toString() ?? '',
+    transportStage: json['transportStage']?.toString() ?? 'Not attempted',
+    transportDetails: json['transportDetails']?.toString() ?? '',
+    transportUpdatedAt: _time(json['transportUpdatedAt']),
+    transportHistory: json['transportHistory']?.toString() ?? '',
     apps: (json['apps'] as List<dynamic>? ?? const [])
         .whereType<Map<dynamic, dynamic>>().map(WatchNotificationApp.fromMap)
         .where((app) => app.packageName.isNotEmpty).toList(),
@@ -138,6 +148,13 @@ class WatchNotificationService {
       'deviceId': deviceId, 'packageName': packageName,
       'account': account, 'enabled': enabled,
     });
+  }
+
+  Future<bool> sendTest({required String deviceId}) async {
+    if (!Platform.isAndroid) return false;
+    return await _channel.invokeMethod<bool>('sendWatchTestNotification', {
+      'deviceId': deviceId,
+    }) ?? false;
   }
 
   Future<void> openNotificationAccess() async {

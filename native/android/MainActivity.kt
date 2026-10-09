@@ -160,7 +160,7 @@ class MainActivity : FlutterFragmentActivity() {
                             deviceName,
                             protocolId,
                             isNotificationServiceEnabled(),
-                        )
+                        ) + SalusWatchTransportStatus.state(this, deviceId)
                     )
                 }
                 "setWatchNotificationMaster" -> {
@@ -179,6 +179,10 @@ class MainActivity : FlutterFragmentActivity() {
                             protocolId,
                             enabled,
                         )
+                        if (protocolId == "garmin-family") {
+                            if (enabled) SalusGarminNotificationSender.watch(this, deviceId)
+                            else SalusGarminNotificationSender.unwatch(deviceId)
+                        }
                     }
                     result.success(true)
                 }
@@ -238,6 +242,15 @@ class MainActivity : FlutterFragmentActivity() {
                         )
                     }
                     result.success(true)
+                }
+                "sendWatchTestNotification" -> {
+                    val deviceId = call.argument<String>("deviceId") ?: ""
+                    val target = SalusWatchNotificationStore.targets(this)
+                        .firstOrNull { it.deviceId == deviceId && it.protocolId == "garmin-family" }
+                    if (target != null && isNotificationServiceEnabled()) {
+                        SalusGarminNotificationSender.test(this, deviceId)
+                        result.success(true)
+                    } else result.success(false)
                 }
                 "notificationAccessStatus" -> {
                     result.success(isNotificationServiceEnabled())

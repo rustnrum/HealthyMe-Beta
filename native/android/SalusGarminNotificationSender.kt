@@ -18,120 +18,238 @@ import android.os.Handler
 import android.os.Looper
 import android.service.notification.StatusBarNotification
 import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.util.ArrayDeque
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.ConcurrentHashMap
 
-/** Direct, best-effort Garmin Multi-Link v2 sender. No Garmin Connect or external app.
- * Salus recognizes connection, GFDI registration, and attribute requests separately.
- * BLE writes do NOT constitute confirmation that an alert was displayed on a watch.
- * Wire format based on publicly documented Garmin protocol and Gadgetbridge sources.
+/**
+ * Locally managed Garmin GFDI notification session. No Garmin Connect relay.
+ * Keeps one GATT session per watch, queues alerts, reconnects with backoff,
+ * and records transport stages. Protocol-acknowledged data is NOT proof of
+ * a watch displaying the alert.
  */
 object SalusGarminNotificationSender {
+    private const val MAX_PENDING = 8
+    private const val ATTEMPT_TIMEOUT_MS = 25_000L
     private val serviceUuid = UUID.fromString("6a4e2800-667b-11e3-949a-0800200c9a66")
     private const val SUFFIX = "-667b-11e3-949a-0800200c9a66"
-    private const val TIMEOUT_MS = 27000L
+    private val main = Handler(Looper.getMainLooper())
+    private val sessions = ConcurrentHashMap<String, Session>()
 
-    @SuppressLint("MissingPermission")
-    fun send(context: Context, target: SalusWatchNotificationStore.Target, sbn: StatusBarNotification) {
-        if (target.protocolId != "garmin-family") return
-        if (Build.VERSION.SDK_INT >= 31 &&
-            context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return
-        val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return
-        if (!adapter.isEnabled) return
-        val device = try { adapter.getRemoteDevice(target.deviceId) } catch (_: Throwable) { return }
-        Session(context.applicationContext, sbn).start(device)
+    private data class Alert(
+        val id: Int, val sourcePackage: String, val title: String,
+        val text: String, val category: Int, val time: Long,
+    )
+
+    private fun permitted(context: Context): Boolean =
+        Build.VERSION.SDK_INT < 31 ||
+            context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+
+    private fun session(context: Context, deviceId: String): Session {
+        return sessions.computeIfAbsent(deviceId) { Session(context.applicationContext, it) }
     }
 
-    private class Session(private val app: Context, private val sbn: StatusBarNotification) {
-        private val handler = Handler(Looper.getMainLooper())
-        private val finished = AtomicBoolean(false)
+    fun watch(context: Context, deviceId: String) {
+        if (deviceId.isBlank()) return
+        val s = session(context, deviceId)
+        main.post { s.start() }
+    }
+
+    fun unwatch(deviceId: String) {
+        val s = sessions.remove(deviceId) ?: return
+        main.post { s.stop() }
+    }
+
+    fun stopAll() {
+        val list = sessions.values.toList()
+        sessions.clear()
+        main.post { list.forEach { it.stop() } }
+    }
+
+    fun send(context: Context, target: SalusWatchNotificationStore.Target, sbn: StatusBarNotification) {
+        if (target.protocolId != "garmin-family") return
+        val extras = sbn.notification.extras
+        val alert = Alert(
+            sbn.key.hashCode(), sbn.packageName,
+            extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty(),
+            (extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
+                ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty(),
+            category(sbn.notification.category), sbn.postTime,
+        )
+        val s = session(context, target.deviceId)
+        main.post { s.offer(alert) }
+    }
+
+    /** Explicit local protocol test. Does not post a synthetic Android notification. */
+    fun test(context: Context, deviceId: String) {
+        val now = System.currentTimeMillis()
+        val alert = Alert(now.toInt(), context.packageName, "Salus test",
+            "Direct Bluetooth notification test from Salus", 0, now)
+        val s = session(context, deviceId)
+        main.post { s.offer(alert) }
+    }
+
+    private fun category(value: String?): Int = when (value) {
+        Notification.CATEGORY_CALL -> 1
+        Notification.CATEGORY_EMAIL -> 6
+        Notification.CATEGORY_MESSAGE -> 12
+        else -> 0
+    }
+
+    private class Session(private val app: Context, private val deviceId: String) {
         private val outgoing = ArrayDeque<ByteArray>()
+        private val pending = ArrayDeque<Alert>()
         private val incoming = ByteArrayOutputStream()
+        private var current: Alert? = null
         private var gatt: BluetoothGatt? = null
-        private var tx: BluetoothGattCharacteristic? = null
         private var rx: BluetoothGattCharacteristic? = null
+        private var tx: BluetoothGattCharacteristic? = null
         private var writing = false
         private var handle = 0
-        private var updateSent = false
+        private var registered = false
         private var subscribed = false
-        private var gfdiRegistered = false
+        private var enabled = true
+        private var connecting = false
+        private var attemptId = 0
+        private var retryCount = 0
         private var mtuPayload = 19
-        private val notificationId = sbn.key.hashCode()
-        private val title = sbn.notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
-        private val text = (sbn.notification.extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
-            ?: sbn.notification.extras.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
+        private var updateSent = false
+        private var registrationSent = false
+        private var attributeBytes = byteArrayOf()
+        private var attributeOffset = 0
+        private var runningCrc = 0
 
-        @SuppressLint("MissingPermission")
-        fun start(device: BluetoothDevice) {
-            handler.postDelayed({ close() }, TIMEOUT_MS)
-            handler.post {
-                if (finished.get()) return@post
-                try {
-                    gatt = if (Build.VERSION.SDK_INT >= 23)
-                        device.connectGatt(app, false, callback, BluetoothDevice.TRANSPORT_LE)
-                    else device.connectGatt(app, false, callback)
-                } catch (_: Throwable) { close() }
+        private fun stage(code: String, detail: String = "") =
+            SalusWatchTransportStatus.mark(app, deviceId, code, detail)
+
+        fun start() {
+            if (!enabled) return
+            if (gatt != null || connecting) return
+            if (!permitted(app)) {
+                stage("Bluetooth permission missing", "Grant Nearby devices / Bluetooth access")
+                return
             }
+            val adapter = app.getSystemService(BluetoothManager::class.java)?.adapter
+            if (adapter == null || !adapter.isEnabled) {
+                stage("Bluetooth unavailable", "Enable Bluetooth on the phone")
+                return
+            }
+            val device = try { adapter.getRemoteDevice(deviceId) } catch (_: Throwable) {
+                stage("Invalid device address", "Rescan and reconnect this watch")
+                return
+            }
+            connecting = true
+            val id = ++attemptId
+            stage("Connecting", "Opening direct Garmin Bluetooth connection")
+            try {
+                @SuppressLint("MissingPermission")
+                val opened = if (Build.VERSION.SDK_INT >= 23)
+                    device.connectGatt(app, false, callback, BluetoothDevice.TRANSPORT_LE)
+                else device.connectGatt(app, false, callback)
+                gatt = opened
+                if (opened == null) fail("Connection failed", "Android returned no GATT session")
+            } catch (error: Throwable) {
+                fail("Connection failed", error.javaClass.simpleName)
+            }
+            main.postDelayed({
+                if (enabled && id == attemptId && !registered) {
+                    fail("Connection timeout", "Garmin session did not register GFDI within 25 seconds")
+                }
+            }, ATTEMPT_TIMEOUT_MS)
+        }
+
+        fun offer(alert: Alert) {
+            if (!enabled) return
+            if (pending.size >= MAX_PENDING) pending.removeFirst()
+            pending.addLast(alert)
+            stage("Queued", "${pending.size} alert(s) waiting for Garmin protocol")
+            if (gatt == null) start()
+            maybeSend()
+        }
+
+        fun stop() {
+            enabled = false
+            ++attemptId
+            disconnect()
+            outgoing.clear(); pending.clear(); current = null
+            stage("Off", "Notification forwarding disabled")
         }
 
         @SuppressLint("MissingPermission")
-        private fun close() {
-            if (!finished.compareAndSet(false, true)) return
-            val active = gatt
-            try { active?.disconnect() } catch (_: Throwable) {}
-            try { active?.close() } catch (_: Throwable) {}
-            outgoing.clear()
-            incoming.reset()
+        private fun disconnect() {
+            val old = gatt
+            gatt = null; rx = null; tx = null
+            connecting = false; writing = false
+            handle = 0; registered = false; subscribed = false
+            registrationSent = false; updateSent = false
+            outgoing.clear(); incoming.reset()
+            try { old?.disconnect() } catch (_: Throwable) {}
+            try { old?.close() } catch (_: Throwable) {}
+        }
+
+        private fun fail(code: String, detail: String) {
+            if (!enabled) return
+            stage(code, detail)
+            ++attemptId
+            disconnect()
+            // Keep the in-flight alert, but don't queue unlimited duplicates.
+            current?.let { if (pending.size < MAX_PENDING) pending.addFirst(it) }
+            current = null
+            retryCount++
+            val delayMs = minOf(60_000L, 2_000L * (1L shl minOf(retryCount, 5)))
+            main.postDelayed({ if (enabled && gatt == null) start() }, delayMs)
         }
 
         private val callback = object : BluetoothGattCallback() {
             @SuppressLint("MissingPermission")
             override fun onConnectionStateChange(g: BluetoothGatt, status: Int, state: Int) {
-                handler.post {
-                    if (finished.get()) return@post
-                    gatt = g
+                main.post {
+                    if (!enabled || gatt !== g) return@post
                     if (status == BluetoothGatt.GATT_SUCCESS && state == BluetoothProfile.STATE_CONNECTED) {
-                        if (!g.discoverServices()) close()
-                    } else if (state == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS) close()
+                        connecting = false
+                        stage("Bluetooth connected", "Discovering Garmin GFDI services")
+                        if (!g.discoverServices()) fail("Service discovery failed", "Android refused discoverServices")
+                    } else if (state == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS) {
+                        fail("Bluetooth disconnected", "GATT status=$status; state=$state")
+                    }
                 }
             }
 
             @SuppressLint("MissingPermission")
             override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-                handler.post { if (!finished.get()) {
-                    if (status != BluetoothGatt.GATT_SUCCESS || !setupGatt(g)) close()
-                }}
+                main.post {
+                    if (!enabled || gatt !== g) return@post
+                    if (status != BluetoothGatt.GATT_SUCCESS || !setupGatt(g)) {
+                        fail("Garmin transport unavailable", "GFDI notify/write characteristics could not be opened")
+                    }
+                }
             }
 
             override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
-                if (status == BluetoothGatt.GATT_SUCCESS) mtuPayload = (mtu - 4).coerceIn(19, 244)
+                main.post { if (status == BluetoothGatt.GATT_SUCCESS) mtuPayload = (mtu - 4).coerceIn(19, 244) }
             }
 
-            @SuppressLint("MissingPermission")
-            override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
-                handler.post { if (!finished.get()) {
-                    if (status != BluetoothGatt.GATT_SUCCESS) close()
-                    else beginHandshake()
-                }}
+            override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+                main.post {
+                    if (!enabled || gatt !== g) return@post
+                    if (status == BluetoothGatt.GATT_SUCCESS) beginHandshake()
+                    else fail("Subscribe failed", "Descriptor write status=$status")
+                }
             }
 
             @Deprecated("Deprecated in Java")
             override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) {
-                onChanged(c.uuid, c.value?.clone() ?: return)
+                onChanged(g, c.uuid, c.value?.clone() ?: return)
             }
 
             override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray) {
-                onChanged(c.uuid, value.clone())
+                onChanged(g, c.uuid, value.clone())
             }
 
-            @SuppressLint("MissingPermission")
             override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
-                handler.post {
-                    if (finished.get()) return@post
-                    if (status != BluetoothGatt.GATT_SUCCESS) close()
+                main.post {
+                    if (!enabled || gatt !== g) return@post
+                    if (status != BluetoothGatt.GATT_SUCCESS) fail("Bluetooth write failed", "GATT status=$status")
                     else { writing = false; drain() }
                 }
             }
@@ -148,6 +266,7 @@ object SalusGarminNotificationSender {
                     send.properties and (BluetoothGattCharacteristic.PROPERTY_WRITE or
                         BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0) {
                     rx = receive; tx = send
+                    stage("GFDI discovered", "Found Garmin Multi-Link receive/send characteristics")
                     if (!g.setCharacteristicNotification(receive, true)) return false
                     val descriptor = receive.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
                     if (descriptor != null) {
@@ -163,165 +282,182 @@ object SalusGarminNotificationSender {
         }
 
         private fun beginHandshake() {
+            if (registrationSent) return
+            stage("GFDI initializing", "Closing previous Garmin handles and registering GFDI")
             enqueue(SalusGarminGfdiCodec.closeAll())
-            // Firmware can omit the CLOSE_ALL response. Attempt GFDI registration
-            // once regardless; unsolicited registration replies are still parsed.
-            handler.postDelayed({ if (!finished.get() && !gfdiRegistered) registerGfdi() }, 700L)
+            main.postDelayed({ if (enabled && !registered) registerGfdi() }, 700L)
         }
 
-        private var registrationSent = false
         private fun registerGfdi() {
-            if (registrationSent || finished.get()) return
+            if (registrationSent || !enabled) return
             registrationSent = true
             enqueue(SalusGarminGfdiCodec.registerGfdi())
         }
 
         private fun enqueue(bytes: ByteArray) {
-            if (finished.get()) return
+            if (!enabled) return
             outgoing.addLast(bytes)
             drain()
         }
 
         @SuppressLint("MissingPermission")
         private fun drain() {
-            if (finished.get() || writing || outgoing.isEmpty()) return
+            if (!enabled || writing || outgoing.isEmpty()) return
             val active = gatt ?: return
             val characteristic = tx ?: return
-            val bytes = outgoing.removeFirst()
-            val response = characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0
-            characteristic.writeType = if (response) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            val packet = outgoing.removeFirst()
+            val requiresResponse = characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0
+            characteristic.writeType = if (requiresResponse) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
                 else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             @Suppress("DEPRECATION")
-            characteristic.value = bytes
+            characteristic.value = packet
             writing = true
             @Suppress("DEPRECATION")
-            val began = try { active.writeCharacteristic(characteristic) } catch (_: Throwable) { false }
-            if (!began) { close(); return }
-            if (!response) handler.postDelayed({ writing = false; drain() }, 90L)
+            val started = try { active.writeCharacteristic(characteristic) } catch (_: Throwable) { false }
+            if (!started) { fail("Bluetooth write rejected", "Android rejected GATT write"); return }
+            if (!requiresResponse) main.postDelayed({
+                if (enabled && gatt === active && writing) { writing = false; drain() }
+            }, 90L)
         }
 
-        private fun sendGfdi(bytes: ByteArray) {
-            if (handle <= 0 || finished.get()) return
-            val framed = SalusGarminGfdiCodec.cobsEncode(bytes)
-            var pos = 0
-            while (pos < framed.size) {
-                val amount = minOf(mtuPayload, framed.size - pos)
-                enqueue(byteArrayOf(handle.toByte()) + framed.copyOfRange(pos, pos + amount))
-                pos += amount
+        private fun sendGfdi(data: ByteArray) {
+            if (handle <= 0 || !enabled) return
+            val framed = SalusGarminGfdiCodec.cobsEncode(data)
+            var offset = 0
+            while (offset < framed.size) {
+                val amount = minOf(mtuPayload, framed.size - offset)
+                enqueue(byteArrayOf(handle.toByte()) + framed.copyOfRange(offset, offset + amount))
+                offset += amount
             }
         }
 
-        private fun onChanged(characteristic: UUID, bytes: ByteArray) {
-            handler.post {
-                if (finished.get() || characteristic != rx?.uuid || bytes.size < 2) return@post
+        private fun onChanged(g: BluetoothGatt, characteristic: UUID, bytes: ByteArray) {
+            main.post {
+                if (!enabled || gatt !== g || characteristic != rx?.uuid || bytes.size < 2) return@post
                 val h = bytes[0].toInt() and 255
                 if (h == 0) {
-                    // REGISTER_ML_RESP: service at 10/11, status at 12, handle at 13.
                     val type = bytes[1].toInt() and 255
                     if (type == 6) registerGfdi()
                     if (type == 1 && bytes.size >= 14 && SalusGarminGfdiCodec.read16(bytes, 10) == 1) {
-                        if (bytes[12].toInt() == 0) {
+                        val status = bytes[12].toInt() and 255
+                        if (status == 0) {
                             handle = bytes[13].toInt() and 255
-                            gfdiRegistered = handle > 0
-                            if (gfdiRegistered) handler.postDelayed({ sendUpdate() }, 250L)
-                        }
+                            registered = handle > 0
+                            if (registered) {
+                                retryCount = 0
+                                stage("GFDI registered", "Waiting for Garmin notification subscription")
+                                // Some firmware only subscribes during full GFDI startup.
+                                // Never falsely report delivery merely from registration.
+                                maybeSend()
+                            }
+                        } else stage("GFDI registration rejected", "Garmin returned status=$status")
                     }
                     return@post
                 }
                 if (h != handle || handle == 0) return@post
-                val fragment = bytes.copyOfRange(1, bytes.size)
-                // COBS starts with 0 and ends with 0; fragments are not packets.
-                if (incoming.size() + fragment.size > 16384) incoming.reset()
-                incoming.write(fragment)
-                val data = incoming.toByteArray()
-                if (data.size >= 3 && data.last().toInt() == 0) {
+                val part = bytes.copyOfRange(1, bytes.size)
+                if (incoming.size() + part.size > 16_384) incoming.reset()
+                incoming.write(part)
+                val framed = incoming.toByteArray()
+                if (framed.size >= 3 && framed.last() == 0.toByte()) {
                     incoming.reset()
-                    val unwrapped = SalusGarminGfdiCodec.cobsDecode(data) ?: return@post
-                    val decoded = SalusGarminGfdiCodec.decodeGfdi(unwrapped) ?: return@post
-                    processGfdi(decoded.first, decoded.second)
+                    val decoded = SalusGarminGfdiCodec.cobsDecode(framed) ?: run {
+                        stage("GFDI decode error", "Invalid framed packet from Garmin")
+                        return@post
+                    }
+                    val message = SalusGarminGfdiCodec.decodeGfdi(decoded) ?: run {
+                        stage("GFDI checksum error", "Received invalid Garmin packet")
+                        return@post
+                    }
+                    processGfdi(message.first, message.second)
                 }
             }
         }
 
-        private fun sendUpdate() {
-            if (!gfdiRegistered || updateSent || finished.get()) return
+        private fun maybeSend() {
+            if (!enabled || !registered || !subscribed || updateSent) return
+            if (current == null && pending.isNotEmpty()) current = pending.removeFirst()
+            val alert = current ?: return
             updateSent = true
-            val category = when (sbn.notification.category) {
-                Notification.CATEGORY_CALL -> 1
-                Notification.CATEGORY_EMAIL -> 6
-                Notification.CATEGORY_MESSAGE -> 12
-                else -> 0
-            }
-            sendGfdi(SalusGarminGfdiCodec.notificationUpdate(notificationId, category))
+            stage("Sending notification", "Watch subscribed; posting Garmin GFDI notification update")
+            sendGfdi(SalusGarminGfdiCodec.notificationUpdate(alert.id, alert.category))
+            val thisId = alert.id
+            main.postDelayed({
+                if (enabled && current?.id == thisId && updateSent) {
+                    stage("No watch attribute request", "Garmin did not request this notification's text")
+                    current = null; updateSent = false
+                    maybeSend()
+                }
+            }, 9000L)
         }
 
         private fun processGfdi(type: Int, payload: ByteArray) {
             when (type) {
-                5036 -> { // Subscription request from watch
-                    if (payload.size >= 2) {
-                        subscribed = payload[0].toInt() == 1
-                        sendGfdi(SalusGarminGfdiCodec.notificationSubscriptionResponse(subscribed, payload[1].toInt() and 255))
-                        if (subscribed) sendUpdate()
+                5036 -> if (payload.size >= 2) {
+                    val enabledOnWatch = payload[0].toInt() == 1
+                    subscribed = enabledOnWatch
+                    sendGfdi(SalusGarminGfdiCodec.notificationSubscriptionResponse(
+                        enabledOnWatch, payload[1].toInt() and 255))
+                    stage(if (enabledOnWatch) "Watch subscribed" else "Watch unsubscribed",
+                        "Garmin notification subscription=${if (enabledOnWatch) "on" else "off"}")
+                    if (subscribed) maybeSend()
+                }
+                5034 -> if (payload.size >= 5 && payload[0].toInt() == 0) {
+                    val requested = SalusGarminGfdiCodec.read32(payload, 1)
+                    sendGfdi(SalusGarminGfdiCodec.notificationControlAck())
+                    val alert = current
+                    if (alert != null && requested == alert.id) {
+                        stage("Watch requested content", "Garmin requested notification attributes")
+                        sendAttributes(alert, payload.copyOfRange(5, payload.size))
                     }
                 }
-                5034 -> { // GET_NOTIFICATION_ATTRIBUTES from watch
-                    if (payload.size >= 5 && payload[0].toInt() == 0) {
-                        val id = SalusGarminGfdiCodec.read32(payload, 1)
-                        sendGfdi(SalusGarminGfdiCodec.notificationControlAck())
-                        if (id == notificationId) sendAttributes(id, payload.copyOfRange(5, payload.size))
-                    }
-                }
-                5000 -> { // Notification data transfer progress
-                    if (payload.size >= 4 && SalusGarminGfdiCodec.read16(payload, 0) == 5035) {
-                        if (payload[2].toInt() == 0 && payload[3].toInt() == 0) sendNextAttributeChunk()
-                    }
+                5000 -> if (payload.size >= 4 && SalusGarminGfdiCodec.read16(payload, 0) == 5035) {
+                    if (payload[2].toInt() == 0 && payload[3].toInt() == 0) sendNextAttributeChunk()
+                    else stage("Notification data rejected", "Garmin returned transfer status ${payload[3].toInt() and 255}")
                 }
             }
         }
 
-        private var attributeBytes = byteArrayOf()
-        private var attributeOffset = 0
-        private var runningCrc = 0
-
-        private fun sendAttributes(id: Int, request: ByteArray) {
-            val titleOrApp = title.ifBlank { sbn.packageName.substringAfterLast('.') }
+        private fun sendAttributes(alert: Alert, request: ByteArray) {
             val options = linkedMapOf(
-                0 to sbn.packageName,
-                1 to titleOrApp,
-                2 to "",
-                3 to text,
-                4 to text.length.toString(),
-                5 to SalusGarminGfdiCodec.timestamp(sbn.postTime),
+                0 to alert.sourcePackage,
+                1 to alert.title.ifBlank { alert.sourcePackage.substringAfterLast('.') },
+                2 to "", 3 to alert.text, 4 to alert.text.length.toString(),
+                5 to SalusGarminGfdiCodec.timestamp(alert.time),
             )
-            val requested = mutableListOf<Pair<Int, String>>()
+            val attributes = mutableListOf<Pair<Int, String>>()
             var i = 0
             while (i < request.size) {
                 val kind = request[i++].toInt() and 255
-                var maxLen = 255
+                var limit = 255
                 if (kind in 1..3 || kind == 7) {
                     if (i + 2 > request.size) break
-                    maxLen = SalusGarminGfdiCodec.read16(request, i).coerceIn(0, 255)
+                    limit = SalusGarminGfdiCodec.read16(request, i).coerceIn(0, 255)
                     i += 2
                 } else if (kind == 127) {
                     if (i + 3 > request.size) break
                     i += 3
                 }
-                val value = options[kind] ?: ""
-                requested.add(kind to value.take(maxLen))
+                attributes.add(kind to (options[kind] ?: "").take(limit))
             }
-            attributeBytes = SalusGarminGfdiCodec.notificationAttributes(id, requested)
-            attributeOffset = 0
-            runningCrc = 0
+            attributeBytes = SalusGarminGfdiCodec.notificationAttributes(alert.id, attributes)
+            attributeOffset = 0; runningCrc = 0
             sendNextAttributeChunk()
         }
 
         private fun sendNextAttributeChunk() {
-            if (attributeOffset >= attributeBytes.size || finished.get()) return
+            if (!enabled || attributeOffset >= attributeBytes.size) return
             val end = minOf(attributeOffset + 200, attributeBytes.size)
             val piece = attributeBytes.copyOfRange(attributeOffset, end)
             runningCrc = SalusGarminGfdiCodec.crc(piece, runningCrc)
-            sendGfdi(SalusGarminGfdiCodec.notificationData(piece, attributeBytes.size, attributeOffset, runningCrc))
+            sendGfdi(SalusGarminGfdiCodec.notificationData(piece, attributeBytes.size,
+                attributeOffset, runningCrc))
             attributeOffset = end
+            if (attributeOffset >= attributeBytes.size) {
+                stage("Notification content sent", "Garmin requested content and Salus wrote the data; display not confirmed")
+                current = null; updateSent = false
+                main.postDelayed({ maybeSend() }, 250L)
+            }
         }
     }
 }

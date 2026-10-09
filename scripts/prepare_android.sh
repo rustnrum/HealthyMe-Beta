@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Preserve the project's existing platform setup and patch the native channel
+# before generated Android sources are compiled and before source is committed.
+python3 scripts/patch_build47.py
 
 test -f native/android/MainActivity.kt
 test -f native/android/SalusProtocolReader.kt
@@ -11,7 +14,6 @@ test -f native/android/AndroidManifest.xml
 PKG_DIR="android/app/src/main/kotlin/com/rustnrum/healthyme/beta03"
 rm -rf android/app/src/main/kotlin
 mkdir -p "$PKG_DIR"
-
 cp native/android/*.kt "$PKG_DIR"/
 cp native/android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
