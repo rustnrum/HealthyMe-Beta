@@ -51,5 +51,9 @@ addition='''                "sendWatchTestNotification" -> {
 if '"sendWatchTestNotification" -> {' not in s:
     assert s.count(needle)==1, 'Could not find channel insert point'
     s=s.replace(needle,addition+needle)
+# An explicit ON action is user approval for Android bonding. Passive listener
+# startup must NEVER display a pairing prompt behind the user's back.
+s=s.replace('SalusGarminNotificationSender.watch(this, deviceId)',
+            'SalusGarminNotificationSender.watch(this, deviceId, true)')
 p.write_text(s)
 print('Patches installed: watch state, on/off connection, direct test action')

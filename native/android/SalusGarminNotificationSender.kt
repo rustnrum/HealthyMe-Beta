@@ -49,10 +49,12 @@ object SalusGarminNotificationSender {
         return sessions.computeIfAbsent(deviceId) { Session(context.applicationContext, it) }
     }
 
-    fun watch(context: Context, deviceId: String) {
+    fun watch(context: Context, deviceId: String) = watch(context, deviceId, false)
+
+    fun watch(context: Context, deviceId: String, promptBond: Boolean) {
         if (deviceId.isBlank()) return
         val s = session(context, deviceId)
-        main.post { s.start() }
+        main.post { if (promptBond) s.allowBondRetry(); s.start(promptBond) }
     }
 
     fun unwatch(deviceId: String) {
@@ -86,7 +88,7 @@ object SalusGarminNotificationSender {
         val alert = Alert(now.toInt(), context.packageName, "Salus test",
             "Direct Bluetooth notification test from Salus", 0, now)
         val s = session(context, deviceId)
-        main.post { s.offer(alert) }
+        main.post { s.allowBondRetry(); s.start(true); s.offer(alert) }
     }
 
     private fun category(value: String?): Int = when (value) {
@@ -107,6 +109,11 @@ object SalusGarminNotificationSender {
         private var writing = false
         private var handle = 0
         private var registered = false
+        private val bondManager = SalusSafeBondManager(app)
+        private var bonding = false
+        private var bondDenied = false
+        private var configurationExchanged = false
+        private var informationExchanged = false
         private var subscribed = false
         private var enabled = true
         private var connecting = false
@@ -122,7 +129,9 @@ object SalusGarminNotificationSender {
         private fun stage(code: String, detail: String = "") =
             SalusWatchTransportStatus.mark(app, deviceId, code, detail)
 
-        fun start() {
+        fun allowBondRetry() { bondDenied = false }
+
+        fun start(promptBond: Boolean = false) {
             if (!enabled) return
             if (gatt != null || connecting) return
             if (!permitted(app)) {
@@ -136,6 +145,31 @@ object SalusGarminNotificationSender {
             }
             val device = try { adapter.getRemoteDevice(deviceId) } catch (_: Throwable) {
                 stage("Invalid device address", "Rescan and reconnect this watch")
+                return
+            }
+            // The user's opt-in to watch notifications permits OS-managed pairing.
+            // Never invent keys or attempt application crypto as a bonding substitute.
+            val bonded = try { device.bondState == BluetoothDevice.BOND_BONDED }
+                catch (_: SecurityException) { false }
+            if (!bonded) {
+                if (bondDenied || !promptBond) {
+                    stage("Pairing required", "Open Watch Settings and enable notifications or send a test to confirm Android pairing")
+                    return
+                }
+                if (bonding) return
+                bonding = true
+                stage("Pairing", "Waiting for Android to confirm a secure watch bond")
+                bondManager.ensureBonded(device) { ok, detail ->
+                    bonding = false
+                    if (!enabled) return@ensureBonded
+                    if (ok) {
+                        stage("Bonded", detail)
+                        start(false)
+                    } else {
+                        bondDenied = true
+                        stage("Pairing failed", detail)
+                    }
+                }
                 return
             }
             connecting = true
@@ -170,6 +204,7 @@ object SalusGarminNotificationSender {
         fun stop() {
             enabled = false
             ++attemptId
+            bondManager.cancel(); bonding = false
             disconnect()
             outgoing.clear(); pending.clear(); current = null
             stage("Off", "Notification forwarding disabled")
@@ -182,6 +217,7 @@ object SalusGarminNotificationSender {
             connecting = false; writing = false
             handle = 0; registered = false; subscribed = false
             registrationSent = false; updateSent = false
+            configurationExchanged = false; informationExchanged = false
             outgoing.clear(); incoming.reset()
             try { old?.disconnect() } catch (_: Throwable) {}
             try { old?.close() } catch (_: Throwable) {}
@@ -345,9 +381,14 @@ object SalusGarminNotificationSender {
                             registered = handle > 0
                             if (registered) {
                                 retryCount = 0
-                                stage("GFDI registered", "Waiting for Garmin notification subscription")
-                                // Some firmware only subscribes during full GFDI startup.
-                                // Never falsely report delivery merely from registration.
+                                stage("GFDI registered", "Waiting for Garmin device-info/configuration exchange")
+                                val currentAttempt = attemptId
+                                main.postDelayed({
+                                    if (enabled && currentAttempt == attemptId && registered && !subscribed) {
+                                        stage("Subscription not received",
+                                            "Device info=${informationExchanged}; config=${configurationExchanged}; no Garmin 5036 subscription")
+                                    }
+                                }, 22_000L)
                                 maybeSend()
                             }
                         } else stage("GFDI registration rejected", "Garmin returned status=$status")
@@ -393,6 +434,38 @@ object SalusGarminNotificationSender {
 
         private fun processGfdi(type: Int, payload: ByteArray) {
             when (type) {
+                5024 -> {
+                    // Gadgetbridge DeviceInformationMessage: ACK followed by detailed response.
+                    if (payload.size < 12) {
+                        stage("Device-info parse error", "Received truncated Garmin 5024 request")
+                        return
+                    }
+                    informationExchanged = true
+                    stage("Garmin device information", "Responding to GFDI device-info request")
+                    sendGfdi(SalusGarminGfdiCodec.genericAck(5024))
+                    sendGfdi(SalusGarminGfdiCodec.deviceInformationResponse(payload))
+                }
+                5050 -> {
+                    // Garmin configuration request gates subscription initialization.
+                    if (payload.isEmpty() || (payload[0].toInt() and 255) > payload.size - 1) {
+                        stage("Configuration parse error", "Garmin 5050 capabilities are incomplete")
+                        return
+                    }
+                    configurationExchanged = true
+                    stage("Garmin configuration", "Sending our supported device capabilities")
+                    sendGfdi(SalusGarminGfdiCodec.genericAck(5050))
+                    sendGfdi(SalusGarminGfdiCodec.configurationResponse())
+                    sendGfdi(SalusGarminGfdiCodec.syncReady())
+                    stage("Garmin startup answered", "Device-information/configuration status: ${informationExchanged}/${configurationExchanged}")
+                }
+                5052 -> if (payload.size >= 4) {
+                    stage("Garmin time request", "Answering watch time request")
+                    sendGfdi(SalusGarminGfdiCodec.currentTimeResponse(SalusGarminGfdiCodec.read32(payload, 0)))
+                }
+                5101 -> if (payload.size >= 5) {
+                    stage("Garmin auth negotiation", "Responding to Garmin application auth negotiation")
+                    sendGfdi(SalusGarminGfdiCodec.authNegotiationResponse(payload))
+                }
                 5036 -> if (payload.size >= 2) {
                     val enabledOnWatch = payload[0].toInt() == 1
                     subscribed = enabledOnWatch
@@ -414,6 +487,10 @@ object SalusGarminNotificationSender {
                 5000 -> if (payload.size >= 4 && SalusGarminGfdiCodec.read16(payload, 0) == 5035) {
                     if (payload[2].toInt() == 0 && payload[3].toInt() == 0) sendNextAttributeChunk()
                     else stage("Notification data rejected", "Garmin returned transfer status ${payload[3].toInt() and 255}")
+                }
+                else -> {
+                    // No silent unsupported Garmin protocol messages during initialization.
+                    if (!subscribed) stage("Garmin protocol message", "Received GFDI type $type; no handler installed")
                 }
             }
         }

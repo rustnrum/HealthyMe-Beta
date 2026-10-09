@@ -94,6 +94,57 @@ object SalusGarminGfdiCodec {
         put(0); put(0); putLong(2L); putShort(1); put(0)
     }.array()
 
+    /** GFDI status ACK for a received Garmin request. */
+    fun genericAck(messageType: Int): ByteArray = gfdiMessage(5000,
+        leShort(messageType) + byteArrayOf(0))
+
+    private fun textField(value: String): ByteArray {
+        val b = value.toByteArray(Charsets.UTF_8).take(60).toByteArray()
+        return byteArrayOf(b.size.toByte()) + b
+    }
+
+    /** Garmin 5024 details, following DeviceInformationMessage negotiation. */
+    fun deviceInformationResponse(incoming: ByteArray): ByteArray {
+        val protocol = read16(incoming, 0)
+        val fields = ByteBuffer.allocate(15).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putShort(5024) // response-to DEVICE_INFORMATION
+            put(0) // ACK
+            putShort(150) // host protocol version from published Garmin client implementation
+            putShort((-1).toShort()) // host product identifier not provided
+            putInt(-1) // host unit ID unknown
+            putShort(7791) // host version, compatible with known client
+            putShort((-1).toShort()) // unrestricted max packet
+        }.array()
+        return gfdiMessage(5000, fields + textField("Salus") + textField("Android") +
+            textField("Phone") + byteArrayOf(if (protocol / 100 == 1) 1 else 0))
+    }
+
+    /** Only advertise capabilities implemented by Salus; avoid promising cloud sync. */
+    fun configurationResponse(): ByteArray {
+        val bits = ByteArray(13)
+        // GarminCapability ordinal bit positions: GNCS, SMS_NOTIFICATIONS,
+        // CURRENT_TIME_REQUEST_SUPPORT, MULTI_LINK_SERVICE.
+        for (bit in intArrayOf(6, 51, 71, 76)) bits[bit / 8] =
+            (bits[bit / 8].toInt() or (1 shl (bit % 8))).toByte()
+        return gfdiMessage(5050, byteArrayOf(bits.size.toByte()) + bits)
+    }
+
+    fun syncReady(): ByteArray = gfdiMessage(5030, byteArrayOf(8, 0))
+
+    fun authNegotiationResponse(incoming: ByteArray): ByteArray = gfdiMessage(5000,
+        leShort(5101) + byteArrayOf(0, 0, incoming[0]) + incoming.copyOfRange(1, 5))
+
+    fun currentTimeResponse(referenceId: Int): ByteArray {
+        val now = System.currentTimeMillis() / 1000L
+        val garminSeconds = (now - 631065600L).toInt()
+        val offset = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000
+        val p = ByteBuffer.allocate(23).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putShort(5052); put(0); putInt(referenceId); putInt(garminSeconds)
+            putInt(offset); putInt(0); putInt(0)
+        }.array()
+        return gfdiMessage(5000, p)
+    }
+
     fun notificationUpdate(id: Int, category: Int, count: Int = 1): ByteArray =
         gfdiMessage(5033, ByteBuffer.allocate(9).order(ByteOrder.LITTLE_ENDIAN).apply {
             put(0) // add

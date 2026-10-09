@@ -180,7 +180,7 @@ class MainActivity : FlutterFragmentActivity() {
                             enabled,
                         )
                         if (protocolId == "garmin-family") {
-                            if (enabled) SalusGarminNotificationSender.watch(this, deviceId)
+                            if (enabled) SalusGarminNotificationSender.watch(this, deviceId, true)
                             else SalusGarminNotificationSender.unwatch(deviceId)
                         }
                     }
