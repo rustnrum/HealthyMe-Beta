@@ -125,6 +125,13 @@ object SalusGarminNotificationSender {
         private var registrationSent = false
         private val notificationTransfer = SalusGarminNotificationTransfer()
         private var dataAckToken = 0
+        private var mlrRequested = true
+        private var mlr: SalusGarminMlrTransport? = null
+        private var applicationInitialized = false
+        private var setupEventsAwaitingAck = 0
+        private var deferredAppAttributes: Pair<String, ByteArray>? = null
+        private var appAttributeTransferActive = false
+        private val recentAlerts = LinkedHashMap<Int, Alert>()
 
         private fun stage(code: String, detail: String = "") =
             SalusWatchTransportStatus.mark(app, deviceId, code, detail)
@@ -195,6 +202,8 @@ object SalusGarminNotificationSender {
 
         fun offer(alert: Alert) {
             if (!enabled) return
+            recentAlerts[alert.id] = alert
+            while (recentAlerts.size > 10) recentAlerts.remove(recentAlerts.keys.first())
             if (pending.size >= MAX_PENDING) pending.removeFirst()
             pending.addLast(alert)
             if (subscriptionSeen && !subscribed) {
@@ -213,6 +222,7 @@ object SalusGarminNotificationSender {
             SalusBluetoothDiagnostics.unwatch(app, deviceId)
             disconnect()
             outgoing.clear(); pending.clear(); current = null
+            recentAlerts.clear(); deferredAppAttributes = null; appAttributeTransferActive = false
             notificationTransfer.reset(); ++dataAckToken
             stage("Off", "Notification forwarding disabled")
         }
@@ -224,6 +234,9 @@ object SalusGarminNotificationSender {
             gatt = null; rx = null; tx = null
             connecting = false; writing = false
             handle = 0; registered = false; subscribed = false; subscriptionSeen = false
+            mlr?.close(); mlr = null; mlrRequested = true
+            applicationInitialized = false; setupEventsAwaitingAck = 0
+            deferredAppAttributes = null; appAttributeTransferActive = false
             registrationSent = false; updateSent = false
             configurationExchanged = false; informationExchanged = false
             outgoing.clear(); incoming.reset()
@@ -283,6 +296,7 @@ object SalusGarminNotificationSender {
                 main.post {
                     if (status == BluetoothGatt.GATT_SUCCESS) {
                         mtuPayload = (mtu - 4).coerceIn(19, 244)
+                        mlr?.setMaxWriteSize(mtu - 3)
                         SalusWatchTransportStatus.note(app, deviceId, "GATT MTU", "Negotiated MTU=$mtu")
                     } else SalusWatchTransportStatus.note(app, deviceId, "GATT MTU failed", SalusBluetoothDiagnostics.gattStatus(status))
                 }
@@ -362,7 +376,7 @@ object SalusGarminNotificationSender {
         private fun registerGfdi() {
             if (registrationSent || !enabled) return
             registrationSent = true
-            enqueue(SalusGarminGfdiCodec.registerGfdi())
+            enqueue(SalusGarminGfdiCodec.registerGfdi(mlrRequested))
         }
 
         private fun enqueue(bytes: ByteArray) {
@@ -394,6 +408,11 @@ object SalusGarminNotificationSender {
         private fun sendGfdi(data: ByteArray) {
             if (handle <= 0 || !enabled) return
             val framed = SalusGarminGfdiCodec.cobsEncode(data)
+            val reliable = mlr
+            if (reliable != null) {
+                reliable.send(framed).forEach { enqueue(it) }
+                return
+            }
             var offset = 0
             while (offset < framed.size) {
                 val amount = minOf(mtuPayload, framed.size - offset)
@@ -413,8 +432,15 @@ object SalusGarminNotificationSender {
                         val status = bytes[12].toInt() and 255
                         if (status == 0) {
                             handle = bytes[13].toInt() and 255
+                            val reliable = if (bytes.size > 14) bytes[14].toInt() and 255 else 0
                             registered = handle > 0
                             if (registered) {
+                                if (reliable != 0) {
+                                    mlr = SalusGarminMlrTransport(handle, mtuPayload + 1)
+                                    scheduleMlrPoll(attemptId)
+                                }
+                                SalusWatchTransportStatus.note(app, deviceId, "Garmin reliability",
+                                    "Requested=${if (mlrRequested) 2 else 0}; negotiated=$reliable; handle=$handle")
                                 retryCount = 0
                                 SalusWatchTransportStatus.metadata(app, deviceId, "protocol", "Garmin ML V2 / GFDI handle registered; awaiting app negotiation")
                                 stage("GFDI registered", "Waiting for Garmin device-info/configuration exchange")
@@ -427,32 +453,73 @@ object SalusGarminNotificationSender {
                                 }, 22_000L)
                                 maybeSend()
                             }
+                        } else if (mlrRequested) {
+                            stage("MLR registration unavailable", "Garmin status=$status; retrying established normal Multi-Link")
+                            mlrRequested = false; registrationSent = false
+                            registerGfdi()
                         } else stage("GFDI registration rejected", "Garmin returned status=$status")
                     }
                     return@post
                 }
-                if (h != handle || handle == 0) return@post
-                val part = bytes.copyOfRange(1, bytes.size)
-                if (incoming.size() + part.size > 16_384) incoming.reset()
-                incoming.write(part)
-                val framed = incoming.toByteArray()
-                if (framed.size >= 3 && framed.last() == 0.toByte()) {
-                    incoming.reset()
-                    val decoded = SalusGarminGfdiCodec.cobsDecode(framed) ?: run {
-                        stage("GFDI decode error", "Invalid framed packet from Garmin")
-                        return@post
-                    }
-                    val message = SalusGarminGfdiCodec.decodeFrame(decoded) ?: run {
-                        stage("GFDI checksum error", "Received invalid Garmin packet")
-                        return@post
-                    }
-                    processGfdi(message.type, message.payload, message.sequence)
+                val activeMlr = mlr
+                if (activeMlr != null && h and 0x80 != 0) {
+                    val received = activeMlr.receive(bytes)
+                    received.error?.let { stage("Garmin MLR packet rejected", it) }
+                    received.outgoing.forEach { enqueue(it) }
+                    received.receivedData?.let { consumeGfdiFragment(it) }
+                    return@post
                 }
+                if (h != handle || handle == 0 || activeMlr != null) return@post
+                consumeGfdiFragment(bytes.copyOfRange(1, bytes.size))
             }
         }
 
+        private fun consumeGfdiFragment(part: ByteArray) {
+            if (incoming.size() + part.size > 16_384) incoming.reset()
+            incoming.write(part)
+            val framed = incoming.toByteArray()
+            if (framed.size >= 3 && framed.last() == 0.toByte()) {
+                incoming.reset()
+                val decoded = SalusGarminGfdiCodec.cobsDecode(framed) ?: run {
+                    stage("GFDI decode error", "Invalid framed packet from Garmin")
+                    return
+                }
+                val message = SalusGarminGfdiCodec.decodeFrame(decoded) ?: run {
+                    stage("GFDI checksum error", "Received invalid Garmin packet")
+                    return
+                }
+                processGfdi(message.type, message.payload, message.sequence)
+            }
+        }
+
+        private fun scheduleMlrPoll(connection: Int) {
+            main.postDelayed({
+                if (enabled && connection == attemptId && mlr != null && gatt != null) {
+                    mlr?.poll()?.forEach { enqueue(it) }
+                    scheduleMlrPoll(connection)
+                }
+            }, 100L)
+        }
+
+        private fun maybeCompleteApplicationSetup() {
+            if (!informationExchanged || !configurationExchanged || applicationInitialized) return
+            applicationInitialized = true
+            val preferences = app.getSharedPreferences("salus_garmin_setup", Context.MODE_PRIVATE)
+            if (preferences.getBoolean("complete_$deviceId", false)) {
+                stage("Garmin application initialized", "Previously completed first-connection lifecycle")
+                return
+            }
+            // Gadgetbridge GarminSupport.completeInitialization(): only first-time setup.
+            // The ordinary 5030/SYNC_READY was already sent at configuration exchange.
+            setupEventsAwaitingAck = 3
+            sendGfdi(SalusGarminGfdiCodec.systemEvent(4))  // PAIR_COMPLETE
+            sendGfdi(SalusGarminGfdiCodec.systemEvent(0))  // SYNC_COMPLETE
+            sendGfdi(SalusGarminGfdiCodec.systemEvent(14)) // SETUP_WIZARD_COMPLETE
+            stage("Garmin first-connection setup", "Pair/sync/setup completion sent; awaiting Garmin system-event ACKs")
+        }
+
         private fun maybeSend() {
-            if (!enabled || !registered || !subscribed || updateSent) return
+            if (!enabled || !registered || !subscribed || updateSent || notificationTransfer.awaitingAck) return
             if (current == null && pending.isNotEmpty()) current = pending.removeFirst()
             val alert = current ?: return
             updateSent = true
@@ -480,6 +547,7 @@ object SalusGarminNotificationSender {
                     stage("Garmin device information", "Responding to GFDI device-info request")
                     sendGfdi(SalusGarminGfdiCodec.genericAck(5024, sequence))
                     sendGfdi(SalusGarminGfdiCodec.deviceInformationResponse(payload, sequence))
+                    maybeCompleteApplicationSetup()
                 }
                 5050 -> {
                     // Garmin configuration request gates subscription initialization.
@@ -493,6 +561,7 @@ object SalusGarminNotificationSender {
                     sendGfdi(SalusGarminGfdiCodec.configurationResponse())
                     sendGfdi(SalusGarminGfdiCodec.syncReady())
                     stage("Garmin startup answered", "Device-information/configuration status: ${informationExchanged}/${configurationExchanged}")
+                    maybeCompleteApplicationSetup()
                 }
                 5052 -> if (payload.size >= 4) {
                     stage("Garmin time request", "Answering watch time request")
@@ -544,14 +613,22 @@ object SalusGarminNotificationSender {
                     }
                     if (subscribed) maybeSend()
                 }
-                5034 -> if (payload.size >= 5 && payload[0].toInt() == 0) {
-                    val requested = SalusGarminGfdiCodec.read32(payload, 1)
-                    sendGfdi(SalusGarminGfdiCodec.notificationControlAck(sequence))
-                    val alert = current
-                    if (alert != null && requested == alert.id) {
-                        SalusWatchTransportStatus.metadata(app, deviceId, "protocol", "Garmin GFDI confirmed; 5034 attribute request received")
-                        stage("Watch requested content", "Garmin requested notification attributes")
-                        sendAttributes(alert, payload.copyOfRange(5, payload.size))
+                5034 -> if (payload.isNotEmpty()) {
+                    when (payload[0].toInt() and 255) {
+                        0 -> if (payload.size >= 5) {
+                            val requested = SalusGarminGfdiCodec.read32(payload, 1)
+                            sendGfdi(SalusGarminGfdiCodec.notificationControlAck(sequence))
+                            val alert = recentAlerts[requested] ?: current?.takeIf { it.id == requested }
+                            if (alert != null) {
+                                SalusWatchTransportStatus.metadata(app, deviceId, "protocol", "Garmin GFDI confirmed; 5034 attribute request received")
+                                stage("Watch requested content", "Garmin requested notification attributes")
+                                if (!notificationTransfer.awaitingAck) {
+                                    sendAttributes(alert, payload.copyOfRange(5, payload.size))
+                                } else stage("Garmin transfer busy", "Additional notification attribute request received during active transfer")
+                            } else stage("Unknown Garmin notification", "5034 requested an ID no longer in cache")
+                        }
+                        1 -> handleAppAttributes(payload.copyOfRange(1, payload.size), sequence)
+                        else -> stage("Garmin notification control", "Unsupported 5034 command=${payload[0].toInt() and 255}")
                     }
                 }
                 5000 -> if (payload.size >= 4 && SalusGarminGfdiCodec.read16(payload, 0) == 5035) {
@@ -570,8 +647,17 @@ object SalusGarminNotificationSender {
                             SalusWatchTransportStatus.metadata(app, deviceId, "protocol", "Garmin GFDI confirmed; 5035 data ACK received (display NOT verified)")
                             stage("Garmin accepted notification data",
                                 "Watch acknowledged all 5035 data chunks; on-screen display still unverified")
-                            current = null; updateSent = false
-                            main.postDelayed({ maybeSend() }, 250L)
+                            if (appAttributeTransferActive) {
+                                appAttributeTransferActive = false
+                            } else {
+                                current = null; updateSent = false
+                            }
+                            val nextApp = deferredAppAttributes
+                            deferredAppAttributes = null
+                            main.postDelayed({
+                                if (nextApp != null) startAppAttributes(nextApp.first, nextApp.second)
+                                else maybeSend()
+                            }, 250L)
                         }
                         is SalusGarminNotificationTransfer.Ack.Rejected -> {
                             ++dataAckToken
@@ -584,12 +670,59 @@ object SalusGarminNotificationSender {
                             stage("Unmatched Garmin data ACK", "GFDI 5035 response received without an active transfer")
                         }
                     }
+                } else if (payload.size >= 3) {
+                    val originalType = SalusGarminGfdiCodec.read16(payload, 0)
+                    val resultCode = payload[2].toInt() and 255
+                    if (originalType == 5033) {
+                        SalusWatchTransportStatus.note(app, deviceId, "Garmin 5033 update status", "Status=$resultCode")
+                        stage(if (resultCode == 0) "Garmin accepted notification update" else "Garmin rejected notification update",
+                            "5033 response=$resultCode; display still unverified")
+                    } else if (originalType == 5030 && setupEventsAwaitingAck > 0) {
+                        if (resultCode == 0) {
+                            --setupEventsAwaitingAck
+                            if (setupEventsAwaitingAck == 0) {
+                                app.getSharedPreferences("salus_garmin_setup", Context.MODE_PRIVATE)
+                                    .edit().putBoolean("complete_$deviceId", true).apply()
+                                stage("Garmin setup acknowledged", "System-event ACKs received; watch-display status unverified")
+                            }
+                        } else stage("Garmin setup event rejected", "System-event response=$resultCode")
+                    } else if (resultCode != 0) {
+                        stage("Garmin protocol response", "Garmin response to GFDI $originalType status=$resultCode")
+                    }
                 }
                 else -> {
                     // No silent unsupported Garmin protocol messages during initialization.
                     if (!subscribed) stage("Garmin protocol message", "Received GFDI type $type; no handler installed")
                 }
             }
+        }
+
+        private fun handleAppAttributes(request: ByteArray, sequence: Int?) {
+            val terminator = request.indexOf(0.toByte())
+            if (terminator <= 0) {
+                stage("Garmin app attributes malformed", "5034 application identifier is not null-terminated")
+                return
+            }
+            val appId = String(request.copyOfRange(0, terminator), Charsets.UTF_8)
+            val ids = request.copyOfRange(terminator + 1, request.size)
+            if (ids.any { (it.toInt() and 255) != 0 }) {
+                stage("Garmin app attribute unsupported", "5034 requested app-attribute ID other than APP_NAME")
+                return
+            }
+            sendGfdi(SalusGarminGfdiCodec.notificationControlAck(sequence))
+            if (notificationTransfer.awaitingAck) {
+                deferredAppAttributes = appId to ids
+                stage("Garmin application metadata queued", "Waiting until notification text transfer completes")
+            } else startAppAttributes(appId, ids)
+        }
+
+        private fun startAppAttributes(appId: String, ids: ByteArray) {
+            if (!enabled || !registered) return
+            val label = appId.substringAfterLast('.').ifBlank { "App" }
+            val response = SalusGarminGfdiCodec.notificationAppAttributes(appId, label, ids) ?: return
+            appAttributeTransferActive = true
+            stage("Garmin application metadata", "Replying to Garmin's 5034 app-name request")
+            notificationTransfer.begin(response).let { sendNextAttributeChunk(it) }
         }
 
         private fun sendAttributes(alert: Alert, request: ByteArray) {
@@ -616,7 +749,7 @@ object SalusGarminNotificationSender {
         }
 
         private fun sendNextAttributeChunk(chunk: SalusGarminNotificationTransfer.Chunk) {
-            if (!enabled || current == null) return
+            if (!enabled || !notificationTransfer.awaitingAck) return
             sendGfdi(SalusGarminGfdiCodec.notificationData(chunk.bytes, chunk.total,
                 chunk.offset, chunk.crc))
             stage("Notification data awaiting Garmin ACK",

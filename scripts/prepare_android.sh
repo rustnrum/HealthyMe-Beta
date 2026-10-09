@@ -3,6 +3,7 @@ set -euo pipefail
 # Preserve the project's existing platform setup and patch the native channel
 # before generated Android sources are compiled and before source is committed.
 python3 scripts/patch_build47.py
+python3 scripts/patch_build54.py
 
 test -f native/android/MainActivity.kt
 test -f native/android/SalusProtocolReader.kt

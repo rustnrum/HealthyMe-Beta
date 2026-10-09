@@ -112,9 +112,12 @@ object SalusGarminGfdiCodec {
         put(0); put(5); putLong(2L); putShort(0)
     }.array()
 
-    fun registerGfdi(): ByteArray = ByteBuffer.allocate(13).order(ByteOrder.LITTLE_ENDIAN).apply {
-        put(0); put(0); putLong(2L); putShort(1); put(0)
-    }.array()
+    /** Request MLR, but obey the reliability actually negotiated by the watch. */
+    fun registerGfdi(reliable: Boolean = true): ByteArray =
+        ByteBuffer.allocate(13).order(ByteOrder.LITTLE_ENDIAN).apply {
+            put(0); put(0); putLong(2L); putShort(1)
+            put((if (reliable) 2 else 0).toByte())
+        }.array()
 
     /** GFDI status ACK for a received Garmin request. */
     fun genericAck(messageType: Int, sequence: Int? = null): ByteArray = gfdiMessage(5000,
@@ -152,6 +155,28 @@ object SalusGarminGfdiCodec {
     }
 
     fun syncReady(): ByteArray = gfdiMessage(5030, byteArrayOf(8, 0))
+
+    /** Garmin SystemEventMessage: enum event ordinal then one zero value byte. */
+    fun systemEvent(event: Int): ByteArray {
+        require(event in 0..16)
+        return gfdiMessage(5030, byteArrayOf(event.toByte(), 0))
+    }
+
+    /** Garmin 5034 command=1: application identifier + zero + requested app attrs. */
+    fun notificationAppAttributes(appId: String, appLabel: String, ids: ByteArray): ByteArray? {
+        if (ids.any { (it.toInt() and 255) != 0 }) return null
+        val out = ByteArrayOutputStream()
+        out.write(1)
+        out.write(appId.toByteArray(Charsets.UTF_8))
+        out.write(0)
+        for (id in ids) {
+            val label = appLabel.toByteArray(Charsets.UTF_8)
+            out.write(id.toInt() and 255)
+            out.write(leShort(label.size))
+            out.write(label)
+        }
+        return out.toByteArray()
+    }
 
     fun authNegotiationResponse(incoming: ByteArray, sequence: Int? = null): ByteArray = gfdiMessage(5000,
         leShort(5101) + byteArrayOf(0, 0, incoming[0]) + incoming.copyOfRange(1, 5), sequence)
