@@ -27,26 +27,48 @@ object SalusGarminGfdiCodec {
         return c and 65535
     }
 
-    fun gfdiMessage(type: Int, payload: ByteArray): ByteArray {
+    /** Garmin encodes some GFDI messages in two bytes as [type-5000, 0x80|sequence].
+     * The second byte's lower five bits carry a transaction sequence number.
+     * Source: Gadgetbridge Garmin Protocol, GFDI request/response encoding.
+     */
+    data class Frame(val type: Int, val payload: ByteArray, val sequence: Int?)
+
+    fun gfdiMessage(type: Int, payload: ByteArray, sequence: Int? = null): ByteArray {
         val size = payload.size + 6
         require(size <= 65535)
         val b = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN)
-        b.putShort(size.toShort()); b.putShort(type.toShort()); b.put(payload)
+        b.putShort(size.toShort())
+        if (sequence == null) {
+            b.putShort(type.toShort())
+        } else {
+            require(type in 5000..5255) { "Compact Garmin message type is outside byte range" }
+            require(sequence in 0..31) { "Garmin sequence number must be 0..31" }
+            b.put((type - 5000).toByte())
+            b.put((0x80 or sequence).toByte())
+        }
+        b.put(payload)
         val bytes = b.array()
         val sum = crc(bytes.copyOfRange(0, size - 2))
         b.putShort(sum.toShort())
         return bytes
     }
 
-    fun decodeGfdi(packet: ByteArray): Pair<Int, ByteArray>? {
+    fun decodeFrame(packet: ByteArray): Frame? {
         if (packet.size < 6) return null
         val b = ByteBuffer.wrap(packet).order(ByteOrder.LITTLE_ENDIAN)
         val length = b.short.toInt() and 65535
-        val type = b.short.toInt() and 65535
         if (length != packet.size || crc(packet.copyOfRange(0, length - 2)) !=
             (b.getShort(length - 2).toInt() and 65535)) return null
-        return type to packet.copyOfRange(4, length - 2)
+        val high = packet[3].toInt() and 255
+        val compact = high and 0x80 != 0
+        val sequence = if (compact) high and 0x1f else null
+        val type = if (compact) 5000 + (packet[2].toInt() and 255)
+            else b.getShort(2).toInt() and 65535
+        return Frame(type, packet.copyOfRange(4, length - 2), sequence)
     }
+
+    fun decodeGfdi(packet: ByteArray): Pair<Int, ByteArray>? =
+        decodeFrame(packet)?.let { it.type to it.payload }
 
     // Garmin adds an extra leading zero to regular COBS.
     fun cobsEncode(input: ByteArray): ByteArray {
@@ -95,8 +117,8 @@ object SalusGarminGfdiCodec {
     }.array()
 
     /** GFDI status ACK for a received Garmin request. */
-    fun genericAck(messageType: Int): ByteArray = gfdiMessage(5000,
-        leShort(messageType) + byteArrayOf(0))
+    fun genericAck(messageType: Int, sequence: Int? = null): ByteArray = gfdiMessage(5000,
+        leShort(messageType) + byteArrayOf(0), sequence)
 
     private fun textField(value: String): ByteArray {
         val b = value.toByteArray(Charsets.UTF_8).take(60).toByteArray()
@@ -104,7 +126,7 @@ object SalusGarminGfdiCodec {
     }
 
     /** Garmin 5024 details, following DeviceInformationMessage negotiation. */
-    fun deviceInformationResponse(incoming: ByteArray): ByteArray {
+    fun deviceInformationResponse(incoming: ByteArray, sequence: Int? = null): ByteArray {
         val protocol = read16(incoming, 0)
         val fields = ByteBuffer.allocate(15).order(ByteOrder.LITTLE_ENDIAN).apply {
             putShort(5024) // response-to DEVICE_INFORMATION
@@ -116,7 +138,7 @@ object SalusGarminGfdiCodec {
             putShort((-1).toShort()) // unrestricted max packet
         }.array()
         return gfdiMessage(5000, fields + textField("Salus") + textField("Android") +
-            textField("Phone") + byteArrayOf(if (protocol / 100 == 1) 1 else 0))
+            textField("Phone") + byteArrayOf(if (protocol / 100 == 1) 1 else 0), sequence)
     }
 
     /** Only advertise capabilities implemented by Salus; avoid promising cloud sync. */
@@ -131,10 +153,10 @@ object SalusGarminGfdiCodec {
 
     fun syncReady(): ByteArray = gfdiMessage(5030, byteArrayOf(8, 0))
 
-    fun authNegotiationResponse(incoming: ByteArray): ByteArray = gfdiMessage(5000,
-        leShort(5101) + byteArrayOf(0, 0, incoming[0]) + incoming.copyOfRange(1, 5))
+    fun authNegotiationResponse(incoming: ByteArray, sequence: Int? = null): ByteArray = gfdiMessage(5000,
+        leShort(5101) + byteArrayOf(0, 0, incoming[0]) + incoming.copyOfRange(1, 5), sequence)
 
-    fun currentTimeResponse(referenceId: Int): ByteArray {
+    fun currentTimeResponse(referenceId: Int, sequence: Int? = null): ByteArray {
         val now = System.currentTimeMillis() / 1000L
         val garminSeconds = (now - 631065600L).toInt()
         val offset = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000
@@ -142,7 +164,7 @@ object SalusGarminGfdiCodec {
             putShort(5052); put(0); putInt(referenceId); putInt(garminSeconds)
             putInt(offset); putInt(0); putInt(0)
         }.array()
-        return gfdiMessage(5000, p)
+        return gfdiMessage(5000, p, sequence)
     }
 
     fun notificationUpdate(id: Int, category: Int, count: Int = 1): ByteArray =
@@ -174,15 +196,21 @@ object SalusGarminGfdiCodec {
             putShort(offset.toShort()); put(bytes)
         }.array())
 
-    fun notificationControlAck() = gfdiMessage(5000, byteArrayOf(
-        0xAA.toByte(), 0x13, 0, 0, 0)) // response-to=5034 + ACK + chunk OK + no error
+    fun notificationControlAck(sequence: Int? = null) = gfdiMessage(5000, byteArrayOf(
+        0xAA.toByte(), 0x13, 0, 0, 0), sequence) // response-to=5034 + ACK + chunk OK + no error
 
-    fun notificationSubscriptionResponse(enabled: Boolean, unknown: Int) = gfdiMessage(
+    fun notificationSubscriptionResponse(enabled: Boolean, unknown: Int, sequence: Int? = null) = gfdiMessage(
         5000, byteArrayOf(0xAC.toByte(), 0x13, 0, if (enabled) 0 else 1,
-            if (enabled) 1 else 0, (unknown and 255).toByte())
-    )
+            if (enabled) 1 else 0, (unknown and 255).toByte()), sequence)
 
-    fun notificationDataAck() = gfdiMessage(5000, byteArrayOf(0xAB.toByte(), 0x13, 0, 0))
+    /** Gadgetbridge ProtobufStatusMessage: acknowledge a received data chunk.
+     * 5043 / 5044 protobuf framing remains feature-specific; no pretend decoded metrics.
+     */
+    fun protobufChunkAck(messageType: Int, requestId: Int, offset: Int, sequence: Int? = null): ByteArray =
+        gfdiMessage(5000, leShort(messageType) + byteArrayOf(0) + leShort(requestId) +
+            leInt(offset) + byteArrayOf(0, 0), sequence)
+
+    fun notificationDataAck(sequence: Int? = null) = gfdiMessage(5000, byteArrayOf(0xAB.toByte(), 0x13, 0, 0), sequence)
 
     fun leShort(i: Int): ByteArray = byteArrayOf((i and 255).toByte(), ((i ushr 8) and 255).toByte())
     fun leInt(i: Int): ByteArray = byteArrayOf((i and 255).toByte(), ((i ushr 8) and 255).toByte(),

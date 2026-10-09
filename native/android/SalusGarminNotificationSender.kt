@@ -385,8 +385,8 @@ object SalusGarminNotificationSender {
                                 val currentAttempt = attemptId
                                 main.postDelayed({
                                     if (enabled && currentAttempt == attemptId && registered && !subscribed) {
-                                        stage("Subscription not received",
-                                            "Device info=${informationExchanged}; config=${configurationExchanged}; no Garmin 5036 subscription")
+                                        stage("Subscription pending",
+                                            "Garmin 5036 not yet received; device info=${informationExchanged}; config=${configurationExchanged}")
                                     }
                                 }, 22_000L)
                                 maybeSend()
@@ -406,11 +406,11 @@ object SalusGarminNotificationSender {
                         stage("GFDI decode error", "Invalid framed packet from Garmin")
                         return@post
                     }
-                    val message = SalusGarminGfdiCodec.decodeGfdi(decoded) ?: run {
+                    val message = SalusGarminGfdiCodec.decodeFrame(decoded) ?: run {
                         stage("GFDI checksum error", "Received invalid Garmin packet")
                         return@post
                     }
-                    processGfdi(message.first, message.second)
+                    processGfdi(message.type, message.payload, message.sequence)
                 }
             }
         }
@@ -432,7 +432,7 @@ object SalusGarminNotificationSender {
             }, 9000L)
         }
 
-        private fun processGfdi(type: Int, payload: ByteArray) {
+        private fun processGfdi(type: Int, payload: ByteArray, sequence: Int?) {
             when (type) {
                 5024 -> {
                     // Gadgetbridge DeviceInformationMessage: ACK followed by detailed response.
@@ -442,8 +442,8 @@ object SalusGarminNotificationSender {
                     }
                     informationExchanged = true
                     stage("Garmin device information", "Responding to GFDI device-info request")
-                    sendGfdi(SalusGarminGfdiCodec.genericAck(5024))
-                    sendGfdi(SalusGarminGfdiCodec.deviceInformationResponse(payload))
+                    sendGfdi(SalusGarminGfdiCodec.genericAck(5024, sequence))
+                    sendGfdi(SalusGarminGfdiCodec.deviceInformationResponse(payload, sequence))
                 }
                 5050 -> {
                     // Garmin configuration request gates subscription initialization.
@@ -453,31 +453,52 @@ object SalusGarminNotificationSender {
                     }
                     configurationExchanged = true
                     stage("Garmin configuration", "Sending our supported device capabilities")
-                    sendGfdi(SalusGarminGfdiCodec.genericAck(5050))
+                    sendGfdi(SalusGarminGfdiCodec.genericAck(5050, sequence))
                     sendGfdi(SalusGarminGfdiCodec.configurationResponse())
                     sendGfdi(SalusGarminGfdiCodec.syncReady())
                     stage("Garmin startup answered", "Device-information/configuration status: ${informationExchanged}/${configurationExchanged}")
                 }
                 5052 -> if (payload.size >= 4) {
                     stage("Garmin time request", "Answering watch time request")
-                    sendGfdi(SalusGarminGfdiCodec.currentTimeResponse(SalusGarminGfdiCodec.read32(payload, 0)))
+                    sendGfdi(SalusGarminGfdiCodec.currentTimeResponse(SalusGarminGfdiCodec.read32(payload, 0), sequence))
                 }
                 5101 -> if (payload.size >= 5) {
                     stage("Garmin auth negotiation", "Responding to Garmin application auth negotiation")
-                    sendGfdi(SalusGarminGfdiCodec.authNegotiationResponse(payload))
+                    sendGfdi(SalusGarminGfdiCodec.authNegotiationResponse(payload, sequence))
+                }
+                5043 -> {
+                    // Protobuf requests arrive in Garmin's compact sequenced GFDI header.
+                    // Match the transaction sequence while acknowledging their transport.
+                    // Feature-specific protobuf responses still require a registered handler.
+                    if (payload.size >= 14) {
+                        val requestId = SalusGarminGfdiCodec.read16(payload, 0)
+                        val offset = SalusGarminGfdiCodec.read32(payload, 2)
+                        val total = SalusGarminGfdiCodec.read32(payload, 6)
+                        val fragmentSize = SalusGarminGfdiCodec.read32(payload, 10)
+                        val withinBounds = total >= 0 && offset >= 0 && fragmentSize >= 0 &&
+                            fragmentSize <= payload.size - 14 && offset.toLong() + fragmentSize <= total
+                        if (withinBounds && offset == 0 && total == fragmentSize) {
+                            sendGfdi(SalusGarminGfdiCodec.genericAck(5043, sequence))
+                        } else if (withinBounds) {
+                            sendGfdi(SalusGarminGfdiCodec.protobufChunkAck(5043, requestId, offset, sequence))
+                            if (!subscribed) stage("Garmin protobuf chunk", "Request=$requestId, offset=$offset, bytes=$fragmentSize/$total")
+                        } else {
+                            stage("Garmin protobuf parse error", "Invalid request=$requestId, offset=$offset, size=$fragmentSize/$total")
+                        }
+                    } else stage("Garmin protobuf parse error", "GFDI 5043 payload too short")
                 }
                 5036 -> if (payload.size >= 2) {
                     val enabledOnWatch = payload[0].toInt() == 1
                     subscribed = enabledOnWatch
                     sendGfdi(SalusGarminGfdiCodec.notificationSubscriptionResponse(
-                        enabledOnWatch, payload[1].toInt() and 255))
+                        enabledOnWatch, payload[1].toInt() and 255, sequence))
                     stage(if (enabledOnWatch) "Watch subscribed" else "Watch unsubscribed",
                         "Garmin notification subscription=${if (enabledOnWatch) "on" else "off"}")
                     if (subscribed) maybeSend()
                 }
                 5034 -> if (payload.size >= 5 && payload[0].toInt() == 0) {
                     val requested = SalusGarminGfdiCodec.read32(payload, 1)
-                    sendGfdi(SalusGarminGfdiCodec.notificationControlAck())
+                    sendGfdi(SalusGarminGfdiCodec.notificationControlAck(sequence))
                     val alert = current
                     if (alert != null && requested == alert.id) {
                         stage("Watch requested content", "Garmin requested notification attributes")

@@ -222,6 +222,18 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
     }
   }
 
+  String _readableTransportHistory(String raw) => raw.split('\n').map((line) {
+    final divider = line.indexOf(' | ');
+    if (divider <= 0) return line;
+    final millis = int.tryParse(line.substring(0, divider));
+    if (millis == null || millis <= 0) return line;
+    final date = DateTime.fromMillisecondsSinceEpoch(millis);
+    final time = '${date.hour.toString().padLeft(2, '0')}:'
+        '${date.minute.toString().padLeft(2, '0')}:'
+        '${date.second.toString().padLeft(2, '0')}';
+    return '$time${line.substring(divider)}';
+  }).join('\n');
+
   String _when(DateTime? at) {
     if (at == null) return 'Never';
     final value = at.toLocal();
@@ -363,7 +375,7 @@ class _WatchDeviceScreenState extends ConsumerState<WatchDeviceScreen>
                             ExpansionTile(
                               title: const Text('Bluetooth event history'),
                               tilePadding: EdgeInsets.zero,
-                              children: [Text(state.transportHistory,
+                              children: [Text(_readableTransportHistory(state.transportHistory),
                                   style: const TextStyle(color: AppTheme.textSecondary,
                                       fontSize: 11))],
                             ),
