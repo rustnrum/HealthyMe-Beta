@@ -30,7 +30,7 @@ void main() {
     expect(sender, contains('registerGfdi()'));
     expect(sender, contains('sendGfdi('));
     expect(sender, contains('processGfdi('));
-    expect(sender, contains('sendNextAttributeChunk()'));
+    expect(sender, contains('sendNextAttributeChunk('));
     expect(sender, isNot(contains('postCompanionAlert')));
   });
 }

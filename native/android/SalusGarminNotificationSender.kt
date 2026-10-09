@@ -123,9 +123,8 @@ object SalusGarminNotificationSender {
         private var mtuPayload = 19
         private var updateSent = false
         private var registrationSent = false
-        private var attributeBytes = byteArrayOf()
-        private var attributeOffset = 0
-        private var runningCrc = 0
+        private val notificationTransfer = SalusGarminNotificationTransfer()
+        private var dataAckToken = 0
 
         private fun stage(code: String, detail: String = "") =
             SalusWatchTransportStatus.mark(app, deviceId, code, detail)
@@ -212,6 +211,7 @@ object SalusGarminNotificationSender {
             bondManager.cancel(); bonding = false
             disconnect()
             outgoing.clear(); pending.clear(); current = null
+            notificationTransfer.reset(); ++dataAckToken
             stage("Off", "Notification forwarding disabled")
         }
 
@@ -224,6 +224,7 @@ object SalusGarminNotificationSender {
             registrationSent = false; updateSent = false
             configurationExchanged = false; informationExchanged = false
             outgoing.clear(); incoming.reset()
+            notificationTransfer.reset(); ++dataAckToken
             try { old?.disconnect() } catch (_: Throwable) {}
             try { old?.close() } catch (_: Throwable) {}
         }
@@ -522,8 +523,34 @@ object SalusGarminNotificationSender {
                     }
                 }
                 5000 -> if (payload.size >= 4 && SalusGarminGfdiCodec.read16(payload, 0) == 5035) {
-                    if (payload[2].toInt() == 0 && payload[3].toInt() == 0) sendNextAttributeChunk()
-                    else stage("Notification data rejected", "Garmin returned transfer status ${payload[3].toInt() and 255}")
+                    val status = payload[2].toInt() and 255
+                    val transferStatus = payload[3].toInt() and 255
+                    when (val ack = notificationTransfer.acknowledge(status, transferStatus)) {
+                        is SalusGarminNotificationTransfer.Ack.Next -> {
+                            ++dataAckToken // invalidates the timeout for the previous chunk
+                            stage("Garmin acknowledged data chunk", "Sending the next requested notification-data chunk")
+                            sendNextAttributeChunk(ack.chunk)
+                        }
+                        SalusGarminNotificationTransfer.Ack.Complete -> {
+                            ++dataAckToken
+                            // Gadgetbridge sends a final 5035 ACK after Garmin accepts the last chunk.
+                            sendGfdi(SalusGarminGfdiCodec.notificationDataAck(sequence))
+                            stage("Garmin accepted notification data",
+                                "Watch acknowledged all 5035 data chunks; on-screen display still unverified")
+                            current = null; updateSent = false
+                            main.postDelayed({ maybeSend() }, 250L)
+                        }
+                        is SalusGarminNotificationTransfer.Ack.Rejected -> {
+                            ++dataAckToken
+                            stage("Garmin rejected notification data",
+                                "GFDI status=${ack.protocolStatus}, transfer=${ack.transferStatus}; no display confirmed")
+                            current = null; updateSent = false
+                            main.postDelayed({ maybeSend() }, 250L)
+                        }
+                        SalusGarminNotificationTransfer.Ack.Unexpected -> {
+                            stage("Unmatched Garmin data ACK", "GFDI 5035 response received without an active transfer")
+                        }
+                    }
                 }
                 else -> {
                     // No silent unsupported Garmin protocol messages during initialization.
@@ -554,24 +581,30 @@ object SalusGarminNotificationSender {
                 }
                 attributes.add(kind to (options[kind] ?: "").take(limit))
             }
-            attributeBytes = SalusGarminGfdiCodec.notificationAttributes(alert.id, attributes)
-            attributeOffset = 0; runningCrc = 0
-            sendNextAttributeChunk()
+            val bytes = SalusGarminGfdiCodec.notificationAttributes(alert.id, attributes)
+            notificationTransfer.begin(bytes).let { sendNextAttributeChunk(it) }
         }
 
-        private fun sendNextAttributeChunk() {
-            if (!enabled || attributeOffset >= attributeBytes.size) return
-            val end = minOf(attributeOffset + 200, attributeBytes.size)
-            val piece = attributeBytes.copyOfRange(attributeOffset, end)
-            runningCrc = SalusGarminGfdiCodec.crc(piece, runningCrc)
-            sendGfdi(SalusGarminGfdiCodec.notificationData(piece, attributeBytes.size,
-                attributeOffset, runningCrc))
-            attributeOffset = end
-            if (attributeOffset >= attributeBytes.size) {
-                stage("Notification content sent", "Garmin requested content and Salus wrote the data; display not confirmed")
-                current = null; updateSent = false
-                main.postDelayed({ maybeSend() }, 250L)
-            }
+        private fun sendNextAttributeChunk(chunk: SalusGarminNotificationTransfer.Chunk) {
+            if (!enabled || current == null) return
+            sendGfdi(SalusGarminGfdiCodec.notificationData(chunk.bytes, chunk.total,
+                chunk.offset, chunk.crc))
+            stage("Notification data awaiting Garmin ACK",
+                "GFDI 5035 chunk ${chunk.offset + chunk.bytes.size}/${chunk.total} queued; waiting for Garmin 5000/5035 response")
+            val token = ++dataAckToken
+            val expectedNotificationId = current?.id
+            val expectedAttempt = attemptId
+            main.postDelayed({
+                if (enabled && token == dataAckToken && expectedAttempt == attemptId &&
+                    current?.id == expectedNotificationId && notificationTransfer.awaitingAck) {
+                    notificationTransfer.reset()
+                    ++dataAckToken
+                    stage("Garmin notification ACK timeout",
+                        "Watch did not acknowledge GFDI 5035 data within 10 seconds; display unverified")
+                    current = null; updateSent = false
+                    main.postDelayed({ maybeSend() }, 250L)
+                }
+            }, 10_000L)
         }
     }
 }
