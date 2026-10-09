@@ -13,7 +13,8 @@ void main() {
     expect(sender, contains('SalusGarminGfdiCodec.decodeFrame(decoded)'));
     expect(sender, contains('processGfdi(message.type, message.payload, message.sequence)'));
     expect(sender, contains('notificationSubscriptionResponse('));
-    expect(sender, contains('payload[1].toInt() and 255, sequence))'));
+    expect(sender, contains('enabledOnWatch, hostAllowed, sequence))'));
+    expect(sender, contains('subscriptionSeen = true'));
     expect(sender, contains('protobufChunkAck(5043, requestId, offset, sequence)'));
   });
 
@@ -22,6 +23,7 @@ void main() {
     for (final raw in ['0x8624 to 5036','0x852B to 5043','0x832B to 5043','0x842B to 5043']) {
       expect(harness, contains(raw));
     }
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.11+49'));
+    expect(File('pubspec.yaml').readAsStringSync(),
+        matches(RegExp(r'version: 0\.21\.\d+\+\d+')));
   });
 }

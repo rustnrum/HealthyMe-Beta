@@ -115,6 +115,7 @@ object SalusGarminNotificationSender {
         private var configurationExchanged = false
         private var informationExchanged = false
         private var subscribed = false
+        private var subscriptionSeen = false
         private var enabled = true
         private var connecting = false
         private var attemptId = 0
@@ -196,7 +197,11 @@ object SalusGarminNotificationSender {
             if (!enabled) return
             if (pending.size >= MAX_PENDING) pending.removeFirst()
             pending.addLast(alert)
-            stage("Queued", "${pending.size} alert(s) waiting for Garmin protocol")
+            if (subscriptionSeen && !subscribed) {
+                stage("Watch notifications off", "${pending.size} alert(s) waiting. On Garmin: Settings > Connectivity > Phone > Notifications > Status > On")
+            } else {
+                stage("Queued", "${pending.size} alert(s) waiting for Garmin protocol")
+            }
             if (gatt == null) start()
             maybeSend()
         }
@@ -215,7 +220,7 @@ object SalusGarminNotificationSender {
             val old = gatt
             gatt = null; rx = null; tx = null
             connecting = false; writing = false
-            handle = 0; registered = false; subscribed = false
+            handle = 0; registered = false; subscribed = false; subscriptionSeen = false
             registrationSent = false; updateSent = false
             configurationExchanged = false; informationExchanged = false
             outgoing.clear(); incoming.reset()
@@ -384,9 +389,9 @@ object SalusGarminNotificationSender {
                                 stage("GFDI registered", "Waiting for Garmin device-info/configuration exchange")
                                 val currentAttempt = attemptId
                                 main.postDelayed({
-                                    if (enabled && currentAttempt == attemptId && registered && !subscribed) {
-                                        stage("Subscription pending",
-                                            "Garmin 5036 not yet received; device info=${informationExchanged}; config=${configurationExchanged}")
+                                    if (enabled && currentAttempt == attemptId && registered && !subscriptionSeen) {
+                                        stage("Subscription not received",
+                                            "No Garmin 5036 received; device info=${informationExchanged}; config=${configurationExchanged}")
                                     }
                                 }, 22_000L)
                                 maybeSend()
@@ -488,12 +493,23 @@ object SalusGarminNotificationSender {
                     } else stage("Garmin protobuf parse error", "GFDI 5043 payload too short")
                 }
                 5036 -> if (payload.size >= 2) {
-                    val enabledOnWatch = payload[0].toInt() == 1
-                    subscribed = enabledOnWatch
+                    // The watch has sent 5036: an off request is NOT a missing request.
+                    // The phone's approval flag must not mirror the watch's off state.
+                    subscriptionSeen = true
+                    val enabledOnWatch = (payload[0].toInt() and 255) == 1
+                    val hostAllowed = SalusWatchNotificationStore.targets(app).any {
+                        it.deviceId.equals(deviceId, ignoreCase = true) && it.protocolId == "garmin-family"
+                    }
+                    subscribed = enabledOnWatch && hostAllowed
                     sendGfdi(SalusGarminGfdiCodec.notificationSubscriptionResponse(
-                        enabledOnWatch, payload[1].toInt() and 255, sequence))
-                    stage(if (enabledOnWatch) "Watch subscribed" else "Watch unsubscribed",
-                        "Garmin notification subscription=${if (enabledOnWatch) "on" else "off"}")
+                        enabledOnWatch, hostAllowed, sequence))
+                    if (enabledOnWatch) {
+                        stage(if (hostAllowed) "Watch subscribed" else "Salus notifications off",
+                            "Garmin requested subscription on; phone permission=${if (hostAllowed) "on" else "off"}")
+                    } else {
+                        stage("Watch notifications off",
+                            "Garmin sent subscription off; phone permission=${if (hostAllowed) "on" else "off"}. On watch: Settings > Connectivity > Phone > Notifications > Status > On")
+                    }
                     if (subscribed) maybeSend()
                 }
                 5034 -> if (payload.size >= 5 && payload[0].toInt() == 0) {

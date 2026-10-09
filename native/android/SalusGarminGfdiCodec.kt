@@ -199,9 +199,22 @@ object SalusGarminGfdiCodec {
     fun notificationControlAck(sequence: Int? = null) = gfdiMessage(5000, byteArrayOf(
         0xAA.toByte(), 0x13, 0, 0, 0), sequence) // response-to=5034 + ACK + chunk OK + no error
 
-    fun notificationSubscriptionResponse(enabled: Boolean, unknown: Int, sequence: Int? = null) = gfdiMessage(
-        5000, byteArrayOf(0xAC.toByte(), 0x13, 0, if (enabled) 0 else 1,
-            if (enabled) 1 else 0, (unknown and 255).toByte()), sequence)
+    /** Reply to Garmin's 5036 request. Phone permission and the watch's
+     * requested subscription state are separate values (Gadgetbridge's
+     * NotificationSubscriptionStatusMessage behavior).
+     * This response does NOT itself turn a watch-side disabled subscription on.
+     */
+    fun notificationSubscriptionResponse(
+        requestedByWatch: Boolean,
+        phoneNotificationsAllowed: Boolean,
+        sequence: Int? = null,
+    ) = gfdiMessage(5000, byteArrayOf(
+        0xAC.toByte(), 0x13, // Response to GFDI 5036
+        0, // ACK
+        if (phoneNotificationsAllowed) 0 else 1, // Host permission: enabled / disabled
+        if (requestedByWatch) 1 else 0, // Echo watch's requested subscription state
+        0, // Reserved, as in Gadgetbridge's implementation
+    ), sequence)
 
     /** Gadgetbridge ProtobufStatusMessage: acknowledge a received data chunk.
      * 5043 / 5044 protobuf framing remains feature-specific; no pretend decoded metrics.
