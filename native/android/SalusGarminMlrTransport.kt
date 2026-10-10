@@ -63,6 +63,7 @@ class SalusGarminMlrTransport(
         val request = ((a and 0x0f) shl 2) or ((b ushr 6) and 3)
         val sequence = b and 63
         val emitted = mutableListOf<ByteArray>()
+        var ignoredAck: String? = null
         val distance = (request - lastPeerAck + 64) % 64
         val inFlight = (nextSend - lastPeerAck + 64) % 64
         if (distance in 1..inFlight) {
@@ -74,7 +75,10 @@ class SalusGarminMlrTransport(
             lastPeerAck = request
             retransmitAt = if (request == nextSend) Long.MAX_VALUE else clock() + retransmitDelay
         } else if (distance != 0) {
-            return Result(null, emptyList(), "invalid cumulative ACK")
+            // The peer's acknowledgment is outside our current send window.
+            // It must not advance outgoing state, but incoming in-sequence GFDI
+            // data still needs processing and an MLR acknowledgment.
+            ignoredAck = "req=$request peerAck=$lastPeerAck sent=$nextSend seq=$sequence"
         }
         var data: ByteArray? = null
         if (packet.size > 2) {
@@ -93,7 +97,7 @@ class SalusGarminMlrTransport(
             }
         }
         emitted.addAll(pump())
-        return Result(data, emitted)
+        return Result(data, emitted, ignoredAck)
     }
 
     /** Called by the session's existing main-thread scheduler. */

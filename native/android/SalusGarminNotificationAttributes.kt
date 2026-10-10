@@ -27,7 +27,7 @@ object SalusGarminNotificationAttributes {
         while (index < request.size) {
             val kind = request[index++].toInt() and 0xff
             var maxLength = 0 // Gadgetbridge interprets a length of zero as unlimited
-            if (kind in listOf(1, 2, 3, 7)) {
+            if (kind in listOf(1, 2, 3)) {
                 if (index + 2 > request.size) return null
                 maxLength = SalusGarminGfdiCodec.read16(request, index)
                 index += 2

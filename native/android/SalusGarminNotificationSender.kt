@@ -127,6 +127,7 @@ object SalusGarminNotificationSender {
         private var dataAckToken = 0
         private var mlrRequested = true
         private var mlr: SalusGarminMlrTransport? = null
+        private var ignoredMlrAckCount = 0
         private var applicationInitialized = false
         private var setupEventsAwaitingAck = 0
         private var deferredAppAttributes: Pair<String, ByteArray>? = null
@@ -235,6 +236,7 @@ object SalusGarminNotificationSender {
             connecting = false; writing = false
             handle = 0; registered = false; subscribed = false; subscriptionSeen = false
             mlr?.close(); mlr = null; mlrRequested = true
+            ignoredMlrAckCount = 0
             applicationInitialized = false; setupEventsAwaitingAck = 0
             deferredAppAttributes = null; appAttributeTransferActive = false
             registrationSent = false; updateSent = false
@@ -464,7 +466,13 @@ object SalusGarminNotificationSender {
                 val activeMlr = mlr
                 if (activeMlr != null && h and 0x80 != 0) {
                     val received = activeMlr.receive(bytes)
-                    received.error?.let { stage("Garmin MLR packet rejected", it) }
+                    received.error?.let { reason ->
+                        if (reason.startsWith("req=")) {
+                            if (++ignoredMlrAckCount <= 3) {
+                                stage("Garmin MLR out-of-window ACK", "$reason; incoming payload processed separately")
+                            }
+                        } else stage("Garmin MLR packet rejected", reason)
+                    }
                     received.outgoing.forEach { enqueue(it) }
                     received.receivedData?.let { consumeGfdiFragment(it) }
                     return@post
@@ -736,7 +744,11 @@ object SalusGarminNotificationSender {
                 request,
             )
             if (encoded == null) {
-                stage("Garmin attribute request unsupported", "Watch requested a malformed or unknown attribute; do not fabricate payload")
+                val selectorHex = request.take(40).joinToString(" ") {
+                    "%02X".format(it.toInt() and 255)
+                }
+                stage("Garmin attribute request unsupported",
+                    "Malformed/unknown 5034 attribute selectors (hex)=$selectorHex; size=${request.size}")
                 notificationTransfer.reset()
                 current = null; updateSent = false
                 main.postDelayed({ maybeSend() }, 250L)
