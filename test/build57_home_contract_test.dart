@@ -17,6 +17,6 @@ void main() {
     expect(recovery,contains("label: 'Preliminary'"));
     expect(sync,contains('ref.watch(healthSyncProvider).isLoading'));
     expect(sync,contains('_rotation.repeat()'));
-    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.20+58'));
+    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.22+60'));
   });
 }

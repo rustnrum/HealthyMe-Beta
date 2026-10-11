@@ -67,14 +67,26 @@ class MetricHistoryService {
     Iterable<DirectMetricSample> samples,
   ) {
     final unique = <String, DirectMetricSample>{};
-    for (final sample in samples) {
+    final ordered = samples.toList()
+      ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+    for (final sample in ordered) {
       if (sample.metric != metric ||
           !validValue(metric, sample.value) ||
           sample.sourceId.trim().isEmpty ||
           SourceNameService.isTransportOnly(sample.sourceId)) {
         continue;
       }
-      final key = '${sample.sourceId}|${sample.capturedAt.millisecondsSinceEpoch}|${sample.value}';
+      final isDailyResting =
+          (metric == 'Resting heart rate' || metric == 'Steps') &&
+          sample.sourceId.startsWith('ble:');
+      final key = isDailyResting
+          ? '${sample.sourceId}|${sample.capturedAt.year}-${sample.capturedAt.month}-${sample.capturedAt.day}'
+          : '${sample.sourceId}|${sample.capturedAt.millisecondsSinceEpoch}|${sample.value}';
+      // Daily step count is cumulative, not additive. Retain the highest
+      // observed total for each source/day from legacy poll-heavy history.
+      final earlier = unique[key];
+      if (metric == 'Steps' && earlier != null &&
+          earlier.value > sample.value) continue;
       unique[key] = sample;
     }
     return unique.values.toList()

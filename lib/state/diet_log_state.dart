@@ -11,14 +11,17 @@ class FoodLogEntry {
   final String id;
   final DateTime eatenAt;
   final String slot, name, portion;
+  final String sourceName, sourceId, imageUrl;
   final double? calories, protein, carbs, fat, fiber;
   const FoodLogEntry({required this.id, required this.eatenAt,
     required this.slot, required this.name, this.portion = '',
-    this.calories, this.protein, this.carbs, this.fat, this.fiber});
+    this.calories, this.protein, this.carbs, this.fat, this.fiber,
+    this.sourceName = 'Manual', this.sourceId = '', this.imageUrl = ''});
   Map<String, dynamic> toJson() => {
     'id': id, 'eatenAt': eatenAt.toIso8601String(), 'slot': slot,
     'name': name, 'portion': portion, 'calories': calories,
     'protein': protein, 'carbs': carbs, 'fat': fat, 'fiber': fiber,
+    'sourceName': sourceName, 'sourceId': sourceId, 'imageUrl': imageUrl,
   };
   factory FoodLogEntry.fromJson(Map<String, dynamic> j) => FoodLogEntry(
     id: j['id']?.toString() ?? '',
@@ -30,11 +33,15 @@ class FoodLogEntry {
     carbs: (j['carbs'] as num?)?.toDouble(),
     fat: (j['fat'] as num?)?.toDouble(),
     fiber: (j['fiber'] as num?)?.toDouble(),
+    sourceName: j['sourceName']?.toString() ?? 'Manual',
+    sourceId: j['sourceId']?.toString() ?? '',
+    imageUrl: j['imageUrl']?.toString() ?? '',
   );
   FoodLogEntry repeated(String newId, DateTime when, String mealSlot) =>
       FoodLogEntry(id: newId, eatenAt: when, slot: mealSlot, name: name,
         portion: portion, calories: calories, protein: protein,
-        carbs: carbs, fat: fat, fiber: fiber);
+        carbs: carbs, fat: fat, fiber: fiber,
+        sourceName: sourceName, sourceId: sourceId, imageUrl: imageUrl);
 }
 
 class GroceryEntry {

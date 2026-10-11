@@ -41,11 +41,11 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
     }
   }
 
-  Future<void> sync() async {
+  Future<void> sync({bool forceDirect = false}) async {
     if (state.isLoading) return;
     state = const AsyncLoading();
     try {
-      await _sync();
+      await _sync(forceDirect: forceDirect);
       state = const AsyncData(null);
     } catch (error, stack) {
       ref.read(appStateProvider.notifier).setHealthError(error.toString());
@@ -68,7 +68,7 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
         bondState: device.bonded ? 'bonded' : device.pairState,
       );
 
-  Future<List<SavedDirectDevice>> _refreshSavedDirectDevices() async {
+  Future<List<SavedDirectDevice>> _refreshSavedDirectDevices({bool force = false}) async {
     final devices = await _savedDevices.load();
     if (devices.isEmpty) return devices;
     // Never cause an unexpected Android permissions prompt on app resume.
@@ -82,7 +82,7 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
       if (device.protocolId == 'cpap-family') continue;
       final now = DateTime.now();
       final previous = _lastDirectAttempt[device.id];
-      if (previous != null && now.difference(previous) <
+      if (!force && previous != null && now.difference(previous) <
           const Duration(minutes: 5)) continue;
       _lastDirectAttempt[device.id] = now;
       try {
@@ -110,9 +110,9 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
     return devices;
   }
 
-  Future<void> _sync({bool? historyOverride}) async {
+  Future<void> _sync({bool? historyOverride, bool forceDirect = false}) async {
     final app = ref.read(appStateProvider);
-    final savedDevices = await _refreshSavedDirectDevices();
+    final savedDevices = await _refreshSavedDirectDevices(force: forceDirect);
     final routedSources = Map<String, String>.from(app.metricSources);
 
     // Clean up legacy entries representing a transport, rather than a real
@@ -127,10 +127,15 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
       ref.read(appStateProvider.notifier).setMetricSource(metric, 'Auto');
     }
 
-    final snapshot = await _service.sync(
-      historicalAccess: historyOverride ?? app.health.historicalAccess,
-      metricSources: routedSources,
-    );
+    // Salus direct BLE works independently of Health Connect authorization.
+    // Do not block real Garmin step reads just because a third-party import
+    // permission is off. Keep the last-known HC snapshot when disconnected.
+    final snapshot = app.health.authorized
+        ? await _service.sync(
+            historicalAccess: historyOverride ?? app.health.historicalAccess,
+            metricSources: routedSources,
+          )
+        : app.health;
     final samples = await _directService.loadSamples();
     final merged = _directService.mergeIntoSnapshot(
       snapshot,

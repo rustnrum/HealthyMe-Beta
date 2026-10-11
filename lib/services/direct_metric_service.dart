@@ -273,8 +273,20 @@ class DirectMetricService {
     final deduped = <String, DirectMetricSample>{};
     for (final sample in [...existing, ...incoming]) {
       if (sample.capturedAt.isBefore(cutoff)) continue;
-      final key = '${sample.sourceId}|${sample.metric}|'
-          '${sample.capturedAt.millisecondsSinceEpoch}';
+      // BLE resting heart rate is a daily summary, not the live pulse.
+      // Poll time is last observed, never a new independent RHR measurement.
+      final isDailyResting = sample.sourceId.startsWith('ble:') &&
+          (sample.metric == 'Resting heart rate' || sample.metric == 'Steps');
+      final key = isDailyResting
+          ? '${sample.sourceId}|${sample.metric}|'
+              '${sample.capturedAt.year}-${sample.capturedAt.month}-${sample.capturedAt.day}'
+          : '${sample.sourceId}|${sample.metric}|'
+              '${sample.capturedAt.millisecondsSinceEpoch}';
+      // Garmin Steps is cumulative for the calendar day. A later poll may
+      // report the same count; it is not an additional walking event.
+      final old = deduped[key];
+      if (sample.metric == 'Steps' && old != null &&
+          old.value > sample.value) continue;
       deduped[key] = sample;
     }
     final next = deduped.values.toList()
@@ -428,6 +440,32 @@ class DirectMetricService {
       return [for (final day in ordered) daily[day]!];
     }
 
+    // Garmin direct Steps is a cumulative daily total, not a sequence of
+    // individual step events. Use saved snapshots from the chosen device only.
+    // Never invent hourly walking activity from an occasional phone poll.
+    final stepSource = resolved['Steps'];
+    final hasDirectStepSource = stepSource != null && stepSource.startsWith('ble:');
+    final stepNow = DateTime.now();
+    String dayKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
+    final validDirectStepSamples = hasDirectStepSource
+        ? direct.where((s) => s.metric == 'Steps' &&
+            s.sourceId == stepSource && s.value.isFinite &&
+            s.value >= 0 && s.value <= 250000 &&
+            !s.capturedAt.isAfter(stepNow)).toList()
+        : <DirectMetricSample>[];
+    final stepsByDay = <String, int>{};
+    for (final s in validDirectStepSamples) {
+      final key = dayKey(s.capturedAt);
+      final value = s.value.round();
+      if (value > (stepsByDay[key] ?? -1)) stepsByDay[key] = value;
+    }
+    final directStepToday = stepsByDay[dayKey(stepNow)] ?? 0;
+    final directDailySteps30 = List<int>.generate(30, (offset) {
+      final day = DateTime(stepNow.year, stepNow.month, stepNow.day)
+          .subtract(Duration(days: 29 - offset));
+      return stepsByDay[dayKey(day)] ?? 0;
+    });
+
     var heartSeries = List<HeartPoint>.from(base.heartSeries);
     if (heart != null) {
       final duplicate = heartSeries.any((p) =>
@@ -441,7 +479,13 @@ class DirectMetricService {
       }
     }
     return base.copyWith(
-      stepsToday: steps?.value.round(),
+      stepsToday: hasDirectStepSource ? directStepToday : steps?.value.round(),
+      // Direct snapshots can establish observed daily totals, but not the
+      // hourly distribution or a prior year's history. Missing days remain
+      // data gaps rather than fabricated counts.
+      hourlySteps: hasDirectStepSource ? const [] : base.hourlySteps,
+      dailySteps30: hasDirectStepSource ? directDailySteps30 : base.dailySteps30,
+      monthlySteps12: hasDirectStepSource ? const [] : base.monthlySteps12,
       sleepMinutes: sleep?.value.round(),
       sleepLightMinutes: sleepLight?.value.round(),
       sleepDeepMinutes: sleepDeep?.value.round(),

@@ -34,7 +34,7 @@ void main() {
 
   test('auto direct sync preserves manual source and excludes CPAP', () {
     final sync = File('lib/state/health_sync_provider.dart').readAsStringSync();
-    expect(sync, contains('_refreshSavedDirectDevices()'));
+    expect(sync, contains('_refreshSavedDirectDevices(force: forceDirect)'));
     expect(sync, contains("device.protocolId == 'cpap-family'"));
     expect(sync, contains('registeredDevices: savedDevices'));
     expect(sync, isNot(contains('staleAfterRefresh')));

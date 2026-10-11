@@ -6,6 +6,8 @@ import '../../state/diet_log_state.dart';
 import '../../state/today_plan_state.dart';
 import '../../widgets/salus_widgets.dart';
 import 'food_entry_dialog.dart';
+import 'food_catalog_screen.dart';
+import 'food_visual_overview.dart';
 
 class DietHomeScreen extends ConsumerWidget {
   const DietHomeScreen({super.key});
@@ -16,6 +18,14 @@ class DietHomeScreen extends ConsumerWidget {
     final today = DateTime.now();
     final foods = log.forDay(today);
     final meals = ref.watch(todayPlanStateProvider).mealsFor(today);
+    // Today's best shortcuts: real previously logged foods, no fake catalog.
+    final seenFoods = <String>{};
+    final recentFoods = <FoodLogEntry>[];
+    for (final entry in log.entries.reversed) {
+      final key = '${entry.name.trim().toLowerCase()}|${entry.portion.trim().toLowerCase()}';
+      if (seenFoods.add(key)) recentFoods.add(entry);
+      if (recentFoods.length >= 5) break;
+    }
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
       children: [
@@ -24,8 +34,10 @@ class DietHomeScreen extends ConsumerWidget {
         const Text('Only food you actually log is counted. Missing nutrients are never estimated.',
           style: TextStyle(color: AppTheme.textSecondary, fontSize: 13.5)),
         const SizedBox(height: 15),
+        FoodVisualOverview(log: log, day: today),
+        const SizedBox(height: 12),
         SalusPaper(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Recorded nutrients', style: TextStyle(
+          const Text('Nutrient details', style: TextStyle(
               color: AppTheme.textPrimary, fontSize: 20, fontWeight: FontWeight.w800)),
           const SizedBox(height: 5),
           Text('${foods.length} food entries today • known values only',
@@ -44,6 +56,28 @@ class DietHomeScreen extends ConsumerWidget {
                 log.incomplete(today, (f) => f.fiber)),
           ]),
         ])),
+        const SizedBox(height: 14),
+        Row(children: [
+          Expanded(child: SalusPaper(
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const FoodCatalogScreen())),
+            child: const Column(children: [
+              Icon(Icons.search_rounded, color: AppTheme.mint, size: 28),
+              SizedBox(height: 5),
+              Text('Find food', style: TextStyle(color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w700)),
+            ]))),
+          const SizedBox(width: 10),
+          Expanded(child: SalusPaper(
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const FoodCatalogScreen(barcodeMode: true))),
+            child: const Column(children: [
+              Icon(Icons.qr_code_rounded, color: AppTheme.amber, size: 28),
+              SizedBox(height: 5),
+              Text('Barcode lookup', style: TextStyle(color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w700)),
+            ]))),
+        ]),
         const SizedBox(height: 12),
         SalusPaper(onTap: () => showFoodEntryDialog(context),
             child: const Row(children: [
@@ -58,6 +92,35 @@ class DietHomeScreen extends ConsumerWidget {
               ])),
               Icon(Icons.chevron_right, color: AppTheme.textSecondary),
             ])),
+        if (recentFoods.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          const SalusSectionTitle(title: 'Log again', eyebrow: 'Your recent foods · one tap'),
+          const SizedBox(height: 10),
+          SingleChildScrollView(scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              for (final entry in recentFoods) ...[
+                SizedBox(width: 152, child: SalusPaper(onTap: () {
+                    ref.read(dietLogStateProvider.notifier).repeatFood(entry, entry.slot);
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text('Added ${entry.name} to ${entry.slot}')));
+                  }, child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      FoodPicture(imageUrl: entry.imageUrl, size: 58),
+                      const SizedBox(height: 7),
+                      Text(entry.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary, fontSize: 13)),
+                      Text(entry.portion.isEmpty ? entry.slot : entry.portion,
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: AppTheme.textSecondary,
+                              fontSize: 11)),
+                      const SizedBox(height: 4),
+                      const Icon(Icons.add_circle_outline, color: AppTheme.mint, size: 20),
+                    ]))),
+                const SizedBox(width: 8),
+              ],
+            ])),
+        ],
         const SizedBox(height: 16),
         const SalusSectionTitle(title: 'Meals', eyebrow: 'Recorded today'),
         const SizedBox(height: 8),
@@ -91,8 +154,10 @@ class DietHomeScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           for (final food in foods.reversed)
             ListTile(
+              leading: FoodPicture(imageUrl: food.imageUrl),
               title: Text(food.name, style: const TextStyle(color: AppTheme.textPrimary)),
-              subtitle: Text('${food.slot}${food.portion.isEmpty ? '' : ' • ${food.portion}'}',
+              subtitle: Text('${food.slot}${food.portion.isEmpty ? '' : ' • ${food.portion}'}'
+                  '${food.sourceName == 'Manual' ? '' : ' • ${food.sourceName}'}',
                   style: const TextStyle(color: AppTheme.textSecondary)),
               trailing: IconButton(tooltip: 'Delete food entry',
                 icon: const Icon(Icons.delete_outline_rounded),

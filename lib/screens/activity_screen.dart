@@ -6,6 +6,7 @@ import '../core/theme/app_theme.dart';
 import '../models/models.dart';
 import '../services/source_name_service.dart';
 import '../state/app_state.dart';
+import '../state/health_sync_provider.dart';
 import '../widgets/command_card.dart';
 import '../widgets/design_widgets.dart';
 import '../widgets/step_bar_chart.dart';
@@ -24,6 +25,10 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   Widget build(BuildContext context) {
     final app = ref.watch(appStateProvider);
     final health = app.health;
+    final directStepSource =
+        health.resolvedSources['Steps']?.startsWith('ble:') == true;
+    final hasSteps = health.authorized || directStepSource;
+    final syncState = ref.watch(healthSyncProvider);
     final goal = app.profile.stepGoal <= 0 ? 10000 : app.profile.stepGoal;
     final progress = (health.stepsToday / goal).clamp(0.0, 1.0);
     final now = DateTime.now();
@@ -35,10 +40,10 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     final activeMinutes = todayWorkouts.fold<int>(0, (sum, w) => sum + w.minutes);
 
     final chartValues = switch (_range) {
-      'Day' => health.hourlySteps,
+      'Day' => directStepSource ? const <int>[] : health.hourlySteps,
       'Week' => _tail(health.dailySteps30, 7),
       'Month' => health.dailySteps30,
-      _ => health.monthlySteps12,
+      _ => directStepSource ? const <int>[] : health.monthlySteps12,
     };
 
     final stepSourceKey = health.resolvedSources['Steps'] ?? app.metricSources['Steps'];
@@ -57,7 +62,18 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
           onChanged: (value) => setState(() => _range = value),
         ),
         const SizedBox(height: 12),
-        _DateNavigator(label: _dateLabel(now)),
+        Row(children: [
+          Expanded(child: _DateNavigator(label: _dateLabel(now))),
+          IconButton(
+            tooltip: 'Sync steps from connected sources',
+            icon: syncState.isLoading
+                ? const SizedBox(width: 20, height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.sync_rounded),
+            onPressed: syncState.isLoading ? null : () =>
+                ref.read(healthSyncProvider.notifier).sync(forceDirect: true),
+          ),
+        ]),
         const SizedBox(height: 12),
         CommandCard(
           padding: const EdgeInsets.all(16),
@@ -76,9 +92,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          health.authorized
-                              ? compactNumber(health.stepsToday)
-                              : '—',
+                          hasSteps ? compactNumber(health.stepsToday) : '—',
                           style: const TextStyle(
                             color: AppTheme.textPrimary,
                             fontSize: 31,
@@ -118,7 +132,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                     ),
                   ),
                   Text(
-                    health.authorized ? '${(progress * 100).round()}%' : '—',
+                    hasSteps ? '${(progress * 100).round()}%' : '—',
                     style: const TextStyle(
                       color: AppTheme.textPrimary,
                       fontSize: 17,
@@ -131,7 +145,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(99),
                 child: LinearProgressIndicator(
-                  value: health.authorized ? progress : 0,
+                  value: hasSteps ? progress : 0,
                   minHeight: 11,
                   color: AppTheme.cyan,
                   backgroundColor: AppTheme.surfaceHigh,
@@ -168,6 +182,16 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                 ],
               ),
               const SizedBox(height: 12),
+              if (directStepSource) ...[
+                const Text(
+                  'Garmin direct sync provides daily step-total snapshots. '
+                  'Missing days are unknown; hourly and yearly history are '
+                  'not available until imported from a source with timestamps.',
+                  style: TextStyle(color: AppTheme.textSecondary,
+                      fontSize: 12.5),
+                ),
+                const SizedBox(height: 10),
+              ],
               StepBarChart(
                 values: chartValues,
                 target: _range == 'Day' ? null : goal.toDouble(),
@@ -247,7 +271,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             values: _tail(health.dailySteps30, 7),
             target: goal.toDouble(),
             showTarget: true,
-            labels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+            labels: _labelsFor('Week', _tail(health.dailySteps30, 7).length),
             height: 150,
           ),
         ),
@@ -274,7 +298,9 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     }
     if (range == 'Week') {
       const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-      return List.generate(count, (i) => days[i % 7]);
+      final firstDay = DateTime.now().subtract(Duration(days: count - 1));
+      return List.generate(count, (i) =>
+          days[firstDay.add(Duration(days: i)).weekday - 1]);
     }
     return null;
   }

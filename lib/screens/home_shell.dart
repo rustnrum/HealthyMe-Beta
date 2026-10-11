@@ -33,9 +33,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     WidgetsBinding.instance.addObserver(this);
     _foregroundSyncTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       if (!mounted) return;
-      final app = ref.read(appStateProvider);
       final sync = ref.read(healthSyncProvider);
-      if (app.health.authorized && !sync.isLoading) {
+      if (!sync.isLoading) {
         ref.read(healthSyncProvider.notifier).sync();
       }
     });
@@ -51,9 +50,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed || !mounted) return;
-    final app = ref.read(appStateProvider);
     final sync = ref.read(healthSyncProvider);
-    if (app.health.authorized && !sync.isLoading) {
+    if (!sync.isLoading) {
       ref.read(healthSyncProvider.notifier).sync();
     }
   }

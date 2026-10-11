@@ -8,6 +8,7 @@ import '../services/direct_metric_service.dart';
 import '../services/metric_history_service.dart';
 import '../services/source_name_service.dart';
 import '../state/app_state.dart';
+import '../state/health_sync_provider.dart';
 
 /// Dedicated, provider-separated trend page for a single measured metric.
 class MetricDetailScreen extends ConsumerStatefulWidget {
@@ -34,6 +35,12 @@ class _MetricDetailScreenState extends ConsumerState<MetricDetailScreen> {
         healthConnectAuthorized: ref.read(appStateProvider).health.authorized,
       );
 
+  Future<void> _syncAndLoad() async {
+    await ref.read(healthSyncProvider.notifier).sync(forceDirect: true);
+    if (!mounted) return;
+    setState(() => _future = _load());
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = ref.watch(appStateProvider);
@@ -47,7 +54,7 @@ class _MetricDetailScreenState extends ConsumerState<MetricDetailScreen> {
           IconButton(
             tooltip: 'Reload measured history',
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => setState(() => _future = _load()),
+            onPressed: _syncAndLoad,
           ),
         ],
       ),
@@ -155,7 +162,10 @@ class _MetricDetailScreenState extends ConsumerState<MetricDetailScreen> {
                         color: AppTheme.textSecondary, fontSize: 16))),
                 ]),
                 const SizedBox(height: 3),
-                Text('Latest • ${_time(last.capturedAt)} • ${last.deviceName}',
+                Text(last.sourceId.startsWith('ble:') &&
+                        (widget.metric == 'Resting heart rate' || widget.metric == 'Steps')
+                    ? '${widget.metric == 'Steps' ? 'Observed daily steps' : 'Daily resting HR'} • last synced ${_time(last.capturedAt)} • ${last.deviceName}'
+                    : 'Latest • ${_time(last.capturedAt)} • ${last.deviceName}',
                     style: const TextStyle(color: AppTheme.textSecondary,
                         fontSize: 12.5)),
                 const SizedBox(height: 20),
@@ -193,7 +203,10 @@ class _MetricDetailScreenState extends ConsumerState<MetricDetailScreen> {
                     title: Text('${_value(sample.value)} $unit',
                         style: const TextStyle(color: AppTheme.textPrimary,
                             fontWeight: FontWeight.w700)),
-                    subtitle: Text(_time(sample.capturedAt),
+                    subtitle: Text(sample.sourceId.startsWith('ble:') &&
+                            (widget.metric == 'Resting heart rate' || widget.metric == 'Steps')
+                        ? 'Daily value • last synced ${_time(sample.capturedAt)}'
+                        : _time(sample.capturedAt),
                         style: const TextStyle(color: AppTheme.textSecondary)),
                     trailing: SizedBox(width: 100,
                         child: Text(sample.deviceName,

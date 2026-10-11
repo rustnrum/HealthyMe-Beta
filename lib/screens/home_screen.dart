@@ -35,12 +35,9 @@ class HomeScreen extends ConsumerWidget {
   }
 
   Future<void> _sync(WidgetRef ref) async {
-    final app = ref.read(appStateProvider);
-    if (app.health.authorized) {
-      await ref.read(healthSyncProvider.notifier).sync();
-    } else {
-      await ref.read(healthSyncProvider.notifier).connectAndSync();
-    }
+    // An explicit Sync always checks saved direct devices; Health Connect
+    // permission is managed separately in Connections.
+    await ref.read(healthSyncProvider.notifier).sync(forceDirect: true);
   }
 
   String _recoverySubtitle(int? score) {

@@ -71,7 +71,8 @@ void main() {
 
   test('Garmin realtime metrics become direct selectable sources', () {
     final service = DirectMetricService();
-    final now = DateTime(2026, 10, 6, 16);
+    // An old step total cannot be today's walking; use an actual same-day poll.
+    final now = DateTime.now();
     const source = 'ble:GARMIN';
 
     final samples = <DirectMetricSample>[
