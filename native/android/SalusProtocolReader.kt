@@ -583,7 +583,7 @@ class SalusProtocolReader(
 
         private fun dayTimestamp(daysAgo: Int): Long {
             val calendar = Calendar.getInstance()
-            calendar.set(Calendar.HOUR_OF_DAY, 12)
+            calendar.set(Calendar.HOUR_OF_DAY, 0)
             calendar.set(Calendar.MINUTE, 0)
             calendar.set(Calendar.SECOND, 0)
             calendar.set(Calendar.MILLISECOND, 0)
@@ -1743,9 +1743,11 @@ private fun parseCpapSummaryPayload(payload: ByteArray) {
                         val recordCount = packet[6].toInt() and 0xff
                         if (recordCount > 0 && recordIndex >= recordCount - 1) {
                             metrics["Steps"] = ringStepTotal.toDouble()
-                            if (ringCaloriesTotal > 0) {
+                            if (ringCaloriesTotal in 1..15000) {
                                 metrics["Active calories"] =
                                     ringCaloriesTotal.toDouble()
+                            } else if (ringCaloriesTotal > 15000) {
+                                notes.add("Ring calorie total is implausible; omitting unverified value")
                             }
                         }
                     }
@@ -1849,6 +1851,35 @@ private fun parseRingSleep(payload: ByteArray) {
         }
         val asleep = light + deep + rem
         if (asleep > 0) {
+            // The R02 sleep record has SIGNED minute offsets in bytes 2..5:
+            // sleep start relative to the day and wake time relative to the
+            // same midnight. These are not packet receipt timestamps.
+            if (recordBytes >= 4) {
+                val startOffset = u16(payload, pointer + 2).toShort().toInt()
+                val endOffset = u16(payload, pointer + 4).toShort().toInt()
+                val elapsed = endOffset - startOffset
+                if (startOffset in -1440..1440 && endOffset in -120..2880 &&
+                    elapsed in 30..1200) {
+                    val midnight = Calendar.getInstance().apply {
+                        timeInMillis = dayTimestamp(daysAgo)
+                        set(Calendar.HOUR_OF_DAY, 0)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    val startTime = (midnight.clone() as Calendar).apply {
+                        add(Calendar.MINUTE, startOffset)
+                    }.timeInMillis
+                    val endTime = (midnight.clone() as Calendar).apply {
+                        add(Calendar.MINUTE, endOffset)
+                    }.timeInMillis
+                    if (startTime > 0 && endTime > startTime &&
+                        endTime <= System.currentTimeMillis() + 300000L) {
+                        addHistoryMetric("Sleep start", 1.0, startTime)
+                        addHistoryMetric("Sleep end", 1.0, endTime)
+                    }
+                }
+            }
             val captured = dayTimestamp(daysAgo)
             addHistoryMetric("Sleep", asleep.toDouble(), captured)
             addHistoryMetric("Sleep light", light.toDouble(), captured)

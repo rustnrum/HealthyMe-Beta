@@ -52,6 +52,10 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
         : (health.sourceLabels[stepSourceKey] ??
             SourceNameService.friendly(stepSourceKey));
     final stepFreshness = health.freshness['Steps'];
+    final stepIsStale = directStepSource && stepFreshness != null &&
+        DateTime.now().difference(stepFreshness) > const Duration(hours: 1);
+    final caloriesPlausible = health.activeCaloriesToday >= 0 &&
+        health.activeCaloriesToday <= 15000;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 30),
@@ -118,6 +122,12 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                             fontWeight: FontWeight.w800,
                           ),
                         ),
+                        if (stepIsStale) ...[
+                          const SizedBox(height: 4),
+                          const Text('Last saved Garmin total — not current',
+                              style: TextStyle(color: AppTheme.amber,
+                                  fontSize: 12, fontWeight: FontWeight.w800)),
+                        ],
                         if (stepFreshness != null) ...[
                           const SizedBox(height: 2),
                           Text(
@@ -219,7 +229,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             Expanded(
               child: HmMetricCard(
                 label: 'Active calories',
-                value: health.authorized
+                value: health.authorized && caloriesPlausible
                     ? '${health.activeCaloriesToday.round()} cal'
                     : '—',
                 accent: AppTheme.mint,
@@ -235,6 +245,12 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             ),
           ],
         ),
+        if (!caloriesPlausible) ...[
+          const SizedBox(height: 8),
+          const Text('Active-calorie data is outside a plausible daily range '
+              'and is hidden pending source verification.',
+              style: TextStyle(color: AppTheme.amber, fontSize: 12)),
+        ],
         const SizedBox(height: 24),
         HmSectionHeader(
           title: 'Workouts',

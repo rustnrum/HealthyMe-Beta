@@ -210,6 +210,12 @@ class DirectMetricService {
     if (metrics.isNotEmpty) {
       final now = DateTime.now();
       for (final entry in metrics.entries) {
+        // The COLMI BigData response already supplies the actual night's
+        // calendar date. Re-labeling it with the poll time is misleading.
+        if ((entry.key == 'Sleep' || entry.key == 'Sleep light' ||
+             entry.key == 'Sleep deep' || entry.key == 'Sleep REM' ||
+             entry.key == 'Sleep awake') &&
+            history.any((item) => item.metric == entry.key)) continue;
         current.add(DirectMetricSample(
           sourceId: sourceId, deviceId: device.id,
           deviceName: device.name, metric: entry.key,
@@ -466,6 +472,28 @@ class DirectMetricService {
       return stepsByDay[dayKey(day)] ?? 0;
     });
 
+    // COLMI ring BigData includes multiple dated nights. Recover its
+    // seven-day duration chart from saved nights of the selected provider,
+    // not Health Connect's unrelated source. Zero bars indicate no reading,
+    // never an inferred zero-hour night.
+    final sleepSource = resolved['Sleep'];
+    final directSleepSelected = sleepSource?.startsWith('ble:') == true;
+    final directSleepDays = <String, int>{};
+    if (directSleepSelected) {
+      for (final sample in direct) {
+        if (sample.sourceId != sleepSource || sample.metric != 'Sleep' ||
+            !sample.value.isFinite || sample.value <= 0 ||
+            sample.value > 1440 || sample.capturedAt.isAfter(stepNow)) continue;
+        final day = dayKey(sample.capturedAt);
+        directSleepDays[day] = sample.value.round();
+      }
+    }
+    final directSleepMinutes7 = List<int>.generate(7, (i) {
+      final date = DateTime(stepNow.year, stepNow.month, stepNow.day)
+          .subtract(Duration(days: 6 - i));
+      return directSleepDays[dayKey(date)] ?? 0;
+    });
+
     var heartSeries = List<HeartPoint>.from(base.heartSeries);
     if (heart != null) {
       final duplicate = heartSeries.any((p) =>
@@ -487,6 +515,7 @@ class DirectMetricService {
       dailySteps30: hasDirectStepSource ? directDailySteps30 : base.dailySteps30,
       monthlySteps12: hasDirectStepSource ? const [] : base.monthlySteps12,
       sleepMinutes: sleep?.value.round(),
+      sleepMinutes7: directSleepSelected ? directSleepMinutes7 : base.sleepMinutes7,
       sleepLightMinutes: sleepLight?.value.round(),
       sleepDeepMinutes: sleepDeep?.value.round(),
       sleepRemMinutes: sleepRem?.value.round(),
@@ -499,7 +528,13 @@ class DirectMetricService {
       hrvMs: hrv?.value,
       bloodOxygenPercent: oxygen?.value,
       respiratoryRate: respiratory?.value,
-      activeCaloriesToday: activeCalories?.value,
+      // A daily 89,620-kcal reading is not plausible. Do not present raw
+      // corrupted/incorrectly-scaled device data as actual energy expenditure.
+      activeCaloriesToday: activeCalories != null &&
+              activeCalories.value >= 0 && activeCalories.value <= 15000
+          ? activeCalories.value
+          : (base.activeCaloriesToday >= 0 && base.activeCaloriesToday <= 15000
+              ? base.activeCaloriesToday : 0),
       heartSeries: heartSeries,
       detectedSources: detected.toList(),
       availableSources: available,

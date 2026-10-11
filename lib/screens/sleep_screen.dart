@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/formatters.dart';
 import '../core/theme/app_theme.dart';
 import '../services/sleep_guidance_service.dart';
+import '../services/direct_metric_service.dart';
+import '../services/sleep_window_service.dart';
 import '../services/source_name_service.dart';
 import '../state/app_state.dart';
 import '../widgets/charts.dart';
@@ -129,6 +131,45 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
           ),
         ),
         const SizedBox(height: 12),
+        if (_range == 'Day' && sleepSourceKey?.startsWith('ble:') == true) ...[
+          CommandCard(
+            child: FutureBuilder<List<DirectMetricSample>>(
+              future: const DirectMetricService().loadSamples(),
+              builder: (context, snapshot) {
+                final window = SleepWindowService.latest(
+                    snapshot.data ?? const <DirectMetricSample>[], sleepSourceKey!);
+                String time(DateTime date) =>
+                    '${date.month}/${date.day} · ${TimeOfDay.fromDateTime(date).format(context)}';
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Sleep and wake times', style: TextStyle(
+                        color: AppTheme.textPrimary, fontWeight: FontWeight.w800,
+                        fontSize: 17)),
+                    const SizedBox(height: 7),
+                    if (window == null)
+                      const Text('Sleep times are not in earlier Salus records. '
+                          'They will appear after the next successful COLMI sleep sync '
+                          'if the ring supplies valid start/end times.',
+                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13))
+                    else ...[
+                      Text('Sleep started  ${time(window.start)}',
+                          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
+                      const SizedBox(height: 5),
+                      Text('Woke up           ${time(window.end)}',
+                          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
+                      const SizedBox(height: 7),
+                      const Text('Ring-detected sleep period; not a clinical measure '
+                          'of the exact moment sleep began.',
+                          style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         if (_range == 'Day') ...[
           CommandCard(
             child: Column(
@@ -237,7 +278,7 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                       ? guidance.minimumMinutes.toDouble()
                       : null,
                   showTarget: guidance.minimumMinutes > 0,
-                  labels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+                  labels: _recentDayLabels(),
                   height: 190,
                 ),
               ],
@@ -263,12 +304,19 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
                 ? guidance.minimumMinutes.toDouble()
                 : null,
             showTarget: guidance.minimumMinutes > 0,
-            labels: const ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+            labels: _recentDayLabels(),
             height: 155,
           ),
         ),
       ],
     );
+  }
+
+  List<String> _recentDayLabels() {
+    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final today = DateTime.now();
+    return List.generate(7, (i) => labels[
+      today.subtract(Duration(days: 6 - i)).weekday - 1]);
   }
 
   String _insight(int tonight, int average, int target) {

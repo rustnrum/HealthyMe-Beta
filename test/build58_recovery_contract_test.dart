@@ -14,6 +14,6 @@ void main() {
     expect(recovery, contains('List<CompletedPlannedWorkout> completedWorkouts = const []'));
     expect(recovery, contains('reading: current == null ? null'));
     expect(screen, contains("item.reading ?? 'N/A'"));
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.22+60'));
+    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.23+61'));
   });
 }
