@@ -9,7 +9,10 @@ import 'source_name_service.dart';
 class MetricHistoryResult {
   final List<DirectMetricSample> readings;
   final String? warning;
-  const MetricHistoryResult({required this.readings, this.warning});
+  /// Prior short Garmin BLE estimates; displayed but excluded from all stats.
+  final List<DirectMetricSample> excludedGarminHrv;
+  const MetricHistoryResult({required this.readings, this.warning,
+      this.excludedGarminHrv = const []});
 }
 
 /// All metric detail screens use the same origin-preserving history reader.
@@ -99,6 +102,10 @@ class MetricHistoryService {
   }) async {
     final stored = await DirectMetricService().loadSamples();
     final readings = <DirectMetricSample>[...stored];
+    final excludedGarmin = metric == 'HRV'
+        ? stored.where((s) => s.metric ==
+            DirectMetricService.experimentalGarminHrv).toList()
+        : <DirectMetricSample>[];
     String? warning;
     final type = healthTypes[metric];
     if (healthConnectAuthorized && Platform.isAndroid && type != null) {
@@ -148,6 +155,7 @@ class MetricHistoryService {
     return MetricHistoryResult(
       readings: normalize(metric, readings),
       warning: warning,
+      excludedGarminHrv: excludedGarmin,
     );
   }
 }

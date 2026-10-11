@@ -42,7 +42,6 @@ void main() {
     expect(sender, contains('Garmin rejected notification update'));
     expect(sender, contains('display still unverified'));
     expect(codec, contains('fun notificationAppAttributes('));
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.23+61'));
     expect(sender, isNot(contains('watch displayed notification')));
   });
 }

@@ -108,6 +108,27 @@ class _MetricDetailScreenState extends ConsumerState<MetricDetailScreen> {
                     style: const TextStyle(color: AppTheme.amber)),
                 const SizedBox(height: 10),
               ],
+              if (widget.metric == 'HRV' &&
+                  snapshot.data?.excludedGarminHrv.isNotEmpty == true) ...[
+                const Text('Previous short Garmin Bluetooth HRV estimates',
+                    style: TextStyle(color: AppTheme.amber,
+                        fontSize: 14, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 5),
+                const Text('These experimental values came from brief R–R samples, '
+                    'not verified overnight HRV. They are preserved below for '
+                    'reference but excluded from the graph, statistics and Recovery.',
+                    style: TextStyle(color: AppTheme.textSecondary,
+                        fontSize: 12.5)),
+                for (final entry in snapshot.data!.excludedGarminHrv.reversed.take(5))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('${entry.value.toStringAsFixed(1)} ms · '
+                        '${_time(entry.capturedAt)} · ${entry.deviceName}',
+                        style: const TextStyle(color: AppTheme.textMuted,
+                            fontSize: 12)),
+                  ),
+                const SizedBox(height: 16),
+              ],
               if (sources.isNotEmpty)
                 DropdownButtonFormField<String>(
                   initialValue: sources.containsKey(selected) ? selected : null,

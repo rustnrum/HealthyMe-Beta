@@ -29,7 +29,7 @@ import java.io.ByteArrayOutputStream
 import java.util.Calendar
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.math.sqrt
+// Short Garmin R-R telemetry is not a validated overnight RMSSD measurement.
 
 /**
  * SALUS_PROTOCOL_METRICS_V036
@@ -492,14 +492,11 @@ class SalusProtocolReader(
         ) {
             if (!completed.compareAndSet(false, true)) return
 
-            if (garminRrMs.size >= 3 && !metrics.containsKey("HRV")) {
-                var sumSquares = 0.0
-                for (index in 1 until garminRrMs.size) {
-                    val delta = garminRrMs[index] - garminRrMs[index - 1]
-                    sumSquares += delta * delta
-                }
-                metrics["HRV"] =
-                    sqrt(sumSquares / (garminRrMs.size - 1))
+            // A 14-second BLE poll with only a few R-R intervals cannot be
+            // treated as Garmin's overnight HRV Status / validated RMSSD.
+            // Keep the transport observations for diagnostics, not Recovery.
+            if (mode == "garmin" && garminRrMs.isNotEmpty()) {
+                notes.add("Garmin supplied ${garminRrMs.size} R-R intervals during a brief poll. Short HRV estimate excluded from Recovery.")
             }
 
             if (ringHrvProxyCount > 0) {

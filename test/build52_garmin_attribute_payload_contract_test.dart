@@ -13,6 +13,5 @@ void main() {
     expect(payload, contains('else -> return null'));
     expect(codec, contains('fun notificationAttributesRaw('));
     expect(sender, contains('Requested attribute IDs='));
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.23+61'));
   });
 }

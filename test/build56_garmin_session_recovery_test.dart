@@ -36,6 +36,5 @@ void main() {
     expect(listener, contains('Android notification eligible'));
     expect(listener, contains('App=\${item.packageName}; forwarding to Garmin'));
     expect(listener, isNot(contains('item.notification.extras.toString()')));
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.23+61'));
   });
 }

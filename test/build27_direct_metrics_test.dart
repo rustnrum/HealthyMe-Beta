@@ -140,11 +140,11 @@ void main() {
 
     expect(merged.latestHeartRate, 76);
     expect(merged.restingHeartRate, 55);
-    expect(merged.hrvMs, 42);
+    expect(merged.hrvMs, isNull);
     expect(merged.bloodOxygenPercent, 97);
     expect(merged.respiratoryRate, 15);
     expect(merged.stepsToday, 8123);
-    expect(merged.availableSources['HRV'], contains(source));
+    expect(merged.availableSources['HRV']?.contains(source) ?? false, isFalse);
     expect(merged.availableSources['Steps'], contains(source));
   });
 

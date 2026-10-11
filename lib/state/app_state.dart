@@ -81,12 +81,31 @@ class HealthyMeState {
         'dailyStates': dailyStates.map((e) => e.toJson()).toList(),
       };
 
+  static HealthSnapshot _safeRestoredHealth(Map<String, dynamic> raw) {
+    final saved = HealthSnapshot.fromJson(raw);
+    final source = saved.resolvedSources['HRV'];
+    final label = (source == null ? '' : saved.sourceLabels[source] ?? '')
+        .toLowerCase();
+    final garminBleHrv = source?.startsWith('ble:') == true &&
+        (label.contains('garmin') || label.contains('voactive') ||
+         label.contains('forerunner') || label.contains('fenix') ||
+         label.contains('fēnix') || label.contains('venu') ||
+         label.contains('instinct') || label.contains('epix'));
+    if (!garminBleHrv) return saved;
+    final resolved = Map<String, String>.from(saved.resolvedSources)
+      ..remove('HRV');
+    final freshness = Map<String, DateTime>.from(saved.freshness)
+      ..remove('HRV');
+    return saved.copyWith(clearHrv: true, hrv30: const [],
+        resolvedSources: resolved, freshness: freshness);
+  }
+
   factory HealthyMeState.fromJson(Map<String, dynamic> json) {
     return HealthyMeState(
       profile: UserProfile.fromJson(
         json['profile'] as Map<String, dynamic>? ?? const {},
       ),
-      health: HealthSnapshot.fromJson(
+      health: _safeRestoredHealth(
         json['health'] as Map<String, dynamic>? ?? const {},
       ),
       measurements: BodyMeasurements.fromJson(

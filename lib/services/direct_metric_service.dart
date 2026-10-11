@@ -103,6 +103,35 @@ class DirectMetricService {
       MethodChannel('com.rustnrum.healthyme/source_discovery');
   // NEVER change this key: existing user history must survive upgrades.
   static const _storageKey = 'salus_direct_metric_samples_v1';
+  static const experimentalGarminHrv = 'Unverified Garmin short HRV';
+
+  // Old Garmin BLE HRV was computed from a handful of R-R intervals. Preserve
+  // those records for diagnostics, but never use them as validated RMSSD.
+  static bool _looksLikeGarmin(String name) {
+    final n = name.toLowerCase();
+    return n.contains('garmin') || n.contains('voactive') ||
+        n.contains('forerunner') || n.contains('fenix') ||
+        n.contains('fēnix') || n.contains('venu') ||
+        n.contains('instinct') || n.contains('epix');
+  }
+
+  static bool isLegacyGarminHrv(DirectMetricSample s) =>
+      s.metric == 'HRV' && s.sourceId.startsWith('ble:') &&
+      _looksLikeGarmin(s.deviceName);
+
+  static bool _garminBleSource(
+    String? source,
+    List<DirectMetricSample> samples,
+    List<SavedDirectDevice> devices,
+    Map<String, String> labels,
+  ) {
+    if (source == null || !source.startsWith('ble:')) return false;
+    if (_looksLikeGarmin(labels[source] ?? '')) return true;
+    if (devices.any((d) => 'ble:${d.id}' == source &&
+        (d.protocolId ?? '').contains('garmin'))) return true;
+    return samples.any((s) => s.sourceId == source &&
+        _looksLikeGarmin(s.deviceName));
+  }
   const DirectMetricService();
 
   Future<void> _requestPermissions() async {
@@ -263,6 +292,12 @@ class DirectMetricService {
       final decoded = jsonDecode(raw) as List<dynamic>;
       final values = decoded.whereType<Map<String, dynamic>>()
           .map(DirectMetricSample.fromJson)
+          .map((s) => isLegacyGarminHrv(s)
+              ? DirectMetricSample(
+                  sourceId: s.sourceId, deviceId: s.deviceId,
+                  deviceName: s.deviceName, metric: experimentalGarminHrv,
+                  value: s.value, unit: s.unit, capturedAt: s.capturedAt)
+              : s)
           .where((s) => s.sourceId.isNotEmpty && s.metric.isNotEmpty && s.value.isFinite)
           .toList()
         ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
@@ -349,15 +384,24 @@ class DirectMetricService {
       for (final rawMetric in providerMetrics) {
         final metric = rawMetric == 'SpO₂' ? 'SpO2' : rawMetric;
         if (metric.isEmpty || metric == 'Raw motion' ||
-            metric == 'Battery' || metric == 'Device information') continue;
+            metric == 'Battery' || metric == 'Device information' ||
+            (metric == 'HRV' && (device.protocolId ?? '').contains('garmin'))) continue;
         final sourceList = available.putIfAbsent(metric, () => <String>[]);
         if (!sourceList.contains(sourceId)) sourceList.add(sourceId);
         counts.putIfAbsent(metric, () => <String, int>{})
             .putIfAbsent(sourceId, () => 0);
       }
     }
-    final direct = samples.where((s) => s.sourceId.startsWith('ble:')).toList()
+    final direct = samples.where((s) =>
+        s.sourceId.startsWith('ble:') && !isLegacyGarminHrv(s)).toList()
       ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+    // Previously cached BLE Garmin HRV must not survive as a current value
+    // or baseline just because a newly validated value wasn't available.
+    final excludeGarminHrv = _garminBleSource(
+          metricSources['HRV'], samples, registeredDevices, base.sourceLabels) ||
+        _garminBleSource(base.resolvedSources['HRV'],
+            samples, registeredDevices, base.sourceLabels);
+    if (excludeGarminHrv) freshness.remove('HRV');
     for (final sample in direct) {
       detected.add(sample.sourceId);
       labels[sample.sourceId] = sample.deviceName;
@@ -524,8 +568,9 @@ class DirectMetricService {
       restingHeartRate: restingHeart?.value,
       restingHeartRate30: directDailySeries('Resting heart rate', base.restingHeartRate30),
       respiratoryRate30: directDailySeries('Respiratory rate', base.respiratoryRate30),
-      hrv30: directDailySeries('HRV', base.hrv30),
+      hrv30: excludeGarminHrv ? const [] : directDailySeries('HRV', base.hrv30),
       hrvMs: hrv?.value,
+      clearHrv: excludeGarminHrv,
       bloodOxygenPercent: oxygen?.value,
       respiratoryRate: respiratory?.value,
       // A daily 89,620-kcal reading is not plausible. Do not present raw
