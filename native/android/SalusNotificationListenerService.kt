@@ -24,9 +24,28 @@ class SalusNotificationListenerService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val item = sbn ?: return
         if (item.packageName == packageName) return // prevent relay loops
-        if (item.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+        val isGmail = item.packageName == SalusWatchNotificationStore.GMAIL_PACKAGE
+        val garminTargets = if (isGmail) SalusWatchNotificationStore.targets(this)
+            .filter { it.protocolId == "garmin-family" } else emptyList()
+        if (item.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) {
+            if (isGmail) garminTargets.forEach {
+                SalusWatchTransportStatus.note(this, it.deviceId,
+                    "Gmail listener", "Grouped summary ignored; waiting for individual email alert")
+            }
+            return
+        }
         if (item.notification.flags and Notification.FLAG_ONGOING_EVENT != 0 &&
-            item.notification.category != Notification.CATEGORY_CALL) return
+            item.notification.category != Notification.CATEGORY_CALL) {
+            if (isGmail) garminTargets.forEach {
+                SalusWatchTransportStatus.note(this, it.deviceId,
+                    "Gmail listener", "Persistent Gmail notification ignored")
+            }
+            return
+        }
+        if (isGmail) garminTargets.forEach {
+            SalusWatchTransportStatus.note(this, it.deviceId,
+                "Gmail listener", "Android Gmail alert received; checking selected apps/accounts")
+        }
 
         val label = try {
             @Suppress("DEPRECATION")
@@ -47,10 +66,20 @@ class SalusNotificationListenerService : NotificationListenerService() {
                 SalusWatchNotificationStore.isAllowed(
                     this, target, item.packageName, account)
         }
-        if (approved.isEmpty()) return
+        if (approved.isEmpty()) {
+            if (isGmail) garminTargets.forEach {
+                SalusWatchTransportStatus.note(this, it.deviceId,
+                    "Gmail filtered", "Gmail app or account is not approved for this watch")
+            }
+            return
+        }
         SalusWatchNotificationStore.recordEligibleNotification(this, item.packageName)
 
         for (target in approved) {
+            if (target.protocolId == "garmin-family") {
+                SalusWatchTransportStatus.note(this, target.deviceId,
+                    "Android notification eligible", "App=${item.packageName}; forwarding to Garmin")
+            }
             executor.execute {
                 when (target.protocolId) {
                     "ido-veryfit-family" -> SalusWatchNotificationSender.send(this, target, item)

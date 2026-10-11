@@ -128,6 +128,9 @@ object SalusGarminNotificationSender {
         private var mlrRequested = true
         private var mlr: SalusGarminMlrTransport? = null
         private var ignoredMlrAckCount = 0
+        private var notificationRecoveryId: Int? = null
+        private var lastAttributeRequestId: Int? = null
+        private var notificationSendToken = 0
         private var applicationInitialized = false
         private var setupEventsAwaitingAck = 0
         private var deferredAppAttributes: Pair<String, ByteArray>? = null
@@ -224,6 +227,7 @@ object SalusGarminNotificationSender {
             disconnect()
             outgoing.clear(); pending.clear(); current = null
             recentAlerts.clear(); deferredAppAttributes = null; appAttributeTransferActive = false
+            notificationRecoveryId = null; lastAttributeRequestId = null
             notificationTransfer.reset(); ++dataAckToken
             stage("Off", "Notification forwarding disabled")
         }
@@ -235,6 +239,7 @@ object SalusGarminNotificationSender {
             gatt = null; rx = null; tx = null
             connecting = false; writing = false
             handle = 0; registered = false; subscribed = false; subscriptionSeen = false
+            notificationSendToken++ // Cancel old GATT-session notification deadlines.
             mlr?.close(); mlr = null; mlrRequested = true
             ignoredMlrAckCount = 0
             applicationInitialized = false; setupEventsAwaitingAck = 0
@@ -433,9 +438,41 @@ object SalusGarminNotificationSender {
                     if (type == 1 && bytes.size >= 14 && SalusGarminGfdiCodec.read16(bytes, 10) == 1) {
                         val status = bytes[12].toInt() and 255
                         if (status == 0) {
-                            handle = bytes[13].toInt() and 255
+                            val newHandle = bytes[13].toInt() and 255
                             val reliable = if (bytes.size > 14) bytes[14].toInt() and 255 else 0
-                            registered = handle > 0
+                            if (newHandle == 0) {
+                                stage("Invalid Garmin registration", "Garmin returned handle zero")
+                                return@post
+                            }
+                            when (SalusGarminRegistrationPolicy.evaluate(
+                                registered, handle, mlr != null, newHandle, reliable != 0)) {
+                                SalusGarminRegistrationPolicy.Decision.DUPLICATE -> {
+                                    // Preserve all MLR send/receive/ACK counters and watch subscription.
+                                    SalusWatchTransportStatus.note(app, deviceId,
+                                        "Garmin duplicate registration", "Handle=$handle; preserving live MLR counters")
+                                    return@post
+                                }
+                                SalusGarminRegistrationPolicy.Decision.REPLACEMENT -> {
+                                    // Remote handle changed: old notification transport is no longer usable.
+                                    // Keep the active alert, but never send on stale subscription state.
+                                    stage("Garmin service replaced", "Reinitializing GFDI for handle=$newHandle")
+                                    current?.let { if (pending.size < MAX_PENDING) pending.addFirst(it) }
+                                    current = null; updateSent = false
+                                    notificationSendToken++
+                                    notificationTransfer.reset(); ++dataAckToken
+                                    outgoing.clear(); incoming.reset()
+                                    mlr?.close(); mlr = null
+                                    subscribed = false; subscriptionSeen = false
+                                    informationExchanged = false; configurationExchanged = false
+                                    applicationInitialized = false; setupEventsAwaitingAck = 0
+                                    deferredAppAttributes = null; appAttributeTransferActive = false
+                                    lastAttributeRequestId = null
+                                    ignoredMlrAckCount = 0
+                                }
+                                SalusGarminRegistrationPolicy.Decision.INITIAL -> Unit
+                            }
+                            handle = newHandle
+                            registered = true
                             if (registered) {
                                 if (reliable != 0) {
                                     mlr = SalusGarminMlrTransport(handle, mtuPayload + 1)
@@ -531,14 +568,27 @@ object SalusGarminNotificationSender {
             if (current == null && pending.isNotEmpty()) current = pending.removeFirst()
             val alert = current ?: return
             updateSent = true
+            lastAttributeRequestId = null
+            val sendToken = ++notificationSendToken
             stage("Sending notification", "Watch subscribed; posting Garmin GFDI notification update")
             sendGfdi(SalusGarminGfdiCodec.notificationUpdate(alert.id, alert.category))
             val thisId = alert.id
             main.postDelayed({
-                if (enabled && current?.id == thisId && updateSent) {
-                    stage("No watch attribute request", "Garmin did not request this notification's text")
-                    current = null; updateSent = false
-                    maybeSend()
+                if (enabled && sendToken == notificationSendToken &&
+                    current?.id == thisId && updateSent &&
+                    lastAttributeRequestId != thisId && !notificationTransfer.awaitingAck) {
+                    if (notificationRecoveryId != thisId) {
+                        notificationRecoveryId = thisId
+                        // fail() preserves/requeues the active alert and reconnects automatically.
+                        fail("Garmin notification session stalled",
+                            "No Garmin 5034 request in 9 seconds; reconnecting once to retry")
+                    } else {
+                        stage("No watch attribute request",
+                            "Retry failed; Garmin did not request this notification's text")
+                        notificationRecoveryId = null
+                        current = null; updateSent = false
+                        maybeSend()
+                    }
                 }
             }, 9000L)
         }
@@ -628,6 +678,7 @@ object SalusGarminNotificationSender {
                             sendGfdi(SalusGarminGfdiCodec.notificationControlAck(sequence))
                             val alert = recentAlerts[requested] ?: current?.takeIf { it.id == requested }
                             if (alert != null) {
+                                if (current?.id == requested) lastAttributeRequestId = requested
                                 SalusWatchTransportStatus.metadata(app, deviceId, "protocol", "Garmin GFDI confirmed; 5034 attribute request received")
                                 stage("Watch requested content", "Garmin requested notification attributes")
                                 if (!notificationTransfer.awaitingAck) {
@@ -655,6 +706,8 @@ object SalusGarminNotificationSender {
                             SalusWatchTransportStatus.metadata(app, deviceId, "protocol", "Garmin GFDI confirmed; 5035 data ACK received (display NOT verified)")
                             stage("Garmin accepted notification data",
                                 "Watch acknowledged all 5035 data chunks; on-screen display still unverified")
+                            // A successful notification content transfer clears its recovery budget.
+                            if (!appAttributeTransferActive) notificationRecoveryId = null
                             if (appAttributeTransferActive) {
                                 appAttributeTransferActive = false
                             } else {
