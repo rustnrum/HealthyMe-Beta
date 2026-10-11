@@ -406,6 +406,28 @@ class DirectMetricService {
       );
       resolve('Sleep Stages', newest);
     }
+    // Direct-device measurements do not get their 30-day series from
+    // Health Connect. Recover saved, timestamped measurements here, grouped
+    // by calendar day so repeated polling on one day cannot fake a baseline.
+    List<double> directDailySeries(String metric, List<double> hcValues) {
+      final source = resolved[metric];
+      if (source == null || !source.startsWith('ble:')) return hcValues;
+      final now = DateTime.now();
+      final cutoff = now.subtract(const Duration(days: 30));
+      final daily = <DateTime, double>{};
+      for (final sample in direct) {
+        if (sample.metric != metric || sample.sourceId != source ||
+            !sample.value.isFinite || sample.value <= 0 ||
+            sample.capturedAt.isBefore(cutoff) ||
+            sample.capturedAt.isAfter(now)) continue;
+        // Both the input and the output are ordered oldest-to-newest.
+        daily[DateTime(sample.capturedAt.year, sample.capturedAt.month,
+            sample.capturedAt.day)] = sample.value;
+      }
+      final ordered = daily.keys.toList()..sort();
+      return [for (final day in ordered) daily[day]!];
+    }
+
     var heartSeries = List<HeartPoint>.from(base.heartSeries);
     if (heart != null) {
       final duplicate = heartSeries.any((p) =>
@@ -427,6 +449,9 @@ class DirectMetricService {
       sleepAwakeMinutes: sleepAwake?.value.round(),
       latestHeartRate: heart?.value,
       restingHeartRate: restingHeart?.value,
+      restingHeartRate30: directDailySeries('Resting heart rate', base.restingHeartRate30),
+      respiratoryRate30: directDailySeries('Respiratory rate', base.respiratoryRate30),
+      hrv30: directDailySeries('HRV', base.hrv30),
       hrvMs: hrv?.value,
       bloodOxygenPercent: oxygen?.value,
       respiratoryRate: respiratory?.value,

@@ -23,6 +23,6 @@ void main() {
     final sender = File('native/android/SalusGarminNotificationSender.kt').readAsStringSync();
     expect(sender, contains('val selectorHex = request.take(40).joinToString(" ")'));
     expect(sender, contains('Malformed/unknown 5034 attribute selectors (hex)='));
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.19+57'));
+    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.20+58'));
   });
 }

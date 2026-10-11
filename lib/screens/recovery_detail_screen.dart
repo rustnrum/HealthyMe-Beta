@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/theme/app_theme.dart';
 import '../services/recovery_service.dart';
 import '../state/app_state.dart';
+import '../state/workout_state.dart';
 import '../widgets/command_card.dart';
 import '../widgets/design_widgets.dart';
 
@@ -13,7 +14,8 @@ class RecoveryDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appStateProvider);
-    final report = RecoveryService.build(app);
+    final report = RecoveryService.build(app,
+        completedWorkouts: ref.watch(workoutStateProvider).history);
     final color = _bandColor(report.band);
 
     return Scaffold(
@@ -226,7 +228,7 @@ class _ContributorRow extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      score == null ? 'N/A' : '$score%',
+                      score == null ? (item.reading ?? 'N/A') : '$score%',
                       style: TextStyle(
                         color: color,
                         fontSize: 14,

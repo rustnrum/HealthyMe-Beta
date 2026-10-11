@@ -64,7 +64,8 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appStateProvider);
     final h = app.health;
-    final recovery = RecoveryService.build(app);
+    final recovery = RecoveryService.build(app,
+        completedWorkouts: ref.watch(workoutStateProvider).history);
     final insight = HomeInsightService.build(app);
     final weight = app.currentWeightLb;
     final mealState = ref.watch(todayPlanStateProvider);

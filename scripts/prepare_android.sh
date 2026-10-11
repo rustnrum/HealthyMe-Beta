@@ -5,10 +5,13 @@ set -euo pipefail
 python3 scripts/patch_build47.py
 # The Build 56 patch is needed when upgrading older source, but its version
 # migration must not run again on an already-committed Build 57 checkout.
-if ! grep -q '^version: 0.21.19+57$' pubspec.yaml; then
+if ! grep -Eq '^version: 0\.21\.(19\+57|20\+58)$' pubspec.yaml; then
   python3 scripts/patch_build56.py
 fi
-python3 scripts/patch_build57.py
+if ! grep -q '^version: 0.21.20+58$' pubspec.yaml; then
+  python3 scripts/patch_build57.py
+fi
+python3 scripts/patch_build58.py
 
 test -f native/android/MainActivity.kt
 test -f native/android/SalusProtocolReader.kt

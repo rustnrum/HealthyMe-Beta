@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../models/models.dart';
+import '../models/workout_models.dart';
 import '../state/app_state.dart';
 import 'daily_state_service.dart';
 import 'sleep_guidance_service.dart';
@@ -13,6 +14,8 @@ class RecoveryContributor {
   final String detail;
   final bool available;
   final int weight;
+  /// Actual latest measured value; displayed even when there is no score.
+  final String? reading;
 
   const RecoveryContributor({
     required this.name,
@@ -20,6 +23,7 @@ class RecoveryContributor {
     required this.detail,
     this.available = true,
     this.weight = 0,
+    this.reading,
   });
 }
 
@@ -57,14 +61,16 @@ class RecoveryService {
   /// Minimum objective coverage needed for an objective-only recovery number.
   static const int _minimumObjectiveCoverage = 50;
 
-  static RecoveryReport build(HealthyMeState app) {
+  static RecoveryReport build(HealthyMeState app, {
+    List<CompletedPlannedWorkout> completedWorkouts = const [],
+  }) {
     final contributors = <RecoveryContributor>[
       _sleepContributor(app),
       _dailyStateContributor(app),
       _hrvContributor(app.health),
       _restingHeartRateContributor(app.health),
       _breathingContributor(app.health),
-      _trainingContributor(app.health),
+      _trainingContributor(app.health, completedWorkouts),
       const RecoveryContributor(
         name: 'Nutrition',
         score: null,
@@ -290,10 +296,13 @@ class RecoveryService {
   static RecoveryContributor _hrvContributor(HealthSnapshot h) {
     final current = h.hrvMs;
     if (current == null || h.hrv30.length < 4) {
-      return const RecoveryContributor(
+      return RecoveryContributor(
         name: 'HRV',
         score: null,
-        detail: 'Building your personal HRV baseline',
+        reading: current == null ? null : '${current.round()} ms',
+        detail: current == null
+            ? 'No HRV value from the selected source'
+            : 'Measured HRV available · ${h.hrv30.length} of 4 daily baseline readings. No comparison score yet.',
         available: false,
         weight: _hrvWeight,
       );
@@ -302,12 +311,11 @@ class RecoveryService {
     final history = _baselineWithoutCurrent(h.hrv30);
     final baseline = _avg(history);
     if (baseline <= 0) {
-      return const RecoveryContributor(
-        name: 'HRV',
-        score: null,
-        detail: 'Building your personal HRV baseline',
-        available: false,
-        weight: _hrvWeight,
+      return RecoveryContributor(
+        name: 'HRV', score: null,
+        reading: '${current.round()} ms',
+        detail: 'HRV baseline could not be calculated from valid historical values',
+        available: false, weight: _hrvWeight,
       );
     }
 
@@ -334,12 +342,13 @@ class RecoveryService {
   static RecoveryContributor _restingHeartRateContributor(HealthSnapshot h) {
     final current = h.restingHeartRate;
     if (current == null || h.restingHeartRate30.length < 4) {
-      return const RecoveryContributor(
-        name: 'Resting HR',
-        score: null,
-        detail: 'Building your resting-HR baseline',
-        available: false,
-        weight: _rhrWeight,
+      return RecoveryContributor(
+        name: 'Resting HR', score: null,
+        reading: current == null ? null : '${current.round()} bpm',
+        detail: current == null
+            ? 'No resting-heart-rate value from the selected source'
+            : 'Measured resting heart rate available · ${h.restingHeartRate30.length} of 4 baseline readings. No comparison score yet.',
+        available: false, weight: _rhrWeight,
       );
     }
 
@@ -369,12 +378,13 @@ class RecoveryService {
   static RecoveryContributor _breathingContributor(HealthSnapshot h) {
     final current = h.respiratoryRate;
     if (current == null || h.respiratoryRate30.length < 4) {
-      return const RecoveryContributor(
-        name: 'Breathing',
-        score: null,
-        detail: 'Building your respiratory baseline',
-        available: false,
-        weight: _breathingWeight,
+      return RecoveryContributor(
+        name: 'Breathing', score: null,
+        reading: current == null ? null : '${current.toStringAsFixed(1)} br/min',
+        detail: current == null
+            ? 'No respiratory-rate value from the selected source'
+            : 'Measured respiratory rate available · ${h.respiratoryRate30.length} of 4 baseline readings. No comparison score yet.',
+        available: false, weight: _breathingWeight,
       );
     }
 
@@ -401,8 +411,12 @@ class RecoveryService {
     );
   }
 
-  static RecoveryContributor _trainingContributor(HealthSnapshot h) {
-    if (!h.authorized) {
+  static RecoveryContributor _trainingContributor(
+    HealthSnapshot h, List<CompletedPlannedWorkout> completedWorkouts) {
+    // A completed Salus workout has exercises and completion time, but no
+    // measured duration. Acknowledging it is valid; inventing its training
+    // strain in minutes would make Recovery misleading.
+    if (!h.authorized && completedWorkouts.isEmpty) {
       return const RecoveryContributor(
         name: 'Training load',
         score: null,
@@ -412,12 +426,18 @@ class RecoveryService {
       );
     }
     if (h.workouts.isEmpty) {
+      if (completedWorkouts.isNotEmpty) {
+        return RecoveryContributor(
+          name: 'Training load', score: null,
+          reading: '${completedWorkouts.length} saved',
+          detail: '${completedWorkouts.length} completed Salus workout(s) found. Duration is not recorded, so training strain is not guessed.',
+          available: false, weight: _trainingWeight,
+        );
+      }
       return const RecoveryContributor(
-        name: 'Training load',
-        score: null,
+        name: 'Training load', score: null,
         detail: 'No workout history yet',
-        available: false,
-        weight: _trainingWeight,
+        available: false, weight: _trainingWeight,
       );
     }
 
