@@ -21,11 +21,14 @@ void main() {
     expect(product.scaled(product.fiber100g, 150), isNull);
   });
 
-  test('missing nutritional facts are not guessed', () {
-    expect(CatalogFood.fromOpenFoodFacts({
+  test('food without a nutrition panel stays visible but unknown', () {
+    final food = CatalogFood.fromOpenFoodFacts({
       'product_name': 'Unknown',
       'nutriments': <String, dynamic>{},
-    }), isNull);
+    });
+    expect(food?.name, 'Unknown');
+    expect(food?.kcal100g, isNull);
+    expect(food?.protein100g, isNull);
   });
 
   test('product source, photo and nutrients survive saved food roundtrip and repeat', () {

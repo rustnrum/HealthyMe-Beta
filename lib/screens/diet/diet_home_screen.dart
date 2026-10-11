@@ -57,41 +57,50 @@ class DietHomeScreen extends ConsumerWidget {
           ]),
         ])),
         const SizedBox(height: 14),
+        // Camera-first daily action. Typed nutrients remain an optional fallback.
+        SalusPaper(glow: true,
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const FoodCatalogScreen(barcodeMode: true))),
+          child: Row(children: [
+            Container(width: 69, height: 69,
+              decoration: BoxDecoration(
+                color: AppTheme.mint.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(20)),
+              child: const Icon(Icons.qr_code_scanner_rounded,
+                color: AppTheme.mint, size: 41)),
+            const SizedBox(width: 14),
+            const Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Scan your food', style: TextStyle(
+                  color: AppTheme.textPrimary, fontSize: 21,
+                  fontWeight: FontWeight.w900)),
+                SizedBox(height: 4),
+                Text('Camera scan → serving → saved',
+                  style: TextStyle(color: AppTheme.textSecondary,
+                      fontSize: 12.5)),
+              ])),
+            const Icon(Icons.chevron_right_rounded, color: AppTheme.mint),
+          ])),
+        const SizedBox(height: 10),
         Row(children: [
-          Expanded(child: SalusPaper(
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => const FoodCatalogScreen())),
-            child: const Column(children: [
-              Icon(Icons.search_rounded, color: AppTheme.mint, size: 28),
-              SizedBox(height: 5),
-              Text('Find food', style: TextStyle(color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w700)),
+          Expanded(child: SalusPaper(onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const FoodCatalogScreen())),
+            child: const Row(children: [
+              Icon(Icons.search_rounded, color: AppTheme.cyan),
+              SizedBox(width: 8),
+              Expanded(child: Text('Find food', style: TextStyle(
+                color: AppTheme.textPrimary, fontWeight: FontWeight.w800))),
             ]))),
           const SizedBox(width: 10),
-          Expanded(child: SalusPaper(
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => const FoodCatalogScreen(barcodeMode: true))),
-            child: const Column(children: [
-              Icon(Icons.qr_code_rounded, color: AppTheme.amber, size: 28),
-              SizedBox(height: 5),
-              Text('Barcode lookup', style: TextStyle(color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w700)),
+          Expanded(child: SalusPaper(onTap: () => showFoodEntryDialog(context),
+            child: const Row(children: [
+              Icon(Icons.edit_note_rounded, color: AppTheme.amber),
+              SizedBox(width: 8),
+              Expanded(child: Text('Quick add', style: TextStyle(
+                color: AppTheme.textPrimary, fontWeight: FontWeight.w800))),
             ]))),
         ]),
-        const SizedBox(height: 12),
-        SalusPaper(onTap: () => showFoodEntryDialog(context),
-            child: const Row(children: [
-              Icon(Icons.add_circle_outline_rounded, color: AppTheme.mint, size: 36),
-              SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text('Log food', style: TextStyle(color: AppTheme.textPrimary,
-                    fontSize: 20, fontWeight: FontWeight.w800)),
-                Text('Enter a serving and any known nutrients',
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12.5)),
-              ])),
-              Icon(Icons.chevron_right, color: AppTheme.textSecondary),
-            ])),
         if (recentFoods.isNotEmpty) ...[
           const SizedBox(height: 18),
           const SalusSectionTitle(title: 'Log again', eyebrow: 'Your recent foods · one tap'),
@@ -125,7 +134,8 @@ class DietHomeScreen extends ConsumerWidget {
         const SalusSectionTitle(title: 'Meals', eyebrow: 'Recorded today'),
         const SizedBox(height: 8),
         for (final slot in salusMealSlots) ...[
-          SalusPaper(onTap: () => showFoodEntryDialog(context, slot: slot),
+          SalusPaper(onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => FoodCatalogScreen(initialSlot: slot))),
             child: Row(children: [
               Icon(_icon(slot), color: AppTheme.mint),
               const SizedBox(width: 12),

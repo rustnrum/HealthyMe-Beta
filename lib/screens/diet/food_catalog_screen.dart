@@ -3,15 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../services/food_catalog_service.dart';
-import '../../state/diet_log_state.dart';
-import '../../state/today_plan_state.dart';
 import '../../widgets/salus_widgets.dart';
+import 'food_barcode_scanner_screen.dart';
+import 'food_portion_sheet.dart';
+import 'food_visual_overview.dart';
 
-/// Explicit search instead of search-as-you-type: respects food API limits,
-/// avoids accidental downloads, and shows sources for every result.
+/// Search or camera-scan a real packaged food. Manual barcode typing is only a
+/// fallback; normal logging needs one serving choice and a single save tap.
 class FoodCatalogScreen extends ConsumerStatefulWidget {
   final bool barcodeMode;
-  const FoodCatalogScreen({super.key, this.barcodeMode = false});
+  final String? initialSlot;
+  const FoodCatalogScreen({super.key, this.barcodeMode = false,
+    this.initialSlot});
 
   @override
   ConsumerState<FoodCatalogScreen> createState() => _FoodCatalogScreenState();
@@ -19,220 +22,249 @@ class FoodCatalogScreen extends ConsumerStatefulWidget {
 
 class _FoodCatalogScreenState extends ConsumerState<FoodCatalogScreen> {
   final _query = TextEditingController();
-  bool _barcode = false;
   bool _busy = false;
+  bool _scanning = false;
   String? _error;
   List<CatalogFood> _results = const [];
+  late final String _initialSlot;
 
   @override
   void initState() {
     super.initState();
-    _barcode = widget.barcodeMode;
+    _initialSlot = widget.initialSlot ?? _defaultSlot();
+    if (widget.barcodeMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scan();
+      });
+    }
+  }
+
+  String _defaultSlot() {
+    final hour = DateTime.now().hour;
+    if (hour < 10) return 'Breakfast';
+    if (hour < 15) return 'Lunch';
+    if (hour < 20) return 'Dinner';
+    return 'Snacks';
   }
 
   @override
-  void dispose() {
-    _query.dispose();
-    super.dispose();
-  }
+  void dispose() { _query.dispose(); super.dispose(); }
 
   Future<void> _search() async {
     if (_busy) return;
+    final term = _query.text.trim();
+    if (term.isEmpty) {
+      setState(() => _error = 'Enter a food or brand to search.');
+      return;
+    }
     setState(() { _busy = true; _error = null; _results = const []; });
     try {
-      final found = _barcode
-          ? await const FoodCatalogService().lookupBarcode(_query.text)
-          : await const FoodCatalogService().search(_query.text);
+      final found = await const FoodCatalogService().search(term);
       if (!mounted) return;
       setState(() {
         _results = found;
-        if (found.isEmpty) _error = 'No usable nutrition entry found. You can log it manually.';
+        if (found.isEmpty) _error =
+            'No matching foods with usable information. Try the brand or a simpler name.';
       });
     } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e is FormatException
-          ? e.message : 'Lookup failed: $e');
+      if (mounted) setState(() => _error = _friendlyError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _log(CatalogFood food) async {
-    final grams = TextEditingController(text: '100');
-    var slot = 'Breakfast';
-    double? amount;
+  String _friendlyError(Object error) {
+    if (error is FormatException) return error.message;
+    final message = error.toString().toLowerCase();
+    if (message.contains('rate-limiting') || message.contains('429')) {
+      return 'Open Food Facts is limiting searches right now. Wait a minute and try again.';
+    }
+    if (message.contains('socket') || message.contains('timeout') ||
+        message.contains('handshake') || message.contains('network')) {
+      return 'Could not reach Open Food Facts. Check your connection and retry.';
+    }
+    return 'Open Food Facts did not respond. Please try again.';
+  }
+
+  Future<void> _scan() async {
+    if (_scanning || _busy) return;
+    setState(() => _scanning = true);
+    String? code;
     try {
-      amount = await showDialog<double>(context: context, builder: (dialogContext) {
-        return StatefulBuilder(builder: (context, update) {
-          final amountNow = double.tryParse(grams.text.trim());
-          final valid = amountNow != null && amountNow > 0 && amountNow <= 10000;
-          String display(double? value, String suffix) =>
-              value == null ? '—' : '${value.toStringAsFixed(1)} $suffix';
-          return AlertDialog(
-            title: Text(food.name, maxLines: 2, overflow: TextOverflow.ellipsis),
-            content: SingleChildScrollView(child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(food.brand.isEmpty ? 'Open Food Facts' : food.brand,
-                    style: const TextStyle(color: AppTheme.textSecondary)),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: grams,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Amount eaten in grams', hintText: 'e.g. 125'),
-                  onChanged: (_) => update(() {}),
-                ),
-                if (food.servingLabel.isNotEmpty) ...[
-                  const SizedBox(height: 5),
-                  Text('Package serving: ${food.servingLabel} (verify grams)',
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                ],
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: slot,
-                  decoration: const InputDecoration(labelText: 'Meal'),
-                  items: [for (final name in salusMealSlots)
-                    DropdownMenuItem(value: name, child: Text(name))],
-                  onChanged: (value) => update(() { if (value != null) slot = value; }),
-                ),
-                const SizedBox(height: 14),
-                Text('Known nutrients for this amount', style: const TextStyle(
-                    fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-                const SizedBox(height: 6),
-                Text(valid
-                    ? '${display(food.scaled(food.kcal100g, amountNow), 'kcal')} · '
-                      '${display(food.scaled(food.protein100g, amountNow), 'g')} protein\n'
-                      '${display(food.scaled(food.carbs100g, amountNow), 'g')} carbs · '
-                      '${display(food.scaled(food.fat100g, amountNow), 'g')} fat'
-                    : 'Enter a valid amount to calculate nutrition.',
-                    style: const TextStyle(color: AppTheme.textSecondary)),
-                const SizedBox(height: 9),
-                const Text('Community-supplied data. Check your package label. Missing nutrients stay unknown.',
-                    style: TextStyle(color: AppTheme.textMuted, fontSize: 11.5)),
-              ],
-            )),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel')),
-              FilledButton(
-                onPressed: valid ? () => Navigator.pop(dialogContext, amountNow) : null,
-                child: const Text('Log food'),
-              ),
-            ],
-          );
-        });
-      });
+      code = await Navigator.of(context).push<String>(MaterialPageRoute(
+        builder: (_) => const FoodBarcodeScannerScreen()));
     } finally {
-      grams.dispose();
+      if (mounted) setState(() => _scanning = false);
     }
-    if (!mounted || amount == null) return;
+    if (!mounted || code == null) return;
+    setState(() { _busy = true; _error = null; _results = const []; });
     try {
-      await ref.read(dietLogStateProvider.notifier).addFood(FoodLogEntry(
-        id: '', eatenAt: DateTime.now(), slot: slot,
-        name: food.name,
-        portion: '${amount.toStringAsFixed(0)} g',
-        calories: food.scaled(food.kcal100g, amount),
-        protein: food.scaled(food.protein100g, amount),
-        carbs: food.scaled(food.carbs100g, amount),
-        fat: food.scaled(food.fat100g, amount),
-        fiber: food.scaled(food.fiber100g, amount),
-        imageUrl: food.imageUrl ?? '',
-        sourceName: 'Open Food Facts',
-        sourceId: food.code,
-      ));
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Logged ${food.name} to $slot')));
-    } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save. Try again.')));
+      final products = await const FoodCatalogService().lookupBarcode(code);
+      if (!mounted) return;
+      if (products.isEmpty) {
+        setState(() => _error = 'Barcode $code is not in Open Food Facts, '
+            'or its entry has no usable details. Try searching by name.');
+        return;
+      }
+      setState(() => _results = products);
+      await _openPortion(products.first);
+    } catch (e) {
+      if (mounted) setState(() => _error = _friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _manualBarcode() async {
+    var digits = '';
+    // A separate dialog keeps the main food screen genuinely camera-first.
+    final code = await showDialog<String>(context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Enter barcode manually'),
+        content: TextField(onChanged: (value) => digits = value,
+          autofocus: true, keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'UPC / EAN digits')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, digits.trim()),
+            child: const Text('Look up')),
+        ],
+      ));
+    if (!mounted || code == null) return;
+    setState(() { _busy = true; _error = null; _results = const []; });
+    try {
+      final found = await const FoodCatalogService().lookupBarcode(code);
+      if (!mounted) return;
+      setState(() {
+        _results = found;
+        if (found.isEmpty) _error = 'No food found for barcode $code.';
+      });
+      if (found.isNotEmpty) await _openPortion(found.first);
+    } catch (e) {
+      if (mounted) setState(() => _error = _friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _openPortion(CatalogFood food) async {
+    final logged = await showModalBottomSheet<bool>(context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: AppTheme.surface,
+      builder: (_) => FoodPortionSheet(food: food, initialSlot: _initialSlot));
+    if (!mounted || logged != true) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('${food.name} added to your food log'),
+      action: SnackBarAction(label: 'Done',
+        onPressed: () { if (mounted) Navigator.of(context).pop(); }),
+    ));
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(_barcode ? 'Barcode lookup' : 'Find food')),
-    body: ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 35),
+    appBar: AppBar(title: const Text('Add food')),
+    body: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 36),
       children: [
-        const SalusSectionTitle(title: 'Food library', eyebrow: 'Find · Verify · Log'),
-        const SizedBox(height: 7),
-        Text(_barcode
-            ? 'Enter the barcode digits on a package. Camera scanning is planned; this lookup already uses real product data.'
-            : 'Search packaged foods by name. Verify the label and enter the weight eaten before adding it.',
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-        const SizedBox(height: 13),
-        SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(value: false, icon: Icon(Icons.search), label: Text('Search')),
-            ButtonSegment(value: true, icon: Icon(Icons.qr_code), label: Text('Barcode')),
-          ],
-          selected: {_barcode},
-          onSelectionChanged: (selected) => setState(() {
-            _barcode = selected.first;
-            _results = const [];
-            _error = null;
-            _query.clear();
-          }),
-        ),
-        const SizedBox(height: 14),
-        TextField(
-          controller: _query,
+        const SalusSectionTitle(title: 'What did you eat?',
+          eyebrow: 'Scan · Choose a serving · Log'),
+        const SizedBox(height: 15),
+        SalusPaper(onTap: _busy ? null : _scan, glow: true,
+          child: Row(children: [
+            Container(width: 65, height: 65, decoration: BoxDecoration(
+              color: AppTheme.mint.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(20)),
+              child: const Icon(Icons.qr_code_scanner_rounded,
+                color: AppTheme.mint, size: 40)),
+            const SizedBox(width: 15),
+            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Scan a barcode', style: TextStyle(
+                  color: AppTheme.textPrimary, fontSize: 21,
+                  fontWeight: FontWeight.w900)),
+                SizedBox(height: 4),
+                Text('Point your camera at the package',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12.5)),
+              ])),
+            const Icon(Icons.chevron_right_rounded, color: AppTheme.mint),
+          ])),
+        const SizedBox(height: 22),
+        const Text('Or find food by name', style: TextStyle(
+          color: AppTheme.textPrimary, fontSize: 17,
+          fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        TextField(controller: _query,
           textInputAction: TextInputAction.search,
-          keyboardType: _barcode ? TextInputType.number : TextInputType.text,
           onSubmitted: (_) => _search(),
           decoration: InputDecoration(
-            prefixIcon: Icon(_barcode ? Icons.qr_code : Icons.search),
-            labelText: _barcode ? 'Barcode numbers' : 'Food name or brand',
-            hintText: _barcode ? 'e.g. 737628064502' : 'e.g. Greek yogurt',
-          ),
-        ),
-        const SizedBox(height: 10),
-        FilledButton.icon(onPressed: _busy ? null : _search,
-          icon: _busy ? const SizedBox(width: 18, height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.search),
-          label: Text(_busy ? 'Looking up…' : 'Find food')),
+            hintText: 'Greek yogurt, bread, protein shake…',
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: IconButton(icon: const Icon(Icons.arrow_forward_rounded),
+              tooltip: 'Search foods', onPressed: _busy ? null : _search),
+          )),
+        const SizedBox(height: 9),
+        Row(children: [
+          TextButton.icon(onPressed: _busy ? null : _manualBarcode,
+            icon: const Icon(Icons.keyboard_alt_outlined, size: 19),
+            label: const Text('Type barcode instead')),
+          const Spacer(),
+          const Text('Open Food Facts', style: TextStyle(
+            color: AppTheme.textMuted, fontSize: 11.5)),
+        ]),
+        if (_busy) ...[
+          const SizedBox(height: 16),
+          const LinearProgressIndicator(),
+          const SizedBox(height: 6),
+          const Text('Looking up food…', style: TextStyle(
+            color: AppTheme.textSecondary, fontSize: 12)),
+        ],
         if (_error != null) ...[
-          const SizedBox(height: 13),
-          Text(_error!, style: const TextStyle(color: AppTheme.amber)),
-        ],
-        const SizedBox(height: 17),
-        for (final food in _results) ...[
-          SalusPaper(onTap: () => _log(food), child: Row(children: [
-            ClipRRect(borderRadius: BorderRadius.circular(11), child:
-              SizedBox(width: 62, height: 62,
-                child: food.imageUrl == null
-                    ? const ColoredBox(color: AppTheme.surfaceHigh,
-                        child: Icon(Icons.restaurant, color: AppTheme.mint))
-                    : Image.network(food.imageUrl!, fit: BoxFit.cover,
-                        errorBuilder: (c, e, trace) => const ColoredBox(
-                          color: AppTheme.surfaceHigh,
-                          child: Icon(Icons.restaurant, color: AppTheme.mint))),
-              )),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(food.name, maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary)),
-                Text(food.brand.isEmpty ? 'Brand not recorded' : food.brand,
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                Text(food.kcal100g == null ? 'Calories not provided'
-                    : '${food.kcal100g!.round()} kcal / 100 g',
-                  style: const TextStyle(color: AppTheme.mint, fontSize: 12)),
-              ])),
-            const Icon(Icons.add_circle_outline, color: AppTheme.mint),
+          const SizedBox(height: 15),
+          SalusPaper(child: Row(children: [
+            const Icon(Icons.info_outline, color: AppTheme.amber),
+            const SizedBox(width: 10),
+            Expanded(child: Text(_error!, style: const TextStyle(
+              color: AppTheme.textSecondary, fontSize: 13))),
           ])),
-          const SizedBox(height: 9),
         ],
-        const SizedBox(height: 16),
-        const Text('Product names, nutrition data and photos: Open Food Facts. '
-          'Database: ODbL; images: CC BY-SA. https://world.openfoodfacts.org '
-          '· Community entries can be wrong or incomplete. Double-check labels.',
+        if (_results.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          SalusSectionTitle(title: 'Matches (${_results.length})',
+            eyebrow: 'Tap a food to choose your serving'),
+          const SizedBox(height: 10),
+          for (final food in _results) ...[
+            SalusPaper(onTap: () => _openPortion(food), child: Row(children: [
+              FoodPicture(imageUrl: food.imageUrl ?? '', size: 72),
+              const SizedBox(width: 13),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(food.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppTheme.textPrimary,
+                      fontSize: 15, fontWeight: FontWeight.w800)),
+                  Text(food.brand.isEmpty ? 'Brand not recorded' : food.brand,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppTheme.textSecondary,
+                      fontSize: 12)),
+                  if (food.servingGrams != null)
+                    Text('Serving: ${food.servingLabel}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: AppTheme.textMuted,
+                        fontSize: 11.5)),
+                  Text(food.kcal100g == null ? 'Nutrition incomplete'
+                      : '${food.kcal100g!.round()} kcal per 100 g',
+                    style: const TextStyle(color: AppTheme.mint, fontSize: 12.5)),
+                ])),
+              const Icon(Icons.add_circle_outline_rounded, color: AppTheme.mint),
+            ])),
+            const SizedBox(height: 9),
+          ],
+        ],
+        const SizedBox(height: 22),
+        const Text('Product details and photos are provided by Open Food Facts '
+            '(ODbL database; CC BY-SA images). Entries are crowdsourced and '
+            'may be missing or incorrect. Confirm against packaging.',
           style: TextStyle(color: AppTheme.textMuted, fontSize: 11.5)),
-      ],
-    ),
+      ]),
   );
 }
