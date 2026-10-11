@@ -3,7 +3,12 @@ set -euo pipefail
 # Preserve the project's existing platform setup and patch the native channel
 # before generated Android sources are compiled and before source is committed.
 python3 scripts/patch_build47.py
-python3 scripts/patch_build56.py
+# The Build 56 patch is needed when upgrading older source, but its version
+# migration must not run again on an already-committed Build 57 checkout.
+if ! grep -q '^version: 0.21.19+57$' pubspec.yaml; then
+  python3 scripts/patch_build56.py
+fi
+python3 scripts/patch_build57.py
 
 test -f native/android/MainActivity.kt
 test -f native/android/SalusProtocolReader.kt

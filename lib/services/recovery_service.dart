@@ -84,7 +84,7 @@ class RecoveryService {
         band: RecoveryBand.noData,
         label: 'Building',
         summary:
-            'Recovery is building. Salus needs more overnight or morning check-in data before showing a number.',
+            'No scored overnight signals or completed check-in yet. Open Recovery to see what is missing.',
         contributors: contributors,
       );
     }
@@ -115,13 +115,28 @@ class RecoveryService {
     // telemetry to a full 0–100 readiness score.
     if (dailyScore == null &&
         objectiveWeight < _minimumObjectiveCoverage) {
+      // Two independent objective contributors can offer an early estimate,
+      // visibly marked preliminary with low coverage. A single favorable
+      // sleep reading must NEVER be presented as a full readiness score.
+      if (objectiveScored.length >= 2 && objectiveScore != null) {
+        return RecoveryReport(
+          score: objectiveScore,
+          confidence: objectiveConfidence,
+          band: RecoveryBand.noData,
+          label: 'Preliminary',
+          summary: 'Preliminary · only $objectiveWeight% signal coverage. Tap to review.',
+          contributors: contributors,
+        );
+      }
+      final available = objectiveScored.isEmpty
+          ? 'No overnight metrics'
+          : objectiveScored.map((entry) => entry.name.toLowerCase()).join(' + ');
       return RecoveryReport(
         score: null,
         confidence: objectiveConfidence,
         band: RecoveryBand.noData,
         label: 'Building',
-        summary:
-            'More overnight signals are needed before Salus shows a reliable recovery number.',
+        summary: '$available provides only $objectiveWeight% of needed recovery coverage. Add another source or complete the morning check-in.',
         contributors: contributors,
       );
     }

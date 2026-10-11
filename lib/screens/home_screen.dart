@@ -6,6 +6,7 @@ import '../models/workout_models.dart';
 import '../services/direct_device_store.dart';
 import '../services/direct_metric_service.dart';
 import '../services/recovery_service.dart';
+import '../services/home_insight_service.dart';
 import '../state/app_state.dart';
 import '../state/health_sync_provider.dart';
 import '../state/navigation_provider.dart';
@@ -13,6 +14,7 @@ import '../state/today_plan_state.dart';
 import '../state/workout_state.dart';
 import '../widgets/device_battery_indicator.dart';
 import '../widgets/salus_widgets.dart';
+import '../widgets/salus_sync_quick_action.dart';
 import '../widgets/salus_mountain_background.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -63,6 +65,7 @@ class HomeScreen extends ConsumerWidget {
     final app = ref.watch(appStateProvider);
     final h = app.health;
     final recovery = RecoveryService.build(app);
+    final insight = HomeInsightService.build(app);
     final weight = app.currentWeightLb;
     final mealState = ref.watch(todayPlanStateProvider);
     final workoutState = ref.watch(workoutStateProvider);
@@ -138,8 +141,36 @@ class HomeScreen extends ConsumerWidget {
             Center(
               child: SalusRecoveryOrb(
                 score: recovery.score,
-                subtitle: _recoverySubtitle(recovery.score),
+                subtitle: recovery.score == null
+                    ? '${recovery.confidence}% data coverage · tap to see what is missing'
+                    : recovery.label == 'Preliminary'
+                        ? recovery.summary
+                        : _recoverySubtitle(recovery.score),
                 onTap: () => Navigator.of(context).pushNamed('/recovery'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SalusPaper(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 11),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.lightbulb_outline_rounded, size: 17, color: AppTheme.mint),
+                      SizedBox(width: 7),
+                      Text('Last 24 hours · Insight',
+                          style: TextStyle(color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w700, fontSize: 14)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(insight.message, style: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 13, height: 1.35)),
+                  const SizedBox(height: 5),
+                  Text(insight.source, style: const TextStyle(
+                      color: AppTheme.textMuted, fontSize: 11.5)),
+                ],
               ),
             ),
             const SizedBox(height: 16),
@@ -346,11 +377,7 @@ class HomeScreen extends ConsumerWidget {
                             Navigator.of(context).pushNamed('/daily-state'),
                       ),
                       const SizedBox(width: 8),
-                      SalusQuickAction(
-                        icon: Icons.sync_rounded,
-                        label: 'Sync',
-                        onTap: () => _sync(ref),
-                      ),
+                      SalusSyncQuickAction(onTap: () => _sync(ref)),
                       const SizedBox(width: 8),
                       SalusQuickAction(
                         icon: Icons.insights_rounded,
@@ -369,6 +396,14 @@ class HomeScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  if (h.lastSync != null || h.error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(h.error != null
+                        ? 'Sync issue: ${h.error}'
+                        : 'Last successful import: ${h.lastSync!.hour.toString().padLeft(2, '0')}:${h.lastSync!.minute.toString().padLeft(2, '0')}',
+                      style: const TextStyle(color: AppTheme.textMuted, fontSize: 11.5),
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ],
                 ],
               ),
             ),
