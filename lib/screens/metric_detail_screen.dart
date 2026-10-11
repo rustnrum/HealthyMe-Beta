@@ -108,26 +108,45 @@ class _MetricDetailScreenState extends ConsumerState<MetricDetailScreen> {
                     style: const TextStyle(color: AppTheme.amber)),
                 const SizedBox(height: 10),
               ],
-              if (widget.metric == 'HRV' &&
-                  snapshot.data?.excludedGarminHrv.isNotEmpty == true) ...[
-                const Text('Previous short Garmin Bluetooth HRV estimates',
+              if (widget.metric == 'HRV' && sources.isEmpty) ...[
+                const Text('No validated HRV available yet',
                     style: TextStyle(color: AppTheme.amber,
-                        fontSize: 14, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 5),
-                const Text('These experimental values came from brief R–R samples, '
-                    'not verified overnight HRV. They are preserved below for '
-                    'reference but excluded from the graph, statistics and Recovery.',
+                        fontSize: 15, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                const Text(
+                    'The vívoactive 6 Bluetooth stream does not supply a '
+                    'verified overnight HRV average through this Salus reader. '
+                    'Your previous brief R–R estimates cannot establish a '
+                    'reliable HRV baseline. Recovery will exclude them. '
+                    'A source that provides timestamped RMSSD records is needed.',
                     style: TextStyle(color: AppTheme.textSecondary,
                         fontSize: 12.5)),
-                for (final entry in snapshot.data!.excludedGarminHrv.reversed.take(5))
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text('${entry.value.toStringAsFixed(1)} ms · '
-                        '${_time(entry.capturedAt)} · ${entry.deviceName}',
-                        style: const TextStyle(color: AppTheme.textMuted,
-                            fontSize: 12)),
-                  ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 15),
+              ],
+              if (widget.metric == 'HRV' &&
+                  snapshot.data?.excludedGarminHrv.isNotEmpty == true) ...[
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('Unverified old Garmin HRV samples',
+                      style: TextStyle(color: AppTheme.textSecondary,
+                          fontSize: 13, fontWeight: FontWeight.w700)),
+                  subtitle: const Text('Preserved, not included in Recovery or charts',
+                      style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                  children: [
+                    for (final entry in snapshot.data!.excludedGarminHrv.reversed.take(20))
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('${entry.value.toStringAsFixed(1)} ms · '
+                              '${_time(entry.capturedAt)} · ${entry.deviceName}',
+                              style: const TextStyle(color: AppTheme.textMuted,
+                                  fontSize: 12)),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
               ],
               if (sources.isNotEmpty)
                 DropdownButtonFormField<String>(

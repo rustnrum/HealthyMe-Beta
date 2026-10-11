@@ -20,6 +20,34 @@ class ActivityScreen extends ConsumerStatefulWidget {
 
 class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   String _range = 'Day';
+  bool _refreshingSteps = false;
+
+  Future<void> _refreshSteps() async {
+    if (_refreshingSteps) return;
+    setState(() => _refreshingSteps = true);
+    try {
+      final app = ref.read(appStateProvider);
+      final route = app.metricSources['Steps'];
+      final selected = route != null && route != 'Auto'
+          ? route : app.health.resolvedSources['Steps'];
+      String result;
+      if (selected?.startsWith('ble:') == true) {
+        result = await ref.read(healthSyncProvider.notifier)
+            .refreshSelectedDirectSteps();
+      } else {
+        await ref.read(healthSyncProvider.notifier).sync();
+        result = ref.read(healthSyncProvider).hasError
+            ? 'Steps sync failed. Check Connections.'
+            : 'Health Connect Steps sync completed. Check the source timestamp.';
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result), duration: const Duration(seconds: 6)),
+      );
+    } finally {
+      if (mounted) setState(() => _refreshingSteps = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,12 +98,12 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
           Expanded(child: _DateNavigator(label: _dateLabel(now))),
           IconButton(
             tooltip: 'Sync steps from connected sources',
-            icon: syncState.isLoading
+            icon: syncState.isLoading || _refreshingSteps
                 ? const SizedBox(width: 20, height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.sync_rounded),
-            onPressed: syncState.isLoading ? null : () =>
-                ref.read(healthSyncProvider.notifier).sync(forceDirect: true),
+            onPressed: syncState.isLoading || _refreshingSteps
+                ? null : _refreshSteps,
           ),
         ]),
         const SizedBox(height: 12),

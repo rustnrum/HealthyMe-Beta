@@ -107,7 +107,6 @@ class BleProtocolProfiles {
       capabilities: [
         'Steps',
         'Heart rate',
-        'HRV',
         'SpO2',
         'Respiratory rate',
         'Active calories',

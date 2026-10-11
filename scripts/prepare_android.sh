@@ -1,32 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Preserve the project's existing platform setup and patch the native channel
-# before generated Android sources are compiled and before source is committed.
 python3 scripts/patch_build47.py
-# Build 56/57 migrations are only needed on an older checkout. Never
-# revert/redo their version upgrades on a committed Build 58/59 source.
-if ! grep -Eq '^version: 0\.21\.(19\+57|20\+58|21\+59|22\+60|23\+61|24\+62)$' pubspec.yaml; then
+if ! grep -Eq '^version: 0\.21\.(19\+57|20\+58|21\+59|22\+60|23\+61|24\+62|25\+63)$' pubspec.yaml; then
   python3 scripts/patch_build56.py
 fi
-if ! grep -Eq '^version: 0\.21\.(20\+58|21\+59|22\+60|23\+61|24\+62)$' pubspec.yaml; then
+if ! grep -Eq '^version: 0\.21\.(20\+58|21\+59|22\+60|23\+61|24\+62|25\+63)$' pubspec.yaml; then
   python3 scripts/patch_build57.py
 fi
-# Build 58 migration's version step cannot be re-applied after Build 59.
-if ! grep -Eq '^version: 0\.21\.(20\+58|21\+59|22\+60|23\+61|24\+62)$' pubspec.yaml; then
+if ! grep -Eq '^version: 0\.21\.(20\+58|21\+59|22\+60|23\+61|24\+62|25\+63)$' pubspec.yaml; then
   python3 scripts/patch_build58.py
 fi
-if ! grep -Eq '^version: 0\.21\.(22\+60|23\+61|24\+62)$' pubspec.yaml; then
+if ! grep -Eq '^version: 0\.21\.(22\+60|23\+61|24\+62|25\+63)$' pubspec.yaml; then
   python3 scripts/patch_build59.py
   python3 scripts/patch_build59_steps.py
 fi
-if ! grep -Eq '^version: 0\.21\.(23\+61|24\+62)$' pubspec.yaml; then
+if ! grep -Eq '^version: 0\.21\.(23\+61|24\+62|25\+63)$' pubspec.yaml; then
   python3 scripts/patch_build60.py
 fi
-if ! grep -q '^version: 0.21.24+62$' pubspec.yaml; then
+if ! grep -Eq '^version: 0\.21\.(24\+62|25\+63)$' pubspec.yaml; then
   python3 scripts/patch_build61.py
 fi
-python3 scripts/patch_build62.py
+if ! grep -q '^version: 0.21.25+63$' pubspec.yaml; then
+  python3 scripts/patch_build62.py
+fi
 python3 scripts/patch_build62_test_contracts.py
+python3 scripts/patch_build63.py
 
 test -f native/android/MainActivity.kt
 test -f native/android/SalusProtocolReader.kt

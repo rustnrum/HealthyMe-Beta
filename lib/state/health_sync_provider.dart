@@ -53,6 +53,71 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
     }
   }
 
+  /// Unlike the broad background sync, this is the exact selected BLE Steps
+  /// device path used by Connections. It does not wait for Health Connect or
+  /// attempt to connect to the ring before updating the displayed total.
+  /// Return a user-visible result; a completed BLE session is not necessarily
+  /// a successful Steps read.
+  Future<String> refreshSelectedDirectSteps() async {
+    if (state.isLoading) {
+      return 'Another health sync is in progress. Try again shortly.';
+    }
+    state = const AsyncLoading();
+    try {
+      final app = ref.read(appStateProvider);
+      final configured = app.metricSources['Steps'];
+      final source = configured != null && configured != 'Auto'
+          ? configured : app.health.resolvedSources['Steps'];
+      if (source == null || !source.startsWith('ble:')) {
+        state = const AsyncData(null);
+        return 'Steps is not using a direct Bluetooth device. Check its data source in Connections.';
+      }
+      final saved = await _savedDevices.load();
+      SavedDirectDevice? selected;
+      for (final device in saved) {
+        if ('ble:${device.id}' == source) {
+          selected = device;
+          break;
+        }
+      }
+      if (selected == null) {
+        state = const AsyncData(null);
+        return 'The selected Steps device is not saved. Check Connections.';
+      }
+      if (!await Permission.bluetoothConnect.isGranted ||
+          !await Permission.bluetoothScan.isGranted) {
+        state = const AsyncData(null);
+        return 'Bluetooth permissions are missing. Check Android permissions for Salus.';
+      }
+      final reading = await _directService.readAndStore(
+        _candidate(selected),
+        protocolId: selected.protocolId,
+        duration: const Duration(seconds: 23),
+      );
+      // Connections refreshes the snapshot directly; Activity must do the
+      // same. Never make this dependent on a separate HC query succeeding.
+      final stored = await _directService.loadSamples();
+      final latest = ref.read(appStateProvider);
+      final merged = _directService.mergeIntoSnapshot(
+        latest.health,
+        metricSources: latest.metricSources,
+        samples: stored,
+        registeredDevices: saved,
+      );
+      ref.read(appStateProvider.notifier).setHealthSnapshot(merged);
+      state = const AsyncData(null);
+      final steps = reading.metrics['Steps'];
+      if (steps == null || !steps.isFinite || steps < 0) {
+        return '${selected.name} connected but returned no new Steps total. ' 
+            'The last saved reading was retained. ${reading.message}';
+      }
+      return '${selected.name}: received ${steps.round()} steps from the watch.';
+    } catch (error, stack) {
+      state = AsyncError(error, stack);
+      return 'Steps sync failed: $error';
+    }
+  }
+
   BleDeviceCandidate _candidate(SavedDirectDevice device) =>
       BleDeviceCandidate(
         id: device.id,
@@ -130,13 +195,22 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
     // Salus direct BLE works independently of Health Connect authorization.
     // Do not block real Garmin step reads just because a third-party import
     // permission is off. Keep the last-known HC snapshot when disconnected.
+    final samples = await _directService.loadSamples();
+    // Commit the direct-device result BEFORE querying Health Connect.
+    // An unrelated HC error must not hide fresh Garmin Steps.
+    final directSnapshot = _directService.mergeIntoSnapshot(
+      ref.read(appStateProvider).health,
+      metricSources: routedSources,
+      samples: samples,
+      registeredDevices: savedDevices,
+    );
+    ref.read(appStateProvider.notifier).setHealthSnapshot(directSnapshot);
     final snapshot = app.health.authorized
         ? await _service.sync(
             historicalAccess: historyOverride ?? app.health.historicalAccess,
             metricSources: routedSources,
           )
-        : app.health;
-    final samples = await _directService.loadSamples();
+        : directSnapshot;
     final merged = _directService.mergeIntoSnapshot(
       snapshot,
       metricSources: routedSources,

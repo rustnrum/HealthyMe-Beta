@@ -725,7 +725,8 @@ class _SavedCard extends StatelessWidget {
     );
 
     final capabilities = device.capabilities
-        .where((item) => item != 'Raw motion' && item != 'Device information')
+        .where((item) => item != 'Raw motion' && item != 'Device information' &&
+            !(item == 'HRV' && (device.protocolId ?? '').contains('garmin')))
         .toList();
 
     return _Paper(
