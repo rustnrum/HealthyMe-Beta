@@ -207,6 +207,7 @@ class SalusProtocolReader(
         private var ringStepComplete = false
         private var ringSleepSeen = false
         private var ringSpo2Requested = false
+        private var ringTempRequested = false
 
         // Garmin Multi-Link state.
         private var garminRx: BluetoothGattCharacteristic? = null
@@ -1642,6 +1643,17 @@ private fun parseCpapSummaryPayload(payload: ByteArray) {
             )
         }
 
+        private fun requestRingTemperature() {
+            if (completed.get() || ringTempRequested) return
+            val activeGatt = gatt ?: return
+            val characteristic = ringBigWrite ?: return
+            ringTempRequested = true
+            ringBigBuffer.reset()
+            // COLMI history 0x25, read only. No sensor settings or firmware writes.
+            writeCharacteristic(activeGatt, characteristic,
+                byteArrayOf(0xbc.toByte(), 0x25, 0x01, 0x00, 0x3e, 0x81.toByte(), 0x02))
+        }
+
         private fun startRingRequests() {
             if (completed.get()) return
 
@@ -1710,6 +1722,8 @@ private fun parseCpapSummaryPayload(payload: ByteArray) {
                 },
                 12800L,
             )
+            // Fallback when a ring firmware never replies to SpO2 big-data.
+            mainHandler.postDelayed({ requestRingTemperature() }, 16300L)
         }
 
         private fun parseRingPacket(packet: ByteArray) {
@@ -1838,6 +1852,14 @@ private fun parseCpapSummaryPayload(payload: ByteArray) {
                 }
             } else if (dataId == 0x2a) {
                 parseRingSpo2(payload)
+                mainHandler.postDelayed({ requestRingTemperature() }, 400L)
+            } else if (dataId == 0x25) {
+                val temperatures = SalusRingTemperatureDecoder.decode(payload)
+                for (sample in temperatures) {
+                    addHistoryMetric("Skin temperature", sample.celsius, sample.timestampMs)
+                }
+                if (temperatures.isEmpty()) notes.add("COLMI 0x25: no verified temperature samples")
+                else notes.add("COLMI 0x25: ${temperatures.size} timestamped skin-temperature samples")
             }
         }
 

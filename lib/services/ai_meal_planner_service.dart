@@ -44,13 +44,16 @@ class SalusMealIdea {
   final int minutes;
   final double? calories;
   final double? protein;
+  final double? carbs;
+  final double? fat;
+  final double? fiber;
   final String? date;
   final String? slot;
 
   const SalusMealIdea({required this.name, required this.cuisine,
     required this.description, required this.recipe,
     required this.ingredients, required this.servings,
-    required this.minutes, this.calories, this.protein, this.date, this.slot});
+    required this.minutes, this.calories, this.protein, this.carbs, this.fat, this.fiber, this.date, this.slot});
 
   static double? _number(dynamic v) {
     if (v is num) return v.toDouble();
@@ -75,6 +78,9 @@ class SalusMealIdea {
       minutes: (_number(j['minutes']) ?? 0).clamp(0, 600).round(),
       calories: _credible(_number(j['estimated_calories_per_serving']), 0, 3000),
       protein: _credible(_number(j['estimated_protein_g_per_serving']), 0, 300),
+      carbs: _credible(_number(j['estimated_carbs_g_per_serving']), 0, 600),
+      fat: _credible(_number(j['estimated_fat_g_per_serving']), 0, 300),
+      fiber: _credible(_number(j['estimated_fiber_g_per_serving']), 0, 100),
       date: (date != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date)) ? date : null,
       slot: const ['Breakfast', 'Lunch', 'Dinner', 'Snacks'].contains(slot) ? slot : null,
     );
@@ -90,6 +96,9 @@ class SalusMealIdea {
     'servings': servings, 'minutes': minutes,
     'estimated_calories_per_serving': calories,
     'estimated_protein_g_per_serving': protein,
+    'estimated_carbs_g_per_serving': carbs,
+    'estimated_fat_g_per_serving': fat,
+    'estimated_fiber_g_per_serving': fiber,
     'date': date, 'slot': slot,
   };
 }
@@ -235,7 +244,8 @@ Return ONLY a JSON object in this shape:
 {"meals":[{"name":"...","cuisine":"...","description":"...",
 "ingredients":["amount and ingredient"],"instructions":"numbered cooking steps",
 "servings":2,"minutes":30,"estimated_calories_per_serving":500,
-"estimated_protein_g_per_serving":35,"date":null,"slot":null}],"note":"..."}.
+"estimated_protein_g_per_serving":35,"estimated_carbs_g_per_serving":42,
+"estimated_fat_g_per_serving":13,"estimated_fiber_g_per_serving":7,"date":null,"slot":null}],"note":"..."}.
 If making a weekly plan, include YYYY-MM-DD date and Breakfast/Lunch/Dinner/Snacks slot for each meal.
 Produce up to 8 complete distinct meals for a normal search (up to 10 when planning a week). Do not claim nutrition estimates are verified.
 Preferred cuisines: ${preferences.cuisines.join(', ').isEmpty ? 'variety' : preferences.cuisines.join(', ')}.

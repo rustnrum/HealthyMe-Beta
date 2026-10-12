@@ -67,7 +67,7 @@ class DirectMetricReadResult {
 
   static String _unit(String metric) => switch (metric) {
     'Heart rate' || 'Resting heart rate' => ' bpm',
-    'HRV' => ' ms', 'SpO2' => '%',
+    'HRV' => ' ms', 'SpO2' => '%', 'Skin temperature' => ' °C',
     'Respiratory rate' => ' br/min',
     'Steps' => ' steps',
     'Sleep' || 'Sleep light' || 'Sleep deep' || 'Sleep REM' ||
@@ -84,7 +84,7 @@ class DirectMetricReadResult {
       'Steps', 'Sleep', 'Heart rate', 'Resting heart rate', 'HRV',
       'SpO2', 'Respiratory rate', 'Usage time', 'AHI', 'Leak rate',
       'Therapy pressure', 'Battery', 'Body battery', 'Stress',
-      'Ring HRV proxy',
+      'Ring HRV proxy', 'Skin temperature',
     ];
     final keys = <String>[
       ...preferred.where(metrics.containsKey),
@@ -179,7 +179,12 @@ class DirectMetricService {
       protocolId: resolvedProtocolId,
       deviceKind: device.deviceKind,
       advertisedServices: device.advertisedServices,
-      duration: duration,
+      duration: (resolvedProtocolId?.contains('colmi') == true ||
+              resolvedProtocolId?.contains('ring') == true ||
+              device.name.toLowerCase().contains('r02') ||
+              device.name.toLowerCase().contains('colmi')) &&
+            duration < const Duration(seconds: 23)
+          ? const Duration(seconds: 23) : duration,
       cpapPasskey: cpapPasskey,
     );
 
@@ -284,7 +289,7 @@ class DirectMetricService {
 
   static String _unitForMetric(String metric) => switch (metric) {
     'Heart rate' || 'Resting heart rate' => 'bpm',
-    'HRV' => 'ms', 'SpO2' => '%',
+    'HRV' => 'ms', 'SpO2' => '%', 'Skin temperature' => '°C',
     'Respiratory rate' => 'br/min', 'Steps' => 'count',
     'Sleep' || 'Sleep light' || 'Sleep deep' || 'Sleep REM' ||
       'Sleep awake' => 'min',
@@ -321,7 +326,7 @@ class DirectMetricService {
   Future<void> _append(List<DirectMetricSample> incoming) async {
     final prefs = await SharedPreferences.getInstance();
     final existing = await loadSamples();
-    final cutoff = DateTime.now().subtract(const Duration(days: 35));
+    final cutoff = DateTime.now().subtract(const Duration(days: 365));
     final deduped = <String, DirectMetricSample>{};
     for (final sample in [...existing, ...incoming]) {
       if (sample.capturedAt.isBefore(cutoff)) continue;
@@ -343,8 +348,8 @@ class DirectMetricService {
     }
     final next = deduped.values.toList()
       ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
-    if (next.length > 3200) {
-      next.removeRange(0, next.length - 3200);
+    if (next.length > 24000) {
+      next.removeRange(0, next.length - 24000);
     }
     await prefs.setString(
       _storageKey, jsonEncode(next.map((s) => s.toJson()).toList()),

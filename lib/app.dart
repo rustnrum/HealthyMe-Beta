@@ -8,6 +8,8 @@ import 'screens/cpap_screen_v38.dart';
 import 'screens/daily_state_screen.dart';
 import 'screens/diet/diet_shell.dart';
 import 'screens/health/health_shell.dart';
+import 'screens/health/salus_health_intelligence_screen.dart';
+import 'screens/health/salus_backup_screen.dart';
 import 'screens/home_shell.dart';
 import 'screens/device_gallery_screen.dart';
 import 'screens/sleep_screen.dart';
@@ -67,6 +69,8 @@ class HealthyMeApp extends ConsumerWidget {
       routes: {
         '/diet': (_) => const DietShell(),
         '/health': (_) => const HealthShell(),
+        '/health-intelligence': (_) => const SalusHealthIntelligenceScreen(),
+        '/backup': (_) => const SalusBackupScreen(),
         '/workout': (_) => const WorkoutScreen(),
         '/trends': (_) => const TrendsScreen(),
         '/metric-heart-rate': (_) => const MetricDetailScreen(metric: 'Heart rate'),

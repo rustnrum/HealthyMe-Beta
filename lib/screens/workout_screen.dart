@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/formatters.dart';
 import '../core/theme/app_theme.dart';
+import 'premium/salus_training_overview.dart';
 import '../models/models.dart';
 import '../models/workout_models.dart';
 import '../state/app_state.dart';
@@ -19,7 +20,7 @@ class WorkoutScreen extends ConsumerStatefulWidget {
 }
 
 class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
-  String _tab = 'Today';
+  String _tab = 'Overview';
 
   @override
   Widget build(BuildContext context) {
@@ -43,8 +44,8 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppTheme.background,
-      appBar: AppBar(
+      backgroundColor: _tab == 'Overview' ? const Color(0xfff6f8f7) : AppTheme.background,
+      appBar: _tab == 'Overview' ? null : AppBar(
         title: const Text('Workout'),
         actions: [
           HealthyMeModuleMenuButton(
@@ -57,10 +58,10 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
+            if (_tab != 'Overview') Padding(
               padding: const EdgeInsets.fromLTRB(18, 4, 18, 10),
               child: HmTabs(
-                labels: const ['Today', 'Schedule', 'Templates', 'History'],
+                labels: const ['Overview', 'Today', 'Schedule', 'Templates', 'History'],
                 selected: _tab,
                 onChanged: (value) => setState(() => _tab = value),
               ),
@@ -85,6 +86,10 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
       'Schedule' => _ScheduleView(library: library),
       'Templates' => _TemplatesView(library: library),
       'History' => _HistoryView(library: library, connected: health.workouts),
+      'Overview' => SalusTrainingOverview(
+        onToday:()=>setState(()=>_tab='Today'),
+        onSchedule:()=>setState(()=>_tab='Schedule'),
+        onHistory:()=>setState(()=>_tab='History')),
       _ => _TodayView(library: library, connected: health.workouts),
     };
   }

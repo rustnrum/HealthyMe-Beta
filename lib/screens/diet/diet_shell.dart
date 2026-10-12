@@ -3,6 +3,8 @@ import '../../core/theme/app_theme.dart';
 import '../../widgets/module_menu_button.dart';
 import '../../widgets/salus_widgets.dart';
 import 'diet_home_screen.dart';
+import '../premium/salus_nutrition_overview.dart';
+import '../../widgets/salus_premium_ui.dart';
 import 'diet_menu_screen.dart';
 import 'ai_meal_discovery_screen.dart';
 import 'meal_calendar_screen.dart';
@@ -36,7 +38,7 @@ class _DietShellState extends State<DietShell> {
     return Theme(
       data: Theme.of(context).copyWith(scaffoldBackgroundColor: DietPalette.background),
       child: Scaffold(
-        appBar: AppBar(
+        appBar: _index == 0 ? null : AppBar(
           flexibleSpace: Container(decoration: const BoxDecoration(image: DecorationImage(image: AssetImage(SalusAssets.leatherTexture), fit: BoxFit.cover, opacity: 0.88))),
           leading: IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.chevron_left_rounded, size: 30)),
           title: Row(children: [
@@ -56,12 +58,27 @@ class _DietShellState extends State<DietShell> {
           }), const SizedBox(width: 6)],
         ),
         body: SafeArea(top: false, child: IndexedStack(index: _index, children: [
-          const DietHomeScreen(), const AiMealDiscoveryScreen(),
+          SalusNutritionOverview(
+            onDiscover:()=>setState(()=>_index=1),
+            onCalendar:()=>setState(()=>_index=3),
+            onMeals:()=>setState(()=>_index=2),
+            onJournal:()=>Navigator.of(context).push(MaterialPageRoute(
+              builder:(_)=>Scaffold(appBar:AppBar(title:const Text('Food journal')),
+                body:const DietHomeScreen()))),
+          ), const AiMealDiscoveryScreen(),
           const DietMenuScreen(),
           MealCalendarScreen(onDiscover: () => setState(() => _index = 1)),
           const GroceryListScreen(),
         ])),
-        bottomNavigationBar: _DietBottomNav(index: _index, onChanged: (value) => setState(() => _index = value)),
+        bottomNavigationBar: _index == 0
+          ? PremiumDestinationBar(index:_index,onChanged:(value)=>setState(()=>_index=value),items:const [
+              (Icons.pie_chart_outline,'Overview'),
+              (Icons.auto_awesome_outlined,'Discover'),
+              (Icons.restaurant_menu_outlined,'Meals'),
+              (Icons.calendar_today_outlined,'Calendar'),
+              (Icons.shopping_cart_outlined,'Grocery'),
+            ])
+          : _DietBottomNav(index: _index, onChanged: (value) => setState(() => _index = value)),
       ),
     );
   }

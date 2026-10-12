@@ -41,6 +41,11 @@ class HealthVitalsScreen extends ConsumerWidget {
       _row(context, 'Respiratory rate', 'Respiratory rate', h.respiratoryRate,
           '/min', Icons.air_rounded, AppTheme.cyan, detail('Respiratory rate')),
       const SizedBox(height: 13),
+      ListTile(leading: const Icon(Icons.thermostat_outlined, color: AppTheme.cyan),
+        title: const Text('Temperature and Health Intelligence'),
+        subtitle: const Text('COLMI ring and Health Connect readings'),
+        onTap: () => Navigator.of(context).pushNamed('/health-intelligence')),
+      const SizedBox(height: 13),
       const Text('Recorded wellness signals are not a diagnosis.',
           style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
     ]);

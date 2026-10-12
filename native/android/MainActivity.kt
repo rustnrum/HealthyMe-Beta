@@ -33,11 +33,20 @@ class MainActivity : FlutterFragmentActivity() {
         private const val GATT_TIMEOUT_MS = 12000L
     }
 
+    private val backupBridge by lazy { SalusBackupBridge(this) }
     private val mainHandler = Handler(Looper.getMainLooper())
     private var activeScanCallback: ScanCallback? = null
 
+    @Deprecated("Android's SAF activity result callback")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (backupBridge.onActivityResult(requestCode, resultCode, data)) return
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger,
+            "com.rustnrum.healthyme/backup").setMethodCallHandler(backupBridge)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -189,6 +198,10 @@ class MainActivity : FlutterFragmentActivity() {
                             protocolId,
                             enabled,
                         )
+                        if (protocolId == "garmin-family") {
+                            if (enabled) SalusGarminNotificationSender.watch(this, deviceId, true)
+                            else SalusGarminNotificationSender.unwatch(deviceId)
+                        }
                         if (protocolId == "garmin-family") {
                             if (enabled) SalusGarminNotificationSender.watch(this, deviceId, true)
                             else SalusGarminNotificationSender.unwatch(deviceId)

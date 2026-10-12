@@ -50,6 +50,28 @@ class HealthHomeScreen extends ConsumerWidget {
         ]),
       ])),
       const SizedBox(height: 11),
+      SalusPaper(onTap: () => Navigator.of(context).pushNamed('/health-intelligence'),
+        child: const Row(children: [
+          Icon(Icons.thermostat_outlined, color: AppTheme.cyan, size: 28),
+          SizedBox(width: 11),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Health Intelligence', style: TextStyle(color: AppTheme.textPrimary,
+                fontSize: 18, fontWeight: FontWeight.w800)),
+            Text('Skin temperature and source-verified trends',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          ])),
+          Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
+        ])),
+      const SizedBox(height: 11),
+      SalusPaper(onTap: () => Navigator.of(context).pushNamed('/backup'),
+        child: const Row(children: [
+          Icon(Icons.backup_outlined, color: AppTheme.mint, size: 28),
+          SizedBox(width: 11),
+          Expanded(child: Text('Backup & Restore', style: TextStyle(
+              color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w800))),
+          Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
+        ])),
+      const SizedBox(height: 11),
       SalusPaper(onTap: () => Navigator.of(context).pushNamed('/metric-heart-rate'),
         child: const Row(children: [
           Icon(Icons.favorite_rounded, color: AppTheme.rose, size: 26),
