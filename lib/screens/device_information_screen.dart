@@ -20,6 +20,7 @@ class _DeviceInformationScreenState extends State<DeviceInformationScreen> {
   final _metricService = DirectMetricService();
   BleDeviceInformation? _info;
   List<DirectMetricSample> _observed = const [];
+  List<DirectMetricSample> _ringHrvHistory = const [];
   bool _loading = false;
   String? _error;
 
@@ -42,9 +43,13 @@ class _DeviceInformationScreenState extends State<DeviceInformationScreen> {
     }
     final sorted = byMetric.values.toList()
       ..sort((a, b) => b.capturedAt.compareTo(a.capturedAt));
+    final ringHrv = samples.where((s) =>
+        s.deviceId == widget.device.id && s.metric == 'Ring HRV proxy').toList()
+      ..sort((a, b) => b.capturedAt.compareTo(a.capturedAt));
     setState(() {
       _info = cached;
       _observed = sorted;
+      _ringHrvHistory = ringHrv;
     });
     if (cached == null) await _refresh();
   }
@@ -188,6 +193,25 @@ class _DeviceInformationScreenState extends State<DeviceInformationScreen> {
                 const Text('These are not validated overnight HRV values '
                     'and must not be treated as medical measurements.',
                     style: TextStyle(fontSize: 12, color: Colors.white70)),
+              ],
+            )),
+          if (widget.device.protocolId == 'ring-uart-v1')
+            _section('Ring HRV firmware proxy history', Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Experimental firmware values. NOT validated RMSSD, '
+                    'milliseconds, AFib detection or a Recovery input.',
+                    style: TextStyle(fontSize: 12, color: Colors.orangeAccent)),
+                const SizedBox(height: 10),
+                if (_ringHrvHistory.isEmpty)
+                  const Text('No timed HRV proxy buckets received yet. '
+                      'Sync the ring in Connections, then reopen this screen.'),
+                for (final sample in _ringHrvHistory.take(24))
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Text('${_date(sample.capturedAt)}  •  '
+                        '${sample.value.toStringAsFixed(0)} (firmware proxy)'),
+                  ),
               ],
             )),
           const Padding(

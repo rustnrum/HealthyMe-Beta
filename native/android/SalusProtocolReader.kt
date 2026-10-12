@@ -201,9 +201,10 @@ class SalusProtocolReader(
         private var ringCaloriesTotal = 0
         private var ringNewCalorieProtocol = false
         private var ringLatestHr = 0
-        private var ringHrvPageCount = 0
-        private var ringHrvProxySum = 0
-        private var ringHrvProxyCount = 0
+        // Firmware HRV is a relative, one-byte-per-slot proxy, NOT RMSSD.
+        private val ringHrvLog = SalusRingHrvLogDecoder()
+        private var ringStepPacketCount = 0
+        private var ringStepComplete = false
         private var ringSleepSeen = false
         private var ringSpo2Requested = false
 
@@ -499,9 +500,16 @@ class SalusProtocolReader(
                 notes.add("Garmin supplied ${garminRrMs.size} R-R intervals during a brief poll. Short HRV estimate excluded from Recovery.")
             }
 
-            if (ringHrvProxyCount > 0) {
-                metrics["Ring HRV proxy"] =
-                    ringHrvProxySum.toDouble() / ringHrvProxyCount.toDouble()
+            // Do not average slot-index and sentinel bytes into an invented
+            // point-in-time HRV measurement. Valid proxy buckets are stored as
+            // individually timestamped history, never clinical HRV.
+            if (mode == "ring") {
+                notes.add("Ring HRV proxy: ${ringHrvLog.decoded} timed buckets; " +
+                    "${ringHrvLog.invalidPackets} rejected packets.")
+                if (!ringStepComplete) {
+                    notes.add("Ring step history incomplete: " +
+                        "$ringStepPacketCount data packets, no final record.")
+                }
             }
 
             try {
@@ -554,6 +562,14 @@ class SalusProtocolReader(
                                 "subscriptionCount" to cpapSubscriptions,
                                 "authenticated" to if (cpapAuthenticated) 1 else 0,
                                 "pairingRequired" to if (cpapPairingRequired) 1 else 0,
+                            )
+                        } else if (mode == "ring") {
+                            mapOf(
+                                "ringHrvProxySamples" to ringHrvLog.decoded,
+                                "ringHrvPages" to ringHrvLog.pageCount,
+                                "ringHrvInvalidPackets" to ringHrvLog.invalidPackets,
+                                "ringStepPackets" to ringStepPacketCount,
+                                "ringStepsComplete" to if (ringStepComplete) 1 else 0,
                             )
                         } else {
                             emptyMap<String, Int>()
@@ -1731,6 +1747,7 @@ private fun parseCpapSummaryPayload(payload: ByteArray) {
                         return
                     }
                     if (packet.size >= 13) {
+                        ringStepPacketCount++
                         var calories = u16(packet, 7)
                         if (ringNewCalorieProtocol) calories *= 10
                         ringStepTotal += u16(packet, 9)
@@ -1739,6 +1756,7 @@ private fun parseCpapSummaryPayload(payload: ByteArray) {
                         val recordIndex = packet[5].toInt() and 0xff
                         val recordCount = packet[6].toInt() and 0xff
                         if (recordCount > 0 && recordIndex >= recordCount - 1) {
+                            ringStepComplete = true
                             metrics["Steps"] = ringStepTotal.toDouble()
                             if (ringCaloriesTotal in 1..15000) {
                                 metrics["Active calories"] =
@@ -1752,24 +1770,27 @@ private fun parseCpapSummaryPayload(payload: ByteArray) {
 
                 57 -> {
                     val index = packet[1].toInt() and 0xff
-                    if (index == 0xff) return
-                    if (index == 0) {
-                        ringHrvPageCount =
-                            if (packet.size > 2) packet[2].toInt() and 0xff else 0
-                        for (page in 1..ringHrvPageCount) {
-                            mainHandler.postDelayed(
-                                { ringSend(57, byteArrayOf(page.toByte())) },
-                                page * 120L,
-                            )
-                        }
-                        return
+                    val midnight = dayTimestamp(0)
+                    val expectedBefore = ringHrvLog.expectedPage
+                    val readings = ringHrvLog.parse(
+                        packet, midnight, System.currentTimeMillis(),
+                    )
+                    for (reading in readings) {
+                        addHistoryMetric(
+                            "Ring HRV proxy", reading.value.toDouble(), reading.timestampMs,
+                        )
                     }
-                    for (position in 3 until minOf(packet.size - 1, 15)) {
-                        val value = packet[position].toInt() and 0xff
-                        if (value != 0 && value != 0xff) {
-                            ringHrvProxySum += value
-                            ringHrvProxyCount += 1
-                        }
+                    // Sequential requests prevent burst writes to the BLE UART.
+                    // Never send firmware/settings commands, just history pages.
+                    val nextPage = ringHrvLog.expectedPage
+                    val accepted = index == 0 && ringHrvLog.headerReceived ||
+                        index > 0 && nextPage > expectedBefore
+                    if (accepted && nextPage in 1..ringHrvLog.pageCount &&
+                        !completed.get()) {
+                        mainHandler.postDelayed(
+                            { if (!completed.get()) ringSend(57, byteArrayOf(nextPage.toByte())) },
+                            160L,
+                        )
                     }
                 }
 
