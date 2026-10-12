@@ -36,7 +36,7 @@ void main() {
     await SalusAppearance.toggle();
     expect(SalusAppearance.light.value,isFalse);
     final prefs=await SharedPreferences.getInstance();
-    expect(prefs.getBool('salus_premium_light_v1'),false);
+    expect(prefs.getBool('salus_premium_light_v2'),false);
     expect(prefs.getString('healthy_me_state_v03'),isNull);
     expect(prefs.getString('salus_diet_log_v1'),isNull);
   });

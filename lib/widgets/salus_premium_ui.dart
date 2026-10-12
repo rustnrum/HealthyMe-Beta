@@ -2,19 +2,20 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'salus_premium_visuals.dart';
 
 /// The premium overview palette is independent of legacy Salus pages so those
 /// pages remain legible until their hard-coded dark colors are migrated.
 class SalusAppearance {
-  static const _key = 'salus_premium_light_v1';
-  static final ValueNotifier<bool> light = ValueNotifier<bool>(true);
+  static const _key = 'salus_premium_light_v2';
+  static final ValueNotifier<bool> light = ValueNotifier<bool>(false);
   static bool _loaded = false;
   static Future<void> load() async {
     if (_loaded) return;
     _loaded = true;
     try {
       final prefs = await SharedPreferences.getInstance();
-      light.value = prefs.getBool(_key) ?? true;
+      light.value = prefs.getBool(_key) ?? false;
     } catch (_) { /* No device preferences in tests; use light default. */ }
   }
   static Future<void> toggle() async {
@@ -27,19 +28,19 @@ class SalusAppearance {
 class SalusSkin {
   final bool light;
   const SalusSkin(this.light);
-  Color get canvas => light ? const Color(0xfff6f8f7) : const Color(0xff071118);
-  Color get panel => light ? Colors.white : const Color(0xff14232a);
-  Color get ink => light ? const Color(0xff102d28) : const Color(0xfff4f8f6);
-  Color get secondary => light ? const Color(0xff627472) : const Color(0xffa2bab8);
-  Color get muted => light ? const Color(0xff899795) : const Color(0xff79918f);
-  Color get accent => light ? const Color(0xff235f4d) : const Color(0xff60e6b1);
-  Color get border => light ? const Color(0xffe8eeeb) : const Color(0xff294038);
-  Color get track => light ? const Color(0xffe9efeb) : const Color(0xff2b3d40);
-  static const Color green = Color(0xff36b974);
-  static const Color blue = Color(0xff69a6ed);
-  static const Color aqua = Color(0xff49c5bf);
-  static const Color orange = Color(0xffef9957);
-  static const Color purple = Color(0xffa18bee);
+  Color get canvas => light ? const Color(0xfff6f8f7) : const Color(0xff050d16);
+  Color get panel => light ? Colors.white : const Color(0xff0d1e2b);
+  Color get ink => light ? const Color(0xff102d28) : const Color(0xfff4f9fc);
+  Color get secondary => light ? const Color(0xff627472) : const Color(0xffabc0c9);
+  Color get muted => light ? const Color(0xff899795) : const Color(0xff77919d);
+  Color get accent => light ? const Color(0xff235f4d) : const Color(0xff03d8f4);
+  Color get border => light ? const Color(0xffe8eeeb) : const Color(0xff274554);
+  Color get track => light ? const Color(0xffe9efeb) : const Color(0xff274554);
+  static const Color green = Color(0xff12e3a2);
+  static const Color blue = Color(0xff4b9df9);
+  static const Color aqua = Color(0xff03d8f4);
+  static const Color orange = Color(0xffffa32a);
+  static const Color purple = Color(0xffb785ff);
 }
 
 class PremiumSection extends StatelessWidget {
@@ -61,15 +62,8 @@ class PremiumCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
   final VoidCallback? onTap;
-  @override Widget build(BuildContext context) {
-    final p=SalusSkin(SalusAppearance.light.value);
-    return Material(color:p.panel,borderRadius:BorderRadius.circular(20),
-      child:InkWell(onTap:onTap,borderRadius:BorderRadius.circular(20),child:Container(
-        padding:padding,
-        decoration:BoxDecoration(borderRadius:BorderRadius.circular(20),border:Border.all(color:p.border),
-          boxShadow:p.light?[BoxShadow(color:Colors.black.withValues(alpha:0.025),blurRadius:16,offset:const Offset(0,5))]:const []),
-        child:child)));
-  }
+  @override Widget build(BuildContext context) => SalusGlass(
+    padding: padding, onTap: onTap, child: child);
 }
 
 class PremiumTitle extends StatelessWidget {

@@ -7,6 +7,7 @@ import '../../services/ai_meal_planner_service.dart';
 import '../../state/diet_log_state.dart';
 import '../../state/today_plan_state.dart';
 import '../../widgets/salus_premium_ui.dart';
+import '../../widgets/salus_premium_visuals.dart';
 import '../diet/food_visual_overview.dart';
 
 /// All nutrition figures are actual food log values. Planned meals are never
@@ -101,13 +102,13 @@ class _SalusNutritionOverviewState extends ConsumerState<SalusNutritionOverview>
       final macros=macroKnown?[protein*4,carbs*4,fat*9]:<double>[];
       final past=[for(var i=6;i>=0;i--)DateTime.now().subtract(Duration(days:i))];
       return ColoredBox(color:p.canvas,child:ListView(padding:const EdgeInsets.fromLTRB(16,17,16,35),children:[
-        Row(children:[Expanded(child:PremiumTitle(subtitle:'YOUR FOOD & YOUR GOALS',title:'Nutrition')),const PremiumThemeButton()]),
+        Row(children:[Expanded(child:SalusHeading('Nutrition',caption:'YOUR FOOD & YOUR GOALS')),const PremiumThemeButton()]),
         const SizedBox(height:12),Row(children:[IconButton(onPressed:()=>setState(()=>_offset--),icon:Icon(Icons.chevron_left,color:p.accent)),
           Expanded(child:Center(child:Text(_offset==0?'Today · ${date.month}/${date.day}/${date.year}':'${date.month}/${date.day}/${date.year}',style:TextStyle(color:p.ink,fontWeight:FontWeight.w700)))),
           IconButton(onPressed:_offset>=0?null:()=>setState(()=>_offset++),icon:Icon(Icons.chevron_right,color:p.accent))]),
         const SizedBox(height:10),PremiumCard(child:Column(children:[
           Row(children:[
-            PremiumRing(value:_goals['Calories']==null?null:kcal,maximum:_goals['Calories']??1,center:kcal==null?'—':'${kcal.round()}',caption:_goals['Calories']==null?'kcal logged':'of ${_goals['Calories']!.round()} kcal',size:133,color:SalusSkin.blue),
+            SalusMacroRing(protein:protein,carbs:carbs,fat:fat,kcal:kcal,target:_goals['Calories'],size:143),
             const SizedBox(width:20),Expanded(child:Column(children:[
               _inlineMacro(p,'Protein',protein,SalusSkin.green),const SizedBox(height:9),
               _inlineMacro(p,'Carbs',carbs,SalusSkin.aqua),const SizedBox(height:9),
@@ -119,6 +120,14 @@ class _SalusNutritionOverviewState extends ConsumerState<SalusNutritionOverview>
           ]))else Text('Macro distribution needs protein, carbs and fat entries.',style:TextStyle(color:p.muted,fontSize:11)),
           if(foods.isNotEmpty&&log.incomplete(date,(f)=>f.calories))Padding(padding:const EdgeInsets.only(top:8),child:Text('Some foods have unknown calories; total is incomplete.',style:TextStyle(color:p.secondary,fontSize:11))),
         ])),
+        const SizedBox(height:12),Row(children:[
+          Expanded(child:_quickKpi('Calories',kcal,'kcal',SalusV.orange,Icons.local_fire_department)),const SizedBox(width:8),
+          Expanded(child:_quickKpi('Protein',protein,'g',SalusV.green,Icons.fitness_center)),const SizedBox(width:8),
+          Expanded(child:_quickKpi('Carbs',carbs,'g',SalusV.blue,Icons.grain)),
+        ]),const SizedBox(height:10),Row(children:[
+          Expanded(child:_quickKpi('Fat',fat,'g',SalusV.red,Icons.water_drop)),const SizedBox(width:8),
+          Expanded(child:_quickKpi('Fiber',fiber,'g',SalusV.purple,Icons.eco)),
+        ]),
         const SizedBox(height:12),PremiumCard(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Row(children:[Icon(Icons.eco_outlined,color:SalusSkin.green),const SizedBox(width:8),Text('Fiber',style:TextStyle(color:p.ink,fontSize:16,fontWeight:FontWeight.w700))]),
           PremiumProgress(label:'Logged fiber',value:fiber,target:_goals['Fiber'],color:SalusSkin.green),
@@ -158,7 +167,13 @@ class _SalusNutritionOverviewState extends ConsumerState<SalusNutritionOverview>
         ])),const SizedBox(height:7),Row(mainAxisAlignment:MainAxisAlignment.center,children:[_legend(p,SalusSkin.blue,'Planned, if complete'),const SizedBox(width:16),_legend(p,SalusSkin.green,'Logged')]),
         const SizedBox(height:7),Text('Planned recipe figures are AI estimates; missing nutrition is never filled in.',textAlign:TextAlign.center,style:TextStyle(color:p.muted,fontSize:10)),
         ])),
-        const SizedBox(height:20),PremiumSection(title:"Today's meals",trailing:'Calendar',onTap:widget.onCalendar),
+        const SizedBox(height:14),SalusGlass(glow:SalusV.green,onTap:widget.onDiscover,child:Row(children:[
+ ClipRRect(borderRadius:BorderRadius.circular(11),child:Image.asset('assets/premium/meal_illustration.jpg',width:64,height:64,fit:BoxFit.cover)),
+ const SizedBox(width:10),const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+ Text('Find meals that fit your goals',style:TextStyle(color:SalusV.ink,fontWeight:FontWeight.w800,fontSize:13)),
+ SizedBox(height:5),Text('Illustration · browse recipe ideas, not your food log',style:TextStyle(color:SalusV.secondary,fontSize:10))])),
+ const Icon(Icons.chevron_right,color:SalusV.cyan)])),
+const SizedBox(height:20),PremiumSection(title:"Today's meals",trailing:'Calendar',onTap:widget.onCalendar),
         const SizedBox(height:8),for(final slot in salusMealSlots)...[
           PremiumCard(onTap:widget.onJournal,child:Row(children:[
             if(foods.where((f)=>f.slot==slot&&f.imageUrl.trim().isNotEmpty).isNotEmpty)
@@ -182,6 +197,11 @@ class _SalusNutritionOverviewState extends ConsumerState<SalusNutritionOverview>
     if(protein<target)return 'Logged protein is ${(target-protein).round()} g below your selected target so far. Review later meals for a protein-rich option; this is not a full-day prediction.';
     return 'Your logged protein has reached your selected target. Review total calories, fiber, and training alongside this result.';
   }
+  Widget _quickKpi(String name,double? value,String unit,Color color,IconData icon)=>
+    SalusGlass(glow:color,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+      Icon(icon,color:color,size:19),const SizedBox(height:7),
+      Text(name,style:const TextStyle(color:SalusV.secondary,fontSize:11)),
+      Text(value==null?'—':'${value.round()} $unit',style:const TextStyle(color:SalusV.ink,fontSize:15,fontWeight:FontWeight.w900))]));
   Widget _planValue(SalusSkin p,String label,double? value,String unit)=>Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Text(label,style:TextStyle(color:p.secondary,fontSize:11)),const SizedBox(height:4),
     Text(value==null?'—':'${value.round()} $unit',style:TextStyle(color:p.ink,fontSize:16,fontWeight:FontWeight.w800)),

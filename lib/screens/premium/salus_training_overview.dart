@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../state/app_state.dart';
 import '../../state/workout_state.dart';
 import '../../widgets/salus_premium_ui.dart';
+import '../../widgets/salus_premium_visuals.dart';
 
 /// Analytics only from completed sessions. The colored muscle groups describe
 /// sets assigned to exercises by a simple, disclosed name mapping; they are
@@ -45,7 +46,10 @@ class _SalusTrainingOverviewState extends ConsumerState<SalusTrainingOverview>{
         h.workouts.where((w)=>w.start.year==d.year&&w.start.month==d.month&&w.start.day==d.day).length).toDouble());}
     final upcoming=[...state.scheduled]..sort((a,b)=>a.scheduledFor.compareTo(b.scheduledFor));
     return ColoredBox(color:p.canvas,child:ListView(padding:const EdgeInsets.fromLTRB(16,16,16,40),children:[
-      Row(children:[Expanded(child:PremiumTitle(subtitle:'MOVEMENT & STRENGTH',title:'Training')),const PremiumThemeButton()]),
+      Row(children:[Expanded(child:SalusHeading('Training',caption:'MOVEMENT & STRENGTH')),const PremiumThemeButton()]),
+      const SizedBox(height:13),const SalusWeekStrip(),const SizedBox(height:16),
+      SalusPhotoHero(asset:'assets/premium/training_hero.jpg',title:'Build a\nstronger you.',
+        subtitle:'Keep up your program, one session at a time.',height:157,buttonText:'View workouts',onTap:widget.onToday),
       const SizedBox(height:18),Row(children:[
         Expanded(child:PremiumCard(child:_stat(p,Icons.fitness_center_rounded,'Workouts','${completed.length+connected.length}','completed this week',SalusSkin.blue))),
         const SizedBox(width:8),Expanded(child:PremiumCard(child:_stat(p,Icons.event_rounded,'Planned','${planned.length}','scheduled this week',SalusSkin.green))),
@@ -53,14 +57,17 @@ class _SalusTrainingOverviewState extends ConsumerState<SalusTrainingOverview>{
       ]),
       const SizedBox(height:18),const PremiumSection(title:'Training frequency · 7 days'),const SizedBox(height:8),
       PremiumCard(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        PremiumLineChart(values:activity,height:145,color:SalusSkin.blue),
+        if(completed.isNotEmpty||connected.isNotEmpty)PremiumLineChart(values:activity,height:145,color:SalusSkin.blue)
+        else const Padding(padding:EdgeInsets.symmetric(vertical:24),child:Text('No completed training sessions recorded this week.',style:TextStyle(color:SalusV.secondary,fontSize:12))),
         Text('Completed sessions by date (including connected workouts; overlapping sources may duplicate sessions).',style:TextStyle(color:p.secondary,fontSize:11)),
       ])),
       const SizedBox(height:21),const PremiumSection(title:'Muscle workload'),const SizedBox(height:8),
       PremiumCard(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        if(programSets==0)Text('Complete a workout containing exercises to see your program distribution.',style:TextStyle(color:p.secondary,fontSize:13)),
+        Center(child:ClipRRect(borderRadius:BorderRadius.circular(12),child:Image.asset('assets/premium/muscle_reference.jpg',height:225,fit:BoxFit.contain))),
+        const SizedBox(height:8),Text('Anatomy reference illustration · colors are not measured activation.',style:TextStyle(color:p.muted,fontSize:10)),
+        const SizedBox(height:10),
+        if(programSets==0)Text('Log a completed workout to show actual sets by muscle group.',style:TextStyle(color:p.secondary,fontSize:13)),
         if(programSets>0)...[
-          SizedBox(height:190,child:Center(child:CustomPaint(size:const Size(145,178),painter:_MuscleDiagram(p,counts)))),
           const SizedBox(height:8),for(var i=0;i<groups.length;i++)_muscleRow(p,groups[i],counts[groups[i]]!,programSets,colors[i]),
           if(unclassified>0)Text('$unclassified sets are unclassified because the exercise name has no verified muscle mapping.',style:TextStyle(color:p.secondary,fontSize:11)),
         ],
@@ -92,25 +99,4 @@ class _SalusTrainingOverviewState extends ConsumerState<SalusTrainingOverview>{
     Expanded(child:ClipRRect(borderRadius:BorderRadius.circular(9),child:LinearProgressIndicator(value:all==0?0:count/all,minHeight:9,color:color,backgroundColor:p.track))),
     const SizedBox(width:9),Text('$count sets',style:TextStyle(color:p.secondary,fontSize:11)),
   ]));
-}
-
-/// Deliberately diagrammatic, not medical anatomy. Front-body zones are tinted
-/// only where completed workout names map to the selected category.
-class _MuscleDiagram extends CustomPainter{
-  const _MuscleDiagram(this.p,this.counts);
-  final SalusSkin p;final Map<String,int> counts;
-  Color tint(String group)=>counts[group]!>0? _SalusTrainingOverviewState.colors[_SalusTrainingOverviewState.groups.indexOf(group)]:p.track;
-  @override void paint(Canvas c,Size s){
-    void rect(double x,double y,double w,double h,double r,String g){c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x,y,w,h),Radius.circular(r)),Paint()..color=tint(g));}
-    final outer=Paint()..color=p.secondary.withValues(alpha:.8)..style=PaintingStyle.stroke..strokeWidth=1;
-    c.drawOval(const Rect.fromLTWH(60,2,26,26),outer);
-    rect(50,36,17,14,6,'Shoulders');rect(79,36,17,14,6,'Shoulders');
-    rect(60,37,13,21,3,'Chest');rect(74,37,13,21,3,'Chest');
-    rect(51,53,10,38,5,'Arms');rect(85,53,10,38,5,'Arms');
-    rect(64,62,18,34,5,'Core');
-    rect(60,99,15,54,5,'Legs');rect(78,99,15,54,5,'Legs');
-    rect(62,157,12,16,3,'Legs');rect(79,157,12,16,3,'Legs');
-    final title=TextPainter(text:TextSpan(text:'FRONT',style:TextStyle(color:p.muted,fontSize:9,letterSpacing:2)),textDirection:TextDirection.ltr)..layout();title.paint(c,const Offset(2,4));
-  }
-  @override bool shouldRepaint(covariant _MuscleDiagram old)=>old.counts!=counts||old.p.light!=p.light;
 }

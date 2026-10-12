@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../state/navigation_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/module_menu_button.dart';
 import '../../widgets/salus_voice_launcher.dart';
 import '../../widgets/salus_widgets.dart';
 import '../labs_screen.dart';
-import 'health_home_screen.dart';
+import '../premium/salus_premium_health.dart';
+import '../../widgets/salus_premium_ui.dart';
 import 'health_vitals_screen.dart';
 
 class HealthPalette {
@@ -28,7 +31,7 @@ class HealthShell extends StatefulWidget {
 
 class _HealthShellState extends State<HealthShell> {
   int _index = 0;
-  static const _pages = [HealthHomeScreen(), HealthVitalsScreen(), LabsScreen(embedded: true)];
+  static const _pages = [SalusPremiumHealth(), HealthVitalsScreen(), LabsScreen(embedded: true)];
   static const _titles = ['Health', 'Vitals', 'Labs'];
 
   @override
@@ -37,7 +40,7 @@ class _HealthShellState extends State<HealthShell> {
     child: Scaffold(
       floatingActionButton: SalusVoiceLauncher(
         onPressed: () => Navigator.of(context).pushNamed('/voice')),
-      appBar: AppBar(
+      appBar: _index == 0 ? null : AppBar(
         flexibleSpace: Container(decoration: const BoxDecoration(image: DecorationImage(image: AssetImage(SalusAssets.leatherTexture), fit: BoxFit.cover, opacity: 0.88))),
         leading: IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.chevron_left_rounded, size: 30)),
         title: Row(children: [
@@ -57,7 +60,19 @@ class _HealthShellState extends State<HealthShell> {
         }), const SizedBox(width: 6)],
       ),
       body: SafeArea(top: false, child: IndexedStack(index: _index, children: _pages)),
-      bottomNavigationBar: _HealthBottomNav(index: _index, onChanged: (value) => setState(() => _index = value)),
+      bottomNavigationBar: _index == 0 ? PremiumDestinationBar(index:3,
+        items:const [
+          (Icons.home_rounded,'Home'),
+          (Icons.restaurant_rounded,'Nutrition'),
+          (Icons.fitness_center_rounded,'Training'),
+          (Icons.favorite_rounded,'Health'),
+          (Icons.more_horiz_rounded,'More')],
+        onChanged:(v){
+          if(v==0||v==4){Navigator.of(context).popUntil((r)=>r.isFirst);}
+          if(v==4)ProviderScope.containerOf(context,listen:false).read(navigationProvider.notifier).go(4);
+          if(v==1)Navigator.of(context).pushReplacementNamed('/diet');
+          if(v==2)Navigator.of(context).pushReplacementNamed('/workout');
+        }) : _HealthBottomNav(index:_index,onChanged:(value)=>setState(()=>_index=value)),
     ),
   );
 }
