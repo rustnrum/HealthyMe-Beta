@@ -8,11 +8,10 @@ import '../models/models.dart';
 import '../models/workout_models.dart';
 import '../state/app_state.dart';
 import '../state/workout_state.dart';
-import '../state/navigation_provider.dart';
 import '../widgets/command_card.dart';
 import '../widgets/design_widgets.dart';
 import '../widgets/module_menu_button.dart';
-import '../widgets/salus_premium_ui.dart';
+import '../widgets/salus_premium_visuals.dart';
 import '../widgets/salus_voice_launcher.dart';
 
 class WorkoutScreen extends ConsumerStatefulWidget {
@@ -49,7 +48,7 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
     return Scaffold(
       floatingActionButton: SalusVoiceLauncher(
         onPressed: () => Navigator.of(context).pushNamed('/voice')),
-      backgroundColor: _tab == 'Overview' ? const Color(0xfff6f8f7) : AppTheme.background,
+      backgroundColor: SalusV.background,
       appBar: _tab == 'Overview' ? null : AppBar(
         title: const Text('Workout'),
         actions: [
@@ -60,23 +59,10 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
           const SizedBox(width: 6),
         ],
       ),
-      bottomNavigationBar: _tab == 'Overview' ? PremiumDestinationBar(index:2,
-        items:const [
-          (Icons.home_rounded,'Home'),
-          (Icons.restaurant_rounded,'Nutrition'),
-          (Icons.fitness_center_rounded,'Training'),
-          (Icons.favorite_rounded,'Health'),
-          (Icons.more_horiz_rounded,'More')],
-        onChanged:(v){
-          if(v==0||v==4)Navigator.of(context).popUntil((r)=>r.isFirst);
-          if(v==4)ref.read(navigationProvider.notifier).go(4);
-          if(v==1)Navigator.of(context).pushReplacementNamed('/diet');
-          if(v==3)Navigator.of(context).pushReplacementNamed('/health');
-        }) : null,
       body: SafeArea(
         child: Column(
           children: [
-            if (_tab != 'Overview') Padding(
+            Padding(
               padding: const EdgeInsets.fromLTRB(18, 4, 18, 10),
               child: HmTabs(
                 labels: const ['Overview', 'Today', 'Schedule', 'Templates', 'History'],

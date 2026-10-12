@@ -7,22 +7,45 @@ import 'salus_premium_visuals.dart';
 /// The premium overview palette is independent of legacy Salus pages so those
 /// pages remain legible until their hard-coded dark colors are migrated.
 class SalusAppearance {
-  static const _key = 'salus_premium_light_v2';
+  static const _key = 'salus_premium_light_v2'; // Preserve Build 75 preference.
+  static const _modeKey = 'salus_appearance_mode_v1';
   static final ValueNotifier<bool> light = ValueNotifier<bool>(false);
+  static String mode = 'dark';
   static bool _loaded = false;
+  static bool _observing = false;
+  static void _apply() {
+    final selectedLight = mode == 'light' ||
+      (mode == 'system' && WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.light);
+    SalusV.lightMode = selectedLight;
+    light.value = selectedLight;
+  }
+  static void onSystemBrightnessChanged() {
+    if (mode == 'system') _apply();
+  }
   static Future<void> load() async {
     if (_loaded) return;
     _loaded = true;
+    if (!_observing) { WidgetsBinding.instance.addObserver(_AppearanceObserver()); _observing = true; }
     try {
       final prefs = await SharedPreferences.getInstance();
-      light.value = prefs.getBool(_key) ?? false;
-    } catch (_) { /* No device preferences in tests; use light default. */ }
+      final stored = prefs.getString(_modeKey);
+      mode = (stored == 'light' || stored == 'dark' || stored == 'system')
+          ? stored! : ((prefs.getBool(_key) ?? false) ? 'light' : 'dark');
+      _apply();
+    } catch (_) { _apply(); }
   }
-  static Future<void> toggle() async {
-    light.value = !light.value;
+  static Future<void> setMode(String requested) async {
+    if (requested != 'light' && requested != 'dark' && requested != 'system') return;
+    mode = requested;
+    _apply();
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_modeKey, requested);
     await prefs.setBool(_key, light.value);
   }
+  static Future<void> toggle() => setMode(light.value ? 'dark' : 'light');
+}
+class _AppearanceObserver extends WidgetsBindingObserver {
+  @override void didChangePlatformBrightness() => SalusAppearance.onSystemBrightnessChanged();
 }
 
 class SalusSkin {
@@ -80,8 +103,15 @@ class PremiumTitle extends StatelessWidget {
 class PremiumThemeButton extends StatelessWidget {
   const PremiumThemeButton({super.key});
   @override Widget build(BuildContext context) {final p=SalusSkin(SalusAppearance.light.value);
-    return IconButton(tooltip:p.light?'Switch dashboards to dark':'Switch dashboards to light',
-      onPressed:()=>SalusAppearance.toggle(), icon:Icon(p.light?Icons.dark_mode_outlined:Icons.light_mode_outlined,color:p.accent));
+    return PopupMenuButton<String>(
+      tooltip:'Appearance: Light, Dark or Follow System',
+      icon:Icon(p.light?Icons.light_mode_outlined:Icons.dark_mode_outlined,color:p.accent),
+      onSelected:(value)=>SalusAppearance.setMode(value),
+      itemBuilder:(context)=>const [
+        PopupMenuItem(value:'light',child:Text('Light theme')),
+        PopupMenuItem(value:'dark',child:Text('Dark theme')),
+        PopupMenuItem(value:'system',child:Text('Follow system')),
+      ]);
   }
 }
 

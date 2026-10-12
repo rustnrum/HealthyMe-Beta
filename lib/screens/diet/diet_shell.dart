@@ -5,7 +5,6 @@ import '../../widgets/salus_voice_launcher.dart';
 import '../../widgets/salus_widgets.dart';
 import 'diet_home_screen.dart';
 import '../premium/salus_nutrition_overview.dart';
-import '../../widgets/salus_premium_ui.dart';
 import 'diet_menu_screen.dart';
 import 'ai_meal_discovery_screen.dart';
 import 'meal_calendar_screen.dart';
@@ -73,15 +72,7 @@ class _DietShellState extends State<DietShell> {
           MealCalendarScreen(onDiscover: () => setState(() => _index = 1)),
           const GroceryListScreen(),
         ])),
-        bottomNavigationBar: _index == 0
-          ? PremiumDestinationBar(index:_index,onChanged:(value)=>setState(()=>_index=value),items:const [
-              (Icons.pie_chart_outline,'Overview'),
-              (Icons.auto_awesome_outlined,'Discover'),
-              (Icons.restaurant_menu_outlined,'Meals'),
-              (Icons.calendar_today_outlined,'Calendar'),
-              (Icons.shopping_cart_outlined,'Grocery'),
-            ])
-          : _DietBottomNav(index: _index, onChanged: (value) => setState(() => _index = value)),
+        bottomNavigationBar: _DietBottomNav(index:_index, onChanged:(value)=>setState(()=>_index=value)),
       ),
     );
   }

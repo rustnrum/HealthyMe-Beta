@@ -12,7 +12,6 @@ import '../widgets/salus_voice_launcher.dart';
 import 'activity_screen.dart';
 import 'body_screen.dart';
 import 'premium/salus_premium_home.dart';
-import '../widgets/salus_premium_ui.dart';
 import 'more_screen.dart';
 import 'sleep_screen.dart';
 
@@ -117,24 +116,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
               ],
             ),
       body: SafeArea(top: false, bottom: false, child: IndexedStack(index: index, children: screens)),
-      bottomNavigationBar: index == 0
-        ? PremiumDestinationBar(index: 0,items: const [
-            (Icons.home_rounded, 'Home'),
-            (Icons.restaurant_rounded, 'Nutrition'),
-            (Icons.fitness_center_rounded, 'Training'),
-            (Icons.favorite_outline, 'Health'),
-            (Icons.more_horiz, 'More'),
-          ],onChanged:(destination){
-            switch(destination){
-              case 0: break;
-              case 1: Navigator.of(context).pushNamed('/diet'); break;
-              case 2: Navigator.of(context).pushNamed('/workout'); break;
-              case 3: Navigator.of(context).pushNamed('/health'); break;
-              case 4: ref.read(navigationProvider.notifier).go(4); break;
-            }
-          })
-        : _SalusBottomNav(index:index,
-            onChanged:ref.read(navigationProvider.notifier).go),
+      bottomNavigationBar: _SalusBottomNav(
+        index:index, onChanged:ref.read(navigationProvider.notifier).go),
     );
   }
 }

@@ -1,24 +1,25 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-/// Build 75 premium visual language. These are presentation-only widgets;
+/// Build 76 light/dark premium visual language. These are presentation-only widgets;
 /// no fake numbers are injected, and null is always treated as unavailable.
 class SalusV {
-  static const background = Color(0xff050d16);
-  static const panel = Color(0xff0d1e2b);
-  static const panelLow = Color(0xff081723);
-  static const border = Color(0xff274554);
-  static const ink = Color(0xfff4f9fc);
-  static const secondary = Color(0xffabc0c9);
-  static const muted = Color(0xff77919d);
-  static const cyan = Color(0xff03d8f4);
+  static bool lightMode = false;
+  static Color get background => lightMode ? Color(0xfff4f8fb) : Color(0xff050d16);
+  static Color get panel => lightMode ? Colors.white : Color(0xff0d1e2b);
+  static Color get panelLow => lightMode ? Color(0xffe8f1f5) : Color(0xff081723);
+  static Color get border => lightMode ? Color(0xffcddde6) : Color(0xff274554);
+  static Color get ink => lightMode ? Color(0xff112b3b) : Color(0xfff4f9fc);
+  static Color get secondary => lightMode ? Color(0xff4a6470) : Color(0xffabc0c9);
+  static Color get muted => lightMode ? Color(0xff607782) : Color(0xff77919d);
+  static Color get shadow => lightMode ? Color(0x160c334d) : Color(0x4a000000);
+  static const cyan = Color(0xff00b4d0);
   static const blue = Color(0xff4b9df9);
-  static const green = Color(0xff12e3a2);
+  static const green = Color(0xff12c58e);
   static const orange = Color(0xffffa32a);
   static const red = Color(0xffff607a);
-  static const purple = Color(0xffb785ff);
+  static const purple = Color(0xffac83e8);
   static const yellow = Color(0xfffbd343);
-  static const Color shadow = Color(0x4a000000);
 }
 
 class SalusGlass extends StatelessWidget {
@@ -33,10 +34,10 @@ class SalusGlass extends StatelessWidget {
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(radius),
       gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
-        colors: [glow?.withValues(alpha: 0.13) ?? const Color(0xff112937),
+        colors: [glow?.withValues(alpha: SalusV.lightMode ? 0.09 : 0.19) ?? SalusV.panelLow,
           SalusV.panel, SalusV.panelLow]),
       border: Border.all(color: glow?.withValues(alpha: .40) ?? SalusV.border, width: 1),
-      boxShadow: const [BoxShadow(color: SalusV.shadow, blurRadius: 18, offset: Offset(0, 7))],
+      boxShadow: [BoxShadow(color: SalusV.shadow, blurRadius: 18, offset: Offset(0, 7))],
     ),
     child: Material(color: Colors.transparent, borderRadius: BorderRadius.circular(radius),
       child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(radius),
@@ -50,10 +51,10 @@ class SalusSection extends StatelessWidget {
   final String? trailing;
   final VoidCallback? onTap;
   @override Widget build(BuildContext context) => Row(children: [
-    Expanded(child: Text(title, style: const TextStyle(color: SalusV.ink,
+    Expanded(child: Text(title, style: TextStyle(color: SalusV.ink,
       fontWeight: FontWeight.w800, fontSize: 17))),
     if (trailing != null) TextButton(onPressed: onTap,
-      child: Text(trailing!, style: const TextStyle(color: SalusV.cyan, fontSize: 12))),
+      child: Text(trailing!, style: TextStyle(color: SalusV.cyan, fontSize: 12))),
   ]);
 }
 
@@ -64,10 +65,10 @@ class SalusHeading extends StatelessWidget {
   final Widget? trailing;
   @override Widget build(BuildContext context) => Row(children: [
     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (caption != null) Text(caption!,style:const TextStyle(color:SalusV.secondary,
+      if (caption != null) Text(caption!,style:TextStyle(color:SalusV.secondary,
         fontSize:11,letterSpacing:2,fontWeight:FontWeight.w700)),
-      if (caption != null) const SizedBox(height: 5),
-      Text(title,style:const TextStyle(color: SalusV.ink,fontSize:27,fontWeight:FontWeight.w900,
+      if (caption != null) SizedBox(height: 5),
+      Text(title,style:TextStyle(color: SalusV.ink,fontSize:27,fontWeight:FontWeight.w900,
         letterSpacing:-.6)),
     ])),
     if (trailing != null) trailing!,
@@ -86,7 +87,7 @@ class SalusWeekStrip extends StatelessWidget {
         return Column(children: [
           Text(names[d.weekday-1],style: TextStyle(color:selected?SalusV.cyan:SalusV.secondary,
             fontSize:11,fontWeight:selected?FontWeight.w800:FontWeight.w500)),
-          const SizedBox(height:8),
+          SizedBox(height:8),
           Container(height:37,width:37,alignment:Alignment.center,
             decoration:BoxDecoration(shape:BoxShape.circle,
               color:selected?SalusV.cyan:SalusV.panel,
@@ -112,23 +113,50 @@ class SalusPhotoHero extends StatelessWidget {
     child:Material(color:SalusV.panel,child:InkWell(onTap:onTap,child:SizedBox(height:height,
       child:Stack(fit:StackFit.expand,children:[
         Image.asset(asset,fit:BoxFit.cover,alignment:imageAlignment),
-        const DecoratedBox(decoration:BoxDecoration(gradient:LinearGradient(
+        DecoratedBox(decoration:BoxDecoration(gradient:LinearGradient(
           begin:Alignment.centerLeft,end:Alignment.centerRight,
           colors:[Color(0xee07131e),Color(0x98091623),Color(0x11060f19)]))),
-        Padding(padding:const EdgeInsets.all(18),child:Column(
+        Padding(padding:EdgeInsets.all(18),child:Column(
           crossAxisAlignment:CrossAxisAlignment.start,mainAxisAlignment:MainAxisAlignment.center,
-          children:[Text(title,style:const TextStyle(color:Colors.white,fontSize:20,
+          children:[Text(title,style:TextStyle(color:Colors.white,fontSize:20,
             fontWeight:FontWeight.w900,height:1.2)),
-            if(subtitle!=null)...[const SizedBox(height:8),SizedBox(width:195,
-              child:Text(subtitle!,style:const TextStyle(color:Color(0xffddebf0),fontSize:11)))],
-            if(buttonText!=null)...[const SizedBox(height:11),Container(
-              padding:const EdgeInsets.symmetric(horizontal:12,vertical:7),
+            if(subtitle!=null)...[SizedBox(height:8),SizedBox(width:195,
+              child:Text(subtitle!,style:TextStyle(color:Color(0xffddebf0),fontSize:11)))],
+            if(buttonText!=null)...[SizedBox(height:11),Container(
+              padding:EdgeInsets.symmetric(horizontal:12,vertical:7),
               decoration:BoxDecoration(color:SalusV.cyan,borderRadius:BorderRadius.circular(30)),
-              child:Text(buttonText!,style:const TextStyle(color:SalusV.background,
+              child:Text(buttonText!,style:TextStyle(color:SalusV.background,
                 fontWeight:FontWeight.w800,fontSize:11)))],
           ])),
       ])))),
   );
+}
+
+/// Built-in illustration without mountains, stock people, or fake metrics.
+class SalusColorHero extends StatelessWidget {
+  const SalusColorHero({super.key,required this.title,this.onTap});
+  final String title;
+  final VoidCallback? onTap;
+  @override Widget build(BuildContext context) => ClipRRect(
+    borderRadius:BorderRadius.circular(20),child:Material(color:SalusV.panel,
+      child:InkWell(onTap:onTap,child:Container(height:134,
+        decoration:BoxDecoration(
+          gradient:LinearGradient(begin:Alignment.topLeft,end:Alignment.bottomRight,
+            colors: SalusV.lightMode ?
+              [Color(0xff185779),Color(0xff148e9c),Color(0xff12a483)] :
+              [Color(0xff061d38),Color(0xff10385a),Color(0xff06655d)])),
+        child:Stack(children:[
+          Positioned(right:-34,top:-60,child:Container(width:195,height:195,
+            decoration:BoxDecoration(shape:BoxShape.circle,border:Border.all(color:SalusV.cyan.withValues(alpha:.52),width:22)))),
+          Positioned(right:18,bottom:-61,child:Container(width:151,height:151,
+            decoration:BoxDecoration(shape:BoxShape.circle,border:Border.all(color:SalusV.green.withValues(alpha:.48),width:17)))),
+          Positioned(left:-45,top:20,child:Container(width:130,height:130,
+            decoration:BoxDecoration(shape:BoxShape.circle,color:SalusV.purple.withValues(alpha:.16)))),
+          Padding(padding:EdgeInsets.symmetric(horizontal:19,vertical:16),
+            child:Row(children:[Expanded(child:Text(title,style:TextStyle(color:Colors.white,
+              fontSize:22,fontWeight:FontWeight.w900,height:1.2))),
+              Icon(Icons.arrow_forward_ios,color:Colors.white,size:19)])),
+        ])))));
 }
 
 /// A circular metric that does NOT imply completeness if goal is unknown.
@@ -147,7 +175,7 @@ class SalusGauge extends StatelessWidget {
         Text(center,style:TextStyle(color:SalusV.ink,fontWeight:FontWeight.w900,
           fontSize:size>=100?25:18)),
         if(caption!=null)Text(caption!,textAlign:TextAlign.center,
-          style:const TextStyle(color:SalusV.secondary,fontSize:9)),
+          style:TextStyle(color:SalusV.secondary,fontSize:9)),
       ])),
     ]));
 }
@@ -180,8 +208,8 @@ class SalusMacroRing extends StatelessWidget {
       Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
         Text(kcal==null?'—':'${kcal!.round()}',style:TextStyle(
           color:SalusV.ink,fontWeight:FontWeight.w900,fontSize:size/5.2)),
-        const Text('kcal logged',style:TextStyle(color:SalusV.secondary,fontSize:10)),
-        if(target!=null)Text('of ${target!.round()}',style:const TextStyle(color:SalusV.muted,fontSize:10)),
+        Text('kcal logged',style:TextStyle(color:SalusV.secondary,fontSize:10)),
+        if(target!=null)Text('of ${target!.round()}',style:TextStyle(color:SalusV.muted,fontSize:10)),
       ])),
     ]));
 }
@@ -219,26 +247,26 @@ class SalusMetricTile extends StatelessWidget {
   final VoidCallback? onTap;
   final List<double?>? chart;
   @override Widget build(BuildContext context)=>SalusGlass(glow:color,onTap:onTap,
-    padding:const EdgeInsets.all(13),child:SizedBox(height:137,
+    padding:EdgeInsets.all(13),child:SizedBox(height:137,
       child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        Row(children:[Icon(icon,color:color,size:23),const SizedBox(width:8),
-          Expanded(child:Text(label,style:const TextStyle(color:SalusV.ink,
+        Row(children:[Icon(icon,color:color,size:23),SizedBox(width:8),
+          Expanded(child:Text(label,style:TextStyle(color:SalusV.ink,
             fontSize:13,fontWeight:FontWeight.w700)))]),
-        const Spacer(),
+        Spacer(),
         Row(children:[
-          Expanded(child:Text(value,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(
+          Expanded(child:Text(value,maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(
             color:SalusV.ink,fontSize:23,fontWeight:FontWeight.w900))),
           SizedBox(width:39,height:39,child:CustomPaint(
             painter:_ArcGauge(progress,progress==null?null:1,color))),
         ]),
-        const SizedBox(height:4),
+        SizedBox(height:4),
         Text(detail,maxLines:1,overflow:TextOverflow.ellipsis,
-          style:const TextStyle(color:SalusV.secondary,fontSize:10)),
-        if(progress!=null)...[const SizedBox(height:9),ClipRRect(
+          style:TextStyle(color:SalusV.secondary,fontSize:10)),
+        if(progress!=null)...[SizedBox(height:9),ClipRRect(
           borderRadius:BorderRadius.circular(8),child:LinearProgressIndicator(
             value:progress!.clamp(0.0,1.0),minHeight:5,
             color:color,backgroundColor:SalusV.border))],
-        if(chart!=null)...[const SizedBox(height:7),SalusSparkline(values:chart!,color:color,height:22)],
+        if(chart!=null)...[SizedBox(height:7),SalusSparkline(values:chart!,color:color,height:22)],
       ])));
 }
 
@@ -246,7 +274,7 @@ class SalusSparkline extends StatelessWidget {
   const SalusSparkline({super.key,required this.values,required this.color,this.height=55});
   final List<double?> values;final Color color;final double height;
   @override Widget build(BuildContext context){
-    if(values.whereType<double>().length<2)return const SizedBox.shrink();
+    if(values.whereType<double>().length<2)return SizedBox.shrink();
     return SizedBox(height:height,width:double.infinity,
       child:CustomPaint(painter:_Spark(values,color)));
   }
@@ -277,10 +305,10 @@ class SalusColorBar extends StatelessWidget {
     required this.color,required this.label,this.unit='g'});
   final double? value,target;final Color color;final String label,unit;
   @override Widget build(BuildContext context)=>Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-    Row(children:[Expanded(child:Text(label,style:const TextStyle(color:SalusV.secondary,fontSize:12))),
+    Row(children:[Expanded(child:Text(label,style:TextStyle(color:SalusV.secondary,fontSize:12))),
       Text(value==null?'Not recorded':target==null?'${value!.round()} $unit':'${value!.round()} / ${target!.round()} $unit',
-        style:const TextStyle(color:SalusV.ink,fontSize:12,fontWeight:FontWeight.w700))]),
-    const SizedBox(height:7),ClipRRect(borderRadius:BorderRadius.circular(10),
+        style:TextStyle(color:SalusV.ink,fontSize:12,fontWeight:FontWeight.w700))]),
+    SizedBox(height:7),ClipRRect(borderRadius:BorderRadius.circular(10),
       child:LinearProgressIndicator(minHeight:7,value:target==null||value==null||target!<=0?0:(value!/target!).clamp(0.0,1.0),
         backgroundColor:SalusV.border,color:color)),
   ]);
