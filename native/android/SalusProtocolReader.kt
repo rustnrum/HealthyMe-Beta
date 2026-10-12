@@ -216,6 +216,9 @@ class SalusProtocolReader(
         private var garminRegisterIndex = 0
         private var garminPendingService: Int? = null
         private var garminRegistrationStarted = false
+        // 0 = not requested; 1 = requested; 2 = registered/no reading;
+        // 3 = rejected; 4 = no reply/write failed; 5 = value received.
+        private var garminBodyBatteryStatus = 0
 
         // ResMed read-only probe state. We intentionally do not write to any
         // proprietary characteristic. The only descriptor write is the
@@ -562,6 +565,10 @@ class SalusProtocolReader(
                                 "subscriptionCount" to cpapSubscriptions,
                                 "authenticated" to if (cpapAuthenticated) 1 else 0,
                                 "pairingRequired" to if (cpapPairingRequired) 1 else 0,
+                            )
+                        } else if (mode == "garmin") {
+                            mapOf(
+                                "garminBodyBatteryStatus" to garminBodyBatteryStatus,
                             )
                         } else if (mode == "ring") {
                             mapOf(
@@ -2091,7 +2098,13 @@ private fun parseRingSpo2(payload: ByteArray) {
 
             val service = GARMIN_SERVICES[garminRegisterIndex]
             garminPendingService = service
+            if (service == GARMIN_REALTIME_BODY_BATTERY) {
+                garminBodyBatteryStatus = 1
+            }
             if (!garminWrite(registerPacket(service))) {
+                if (service == GARMIN_REALTIME_BODY_BATTERY) {
+                    garminBodyBatteryStatus = 4
+                }
                 garminPendingService = null
                 garminRegisterIndex += 1
                 mainHandler.postDelayed({ registerNextGarmin() }, 120L)
@@ -2102,6 +2115,10 @@ private fun parseRingSpo2(payload: ByteArray) {
             mainHandler.postDelayed(
                 {
                     if (garminPendingService == service) {
+                        if (service == GARMIN_REALTIME_BODY_BATTERY &&
+                            garminBodyBatteryStatus == 1) {
+                            garminBodyBatteryStatus = 4
+                        }
                         garminPendingService = null
                         garminRegisterIndex += 1
                         registerNextGarmin()
@@ -2144,6 +2161,10 @@ private fun parseRingSpo2(payload: ByteArray) {
                 val service = u16(value, 10)
                 val status = value[12].toInt() and 0xff
                 val handle = value[13].toInt() and 0xff
+                if (service == GARMIN_REALTIME_BODY_BATTERY &&
+                    garminBodyBatteryStatus != 5) {
+                    garminBodyBatteryStatus = if (status == 0 && handle in 1..127) 2 else 3
+                }
 
                 if (status == 0 && handle in 1..127) {
                     garminHandleToService[handle] = service
@@ -2227,8 +2248,9 @@ private fun parseRingSpo2(payload: ByteArray) {
                 GARMIN_REALTIME_BODY_BATTERY -> {
                     if (payload.isNotEmpty()) {
                         val bodyBattery = payload[0].toInt()
-                        if (bodyBattery in 0..100) {
+                        if (bodyBattery in 1..100) {
                             metrics["Body battery"] = bodyBattery.toDouble()
+                            garminBodyBatteryStatus = 5
                         }
                     }
                 }

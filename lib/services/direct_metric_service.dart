@@ -255,6 +255,17 @@ class DirectMetricService {
     if (history.isNotEmpty || current.isNotEmpty) {
       await _append([...history, ...current]);
     }
+    if (resolvedProtocolId == 'garmin-family') {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(
+        'salus_garmin_body_battery_status_${device.id}',
+        diagnostics['garminBodyBatteryStatus'] ?? 0,
+      );
+      await prefs.setString(
+        'salus_garmin_body_battery_attempt_${device.id}',
+        DateTime.now().toIso8601String(),
+      );
+    }
     return DirectMetricReadResult(
       metrics: metrics, message: message, reader: reader,
       observations: observations, diagnostics: diagnostics, history: history,

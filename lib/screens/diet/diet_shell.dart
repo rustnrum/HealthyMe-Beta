@@ -4,7 +4,8 @@ import '../../widgets/module_menu_button.dart';
 import '../../widgets/salus_widgets.dart';
 import 'diet_home_screen.dart';
 import 'diet_menu_screen.dart';
-import 'diet_planning_screen.dart';
+import 'ai_meal_discovery_screen.dart';
+import 'meal_calendar_screen.dart';
 import 'grocery_list_screen.dart';
 
 class DietPalette {
@@ -28,8 +29,7 @@ class DietShell extends StatefulWidget {
 
 class _DietShellState extends State<DietShell> {
   int _index = 0;
-  static const _pages = [DietHomeScreen(), DietMenuScreen(), DietPlanningScreen(), GroceryListScreen()];
-  static const _titles = ['Today', 'Meals', 'Plan', 'Grocery'];
+  static const _titles = ['Today', 'Discover', 'My Meals', 'Calendar', 'Grocery'];
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +55,12 @@ class _DietShellState extends State<DietShell> {
             }
           }), const SizedBox(width: 6)],
         ),
-        body: SafeArea(top: false, child: IndexedStack(index: _index, children: _pages)),
+        body: SafeArea(top: false, child: IndexedStack(index: _index, children: [
+          const DietHomeScreen(), const AiMealDiscoveryScreen(),
+          const DietMenuScreen(),
+          MealCalendarScreen(onDiscover: () => setState(() => _index = 1)),
+          const GroceryListScreen(),
+        ])),
         bottomNavigationBar: _DietBottomNav(index: _index, onChanged: (value) => setState(() => _index = value)),
       ),
     );
@@ -65,14 +70,14 @@ class _DietShellState extends State<DietShell> {
 class _DietBottomNav extends StatelessWidget {
   final int index; final ValueChanged<int> onChanged;
   const _DietBottomNav({required this.index, required this.onChanged});
-  static const _items = [(Icons.today_outlined, 'Today'), (Icons.restaurant_menu_rounded, 'Meals'), (Icons.calendar_month_outlined, 'Plan'), (Icons.shopping_cart_outlined, 'Grocery')];
+  static const _items = [(Icons.today_outlined, 'Today'), (Icons.auto_awesome_outlined, 'Discover'), (Icons.restaurant_menu_rounded, 'Meals'), (Icons.calendar_month_outlined, 'Calendar'), (Icons.shopping_cart_outlined, 'Grocery')];
   @override
   Widget build(BuildContext context) => Container(
     decoration: const BoxDecoration(color: AppTheme.backgroundDeep, image: DecorationImage(image: AssetImage(SalusAssets.leatherTexture), fit: BoxFit.cover, opacity: 0.82), border: Border(top: BorderSide(color: AppTheme.border, width: 0.8))),
     padding: EdgeInsets.only(top: 8, bottom: 6 + MediaQuery.paddingOf(context).bottom * 0.45),
     child: Row(children: [for (var i=0;i<_items.length;i++) Expanded(child: InkWell(onTap: () => onChanged(i), child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(mainAxisSize: MainAxisSize.min, children: [
       Icon(_items[i].$1, color: i==index ? AppTheme.cyan : AppTheme.creamText.withValues(alpha: 0.72), size: 22),
-      const SizedBox(height: 4), Text(_items[i].$2, style: TextStyle(color: i==index ? AppTheme.cyan : AppTheme.creamText.withValues(alpha: 0.72), fontSize: 12, fontWeight: i==index ? FontWeight.w700 : FontWeight.w500)),
+      const SizedBox(height: 4), Text(_items[i].$2, style: TextStyle(color: i==index ? AppTheme.cyan : AppTheme.creamText.withValues(alpha: 0.72), fontSize: 10.5, fontWeight: i==index ? FontWeight.w700 : FontWeight.w500)),
       const SizedBox(height: 4), AnimatedContainer(duration: const Duration(milliseconds: 160), width: i==index ? 22 : 4, height: 2, decoration: BoxDecoration(color: i==index ? AppTheme.cyan : Colors.transparent, borderRadius: BorderRadius.circular(99))),
     ]))))]),
   );

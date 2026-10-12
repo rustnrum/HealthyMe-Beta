@@ -6,6 +6,7 @@ import '../services/recovery_service.dart';
 import '../state/app_state.dart';
 import '../state/workout_state.dart';
 import '../widgets/command_card.dart';
+import '../widgets/garmin_body_battery_panel.dart';
 import '../widgets/design_widgets.dart';
 
 class RecoveryDetailScreen extends ConsumerWidget {
@@ -106,6 +107,11 @@ class RecoveryDetailScreen extends ConsumerWidget {
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 16),
+          GarminBodyBatteryPanel(
+            recoveryScore: report.score,
+            recoveryConfidence: report.confidence,
           ),
           const SizedBox(height: 24),
           const HmSectionHeader(title: 'Recovery contributors'),
