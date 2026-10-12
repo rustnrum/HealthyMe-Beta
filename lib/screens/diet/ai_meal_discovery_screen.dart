@@ -23,6 +23,7 @@ class _AiMealDiscoveryScreenState extends ConsumerState<AiMealDiscoveryScreen> {
   SalusMealSuggestions? _results;
   bool _searching = false;
   bool _applying = false;
+  bool _more = false;
   String? _error;
 
   @override
@@ -46,14 +47,15 @@ class _AiMealDiscoveryScreenState extends ConsumerState<AiMealDiscoveryScreen> {
         '${_dateKey(start.add(Duration(days: offset)))} Dinner'];
   }
 
-  Future<void> _search([String? suggested]) async {
+  Future<void> _search([String? suggested, bool append = false]) async {
     final query = (suggested ?? _request.text).trim();
+    final priorNames = append ? (_results?.meals.map((e) => e.name).join('; ') ?? '') : ''; 
     if (query.isEmpty || _searching) return;
     _request.text = query;
     final isPlanning = query.toLowerCase().contains('unplanned') ||
         query.toLowerCase().contains('week') ||
         query.toLowerCase().contains('calendar');
-    setState(() { _searching = true; _error = null; _results = null; });
+    setState(() { _searching = true; _error = null; if (!append) _results = null; _more = append; });
     try {
       final options = isPlanning ? _missingDinnerSlots() : null;
       if (isPlanning && options!.isEmpty) {
@@ -61,12 +63,20 @@ class _AiMealDiscoveryScreenState extends ConsumerState<AiMealDiscoveryScreen> {
         return;
       }
       final result = await _service.discover(
-        request: query, preferences: _preferences,
+        request: append ? '$query. Give different recipes. Exclude all these previously shown: $priorNames.' : query,
+        preferences: _preferences,
         openSlots: options == null ? null : options.join('; '));
-      if (mounted) setState(() => _results = result);
+      if (mounted) {
+        final existing = append ? (_results?.meals ?? const <SalusMealIdea>[]) : <SalusMealIdea>[];
+        final names = existing.map((e) => e.name.trim().toLowerCase()).toSet();
+        final merged = [...existing, ...result.meals.where((e) => names.add(e.name.trim().toLowerCase()))];
+        final combined = SalusMealSuggestions(merged.take(32).toList(), result.note);
+        setState(() => _results = combined);
+        await _service.saveLastDiscovery(combined);
+      }
     } catch (error) {
       if (mounted) setState(() => _error = 'Meal discovery failed: $error');
-    } finally { if (mounted) setState(() => _searching = false); }
+    } finally { if (mounted) setState(() { _searching = false; _more = false; }); }
   }
 
   Future<void> _planRecipe(SalusMealIdea idea) async {
@@ -152,6 +162,24 @@ class _AiMealDiscoveryScreenState extends ConsumerState<AiMealDiscoveryScreen> {
     finally { if (mounted) setState(() => _applying = false); }
   }
 
+  Future<void> _saveFavorite(SalusMealIdea idea, String category) async {
+    try {
+      final inserted = await _service.saveFavorite(idea, category);
+      _toast(inserted ? 'Saved ${idea.name} to $category recipes.' : 'Already saved to $category.');
+    } catch (error) { _toast('Could not save recipe: $error'); }
+  }
+
+  Widget _saveRecipeMenu(SalusMealIdea idea) => PopupMenuButton<String>(
+    tooltip: 'Save this recipe to My Meals',
+    onSelected: (category) => _saveFavorite(idea, category),
+    itemBuilder: (context) => [for (final category in SalusMealPlannerService.recipeCategories)
+      PopupMenuItem(value: category, child: Text('Save to $category'))],
+    child: const Padding(padding: EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.bookmark_add_outlined, size: 18), SizedBox(width: 6), Text('Save recipe'),
+      ])),
+  );
+
   Future<void> _addGroceries(SalusMealIdea idea) async {
     if (idea.ingredients.isEmpty) { _toast('This recipe did not include ingredients.'); return; }
     final ok = await showDialog<bool>(context: context, builder: (dialog) => AlertDialog(
@@ -203,6 +231,7 @@ class _AiMealDiscoveryScreenState extends ConsumerState<AiMealDiscoveryScreen> {
             Wrap(spacing: 8, runSpacing: 8, children: [
               FilledButton.icon(onPressed: () { Navigator.pop(sheet); _planRecipe(idea); },
                 icon: const Icon(Icons.calendar_month_outlined), label: const Text('Plan meal')),
+              _saveRecipeMenu(idea),
               OutlinedButton.icon(onPressed: () { Navigator.pop(sheet); _addGroceries(idea); },
                 icon: const Icon(Icons.shopping_cart_outlined), label: const Text('Add groceries')),
             ]),
@@ -231,8 +260,8 @@ class _AiMealDiscoveryScreenState extends ConsumerState<AiMealDiscoveryScreen> {
         label: Text(_searching ? 'Finding recipes…' : 'Find meals with AI')),
       const SizedBox(height: 12),
       Wrap(spacing: 7, runSpacing: 7, children: [
-        ActionChip(label: const Text('Mediterranean'), onPressed: _searching ? null : () => _search('Suggest four Mediterranean dinners with complete recipes')),
-        ActionChip(label: const Text('Mexican'), onPressed: _searching ? null : () => _search('Suggest four Mexican dinner recipes')),
+        ActionChip(label: const Text('Mediterranean'), onPressed: _searching ? null : () => _search('Suggest eight Mediterranean dinners with complete recipes')),
+        ActionChip(label: const Text('Mexican'), onPressed: _searching ? null : () => _search('Suggest eight Mexican dinner recipes')),
         ActionChip(label: const Text('Use my ingredients'), onPressed: _searching ? null : () { _request.text = 'I have: '; _toast('Add your ingredients in the search box, then tap Find meals.'); }),
         ActionChip(label: const Text('Fill unplanned dinners'), onPressed: _searching ? null : () => _search('Fill my unplanned dinners this week with different easy meals and assign the available dates')),
       ]),
@@ -278,11 +307,18 @@ class _AiMealDiscoveryScreenState extends ConsumerState<AiMealDiscoveryScreen> {
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 6, children: [
               OutlinedButton(onPressed: () => _showRecipe(idea), child: const Text('View recipe')),
+              _saveRecipeMenu(idea),
               FilledButton.tonal(onPressed: _applying ? null : () => _planRecipe(idea), child: const Text('Plan meal')),
             ]),
           ])),
           const SizedBox(height: 9),
         ],
+        OutlinedButton.icon(
+          onPressed: _searching || _applying ? null : () => _search(null, true),
+          icon: _more ? const Icon(Icons.hourglass_empty) : const Icon(Icons.refresh_rounded),
+          label: Text(_more ? 'Finding more…' : 'Find more recipes'),
+        ),
+        const SizedBox(height: 10),
         const Text('AI recipes and nutrient estimates require review. Nothing is logged as eaten until you log it yourself.',
           style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
       ],

@@ -13,6 +13,8 @@ import 'screens/device_gallery_screen.dart';
 import 'screens/sleep_screen.dart';
 import 'screens/activity_screen.dart';
 import 'screens/ai_coach_screen.dart';
+import 'screens/salus_voice_screen.dart';
+import 'widgets/salus_voice_launcher.dart';
 import 'screens/metric_detail_screen.dart';
 import 'screens/labs_screen.dart';
 import 'screens/body_visual_screen.dart';
@@ -26,6 +28,9 @@ import 'screens/watch_device_screen.dart';
 import 'state/app_state.dart';
 import 'widgets/morning_checkin_gate.dart';
 
+final GlobalKey<NavigatorState> _salusVoiceNavigatorKey = GlobalKey<NavigatorState>();
+final ValueNotifier<bool> _salusVoiceOpen = ValueNotifier<bool>(false);
+
 class HealthyMeApp extends ConsumerWidget {
   const HealthyMeApp({super.key});
 
@@ -33,6 +38,27 @@ class HealthyMeApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(appStateProvider);
     return MaterialApp(
+      navigatorKey: _salusVoiceNavigatorKey,
+      // One voice assistant covers every Salus route. Do not place separate
+      // microphones with independent conversation state in each module.
+      builder: (context, child) => Stack(fit: StackFit.expand, children: [
+        child ?? const SizedBox.shrink(),
+        if (state.profile.completed && MediaQuery.viewInsetsOf(context).bottom == 0)
+          Positioned(right: 15, bottom: 92,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _salusVoiceOpen,
+              builder: (context, open, _) => open
+                ? const SizedBox.shrink()
+                : SalusVoiceLauncher(onPressed: () {
+                    final navigator = _salusVoiceNavigatorKey.currentState;
+                    if (navigator == null || _salusVoiceOpen.value) return;
+                    _salusVoiceOpen.value = true;
+                    navigator.pushNamed('/voice').whenComplete(() {
+                      _salusVoiceOpen.value = false;
+                    });
+                  }),
+            )),
+      ]),
       debugShowCheckedModeBanner: false,
       title: 'Salus',
       theme: AppTheme.dark,
@@ -72,6 +98,7 @@ class HealthyMeApp extends ConsumerWidget {
         '/cpap': (_) => const CpapScreenV38(),
         '/watch-device': (_) => const WatchDeviceScreen(),
         '/coach': (_) => const AiCoachScreen(),
+        '/voice': (_) => const SalusVoiceScreen(),
       },
       home: state.profile.completed
           ? const MorningCheckInGate(child: HomeShell())

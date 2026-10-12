@@ -1,0 +1,17 @@
+Salus Build 70 CI-repair overlay (2026-10-12)
+
+Upload this ZIP AS-IS to https://github.com/rustnrum/HealthyMe-Beta/upload/main
+and commit it to main. The workflow expands this wrapper and calls
+scripts/prepare_android.sh. That script restores the ORIGINAL 9-file
+Build 70 overlay from the specified, verified GitHub commit and applies
+one correction: migrate three deprecated speech-to-text arguments to
+SpeechListenOptions, preserving their values. No native modules are touched.
+
+Original Git commit: 2d5247cbc8f88dce85f35d985e4e9c831fbacb85
+Original ZIP blob: f21b0553470fd043de7a42d6e3f213b8fe887829
+Target version: 0.21.32+70
+Android package: com.rustnrum.healthyme.beta03
+
+This ZIP is a workflow source overlay, not an APK and not a standalone
+full app checkout. Requires access to the existing GitHub repository and
+original commit. Analyze/test/build/sign must still pass in Actions.

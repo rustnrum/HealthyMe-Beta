@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'salus_ai_service.dart';
@@ -125,10 +127,90 @@ class SalusMealSuggestions {
   }
 }
 
+/// User-approved recipe bookmark; separate from eaten food journal.
+class SalusSavedRecipe {
+  final String id;
+  final String category;
+  final SalusMealIdea recipe;
+  const SalusSavedRecipe({required this.id, required this.category, required this.recipe});
+
+  Map<String, dynamic> toJson() => {
+    'id': id, 'category': category, 'recipe': recipe.toJson(),
+  };
+  factory SalusSavedRecipe.fromJson(Map<String, dynamic> json) => SalusSavedRecipe(
+    id: json['id']?.toString() ?? '',
+    category: json['category']?.toString() ?? 'Dinner',
+    recipe: SalusMealIdea.fromJson(Map<String, dynamic>.from(json['recipe'] as Map)),
+  );
+}
+
 class SalusMealPlannerService {
   static const _preferencesKey = 'salus_food_preferences_v1';
   static const _recipesKey = 'salus_planned_recipe_details_v1';
+  static const _favoritesKey = 'salus_saved_ai_recipes_v1';
+  static final ValueNotifier<int> favoritesRevision = ValueNotifier<int>(0);
+  static const _recentSearchKey = 'salus_recent_recipe_search_v1';
   const SalusMealPlannerService();
+
+  static const recipeCategories = <String>['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
+
+  Future<List<SalusSavedRecipe>> loadFavorites() async {
+    final prefs = await SharedPreferences.getInstance();
+    final text = prefs.getString(_favoritesKey);
+    if (text == null || text.isEmpty) return [];
+    try {
+      final list = jsonDecode(text) as List;
+      return list.whereType<Map>().map((item) {
+        try { return SalusSavedRecipe.fromJson(Map<String, dynamic>.from(item)); }
+        catch (_) { return null; }
+      }).whereType<SalusSavedRecipe>().toList();
+    } catch (_) { return []; }
+  }
+
+  /// Returns false if this recipe is already saved in the selected category.
+  Future<bool> saveFavorite(SalusMealIdea recipe, String category) async {
+    if (!recipeCategories.contains(category)) throw ArgumentError.value(category, 'category');
+    final saved = await loadFavorites();
+    if (saved.any((entry) => entry.category == category &&
+        entry.recipe.name.trim().toLowerCase() == recipe.name.trim().toLowerCase())) {
+      return false;
+    }
+    final item = SalusSavedRecipe(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      category: category, recipe: recipe,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    final ok = await prefs.setString(_favoritesKey,
+      jsonEncode([...saved, item].map((v) => v.toJson()).toList()));
+    if (ok) favoritesRevision.value += 1;
+    return ok;
+  }
+
+  Future<void> removeFavorite(String id) async {
+    final saved = await loadFavorites();
+    final prefs = await SharedPreferences.getInstance();
+    final ok = await prefs.setString(_favoritesKey,
+      jsonEncode(saved.where((v) => v.id != id).map((v) => v.toJson()).toList()));
+    if (ok) favoritesRevision.value += 1;
+  }
+
+  Future<void> saveLastDiscovery(SalusMealSuggestions result) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_recentSearchKey,
+      jsonEncode(result.meals.map((v) => v.toJson()).toList()));
+  }
+
+  Future<List<SalusMealIdea>> loadLastDiscovery() async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = prefs.getString(_recentSearchKey);
+    if (data == null) return [];
+    try {
+      return (jsonDecode(data) as List).whereType<Map>().map((m) {
+        try { return SalusMealIdea.fromJson(Map<String, dynamic>.from(m)); }
+        catch (_) { return null; }
+      }).whereType<SalusMealIdea>().toList();
+    } catch (_) { return []; }
+  }
 
   Future<SalusFoodPreferences> loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
@@ -155,7 +237,7 @@ Return ONLY a JSON object in this shape:
 "servings":2,"minutes":30,"estimated_calories_per_serving":500,
 "estimated_protein_g_per_serving":35,"date":null,"slot":null}],"note":"..."}.
 If making a weekly plan, include YYYY-MM-DD date and Breakfast/Lunch/Dinner/Snacks slot for each meal.
-Produce at most 10 complete distinct meals. Do not claim nutrition estimates are verified.
+Produce up to 8 complete distinct meals for a normal search (up to 10 when planning a week). Do not claim nutrition estimates are verified.
 Preferred cuisines: ${preferences.cuisines.join(', ').isEmpty ? 'variety' : preferences.cuisines.join(', ')}.
 Disliked ingredients (avoid or substitute): ${preferences.dislikes.isEmpty ? 'none' : preferences.dislikes}.
 Allergies / strict exclusion requests: ${preferences.allergens.isEmpty ? 'none specified' : preferences.allergens}. NEVER knowingly include these, warn to review ingredient labels and cross-contact.
