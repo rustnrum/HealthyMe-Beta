@@ -111,6 +111,10 @@
                 android:value="conversations|alerting|silent" />
         </service>
 
+        <!-- Temporary renderer compatibility test for Galaxy Z Fold7: use OpenGL instead of Impeller. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
