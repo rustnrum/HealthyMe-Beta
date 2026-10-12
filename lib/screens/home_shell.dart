@@ -8,6 +8,7 @@ import '../state/app_state.dart';
 import '../state/health_sync_provider.dart';
 import '../state/navigation_provider.dart';
 import '../widgets/module_menu_button.dart';
+import '../widgets/salus_voice_launcher.dart';
 import 'activity_screen.dart';
 import 'body_screen.dart';
 import 'premium/salus_premium_home.dart';
@@ -96,6 +97,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     }
 
     return Scaffold(
+      floatingActionButton: SalusVoiceLauncher(
+        onPressed: () => Navigator.of(context).pushNamed('/voice')),
       appBar: index == 0
           ? null // Premium dashboard owns its SALUS header.
           : AppBar(

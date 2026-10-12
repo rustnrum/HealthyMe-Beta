@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/module_menu_button.dart';
+import '../../widgets/salus_voice_launcher.dart';
 import '../../widgets/salus_widgets.dart';
 import 'diet_home_screen.dart';
 import '../premium/salus_nutrition_overview.dart';
@@ -38,6 +39,8 @@ class _DietShellState extends State<DietShell> {
     return Theme(
       data: Theme.of(context).copyWith(scaffoldBackgroundColor: DietPalette.background),
       child: Scaffold(
+      floatingActionButton: SalusVoiceLauncher(
+        onPressed: () => Navigator.of(context).pushNamed('/voice')),
         appBar: _index == 0 ? null : AppBar(
           flexibleSpace: Container(decoration: const BoxDecoration(image: DecorationImage(image: AssetImage(SalusAssets.leatherTexture), fit: BoxFit.cover, opacity: 0.88))),
           leading: IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.chevron_left_rounded, size: 30)),

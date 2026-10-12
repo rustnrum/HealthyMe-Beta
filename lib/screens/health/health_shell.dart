@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/module_menu_button.dart';
+import '../../widgets/salus_voice_launcher.dart';
 import '../../widgets/salus_widgets.dart';
 import '../labs_screen.dart';
 import 'health_home_screen.dart';
@@ -34,6 +35,8 @@ class _HealthShellState extends State<HealthShell> {
   Widget build(BuildContext context) => Theme(
     data: Theme.of(context).copyWith(scaffoldBackgroundColor: HealthPalette.background),
     child: Scaffold(
+      floatingActionButton: SalusVoiceLauncher(
+        onPressed: () => Navigator.of(context).pushNamed('/voice')),
       appBar: AppBar(
         flexibleSpace: Container(decoration: const BoxDecoration(image: DecorationImage(image: AssetImage(SalusAssets.leatherTexture), fit: BoxFit.cover, opacity: 0.88))),
         leading: IconButton(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.chevron_left_rounded, size: 30)),

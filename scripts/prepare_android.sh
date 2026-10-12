@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+if ! grep -Eq '^version: 0\.21\.36\+74$' pubspec.yaml; then
 python3 scripts/patch_build47.py
 if ! grep -Eq '^version: 0\.21\.(19\+57|20\+58|21\+59|22\+60|23\+61|24\+62|25\+63|26\+64|27\+65|28\+66|29\+67|30\+68|31\+69|32\+70|33\+71|34\+72|35\+73)$' pubspec.yaml; then
   python3 scripts/patch_build56.py
@@ -51,11 +52,14 @@ fi
 if grep -Eq '^version: 0\.21\.(32\+70|33\+71)$' pubspec.yaml; then
   python3 scripts/patch_build71.py
 fi
-if grep -Eq '^version: 0\.21\.(33\+71|34\+72|35\+73)$' pubspec.yaml; then
+if grep -Eq '^version: 0\.21\.(33\+71|34\+72)$' pubspec.yaml; then
   python3 scripts/patch_build72.py
 fi
 
 python3 scripts/patch_build73.py
+
+fi
+python3 scripts/patch_build74.py
 
 test -f lib/widgets/garmin_body_battery_panel.dart
 test -f native/android/MainActivity.kt

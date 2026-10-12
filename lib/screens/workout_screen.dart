@@ -11,6 +11,7 @@ import '../state/workout_state.dart';
 import '../widgets/command_card.dart';
 import '../widgets/design_widgets.dart';
 import '../widgets/module_menu_button.dart';
+import '../widgets/salus_voice_launcher.dart';
 
 class WorkoutScreen extends ConsumerStatefulWidget {
   const WorkoutScreen({super.key});
@@ -44,6 +45,8 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
     }
 
     return Scaffold(
+      floatingActionButton: SalusVoiceLauncher(
+        onPressed: () => Navigator.of(context).pushNamed('/voice')),
       backgroundColor: _tab == 'Overview' ? const Color(0xfff6f8f7) : AppTheme.background,
       appBar: _tab == 'Overview' ? null : AppBar(
         title: const Text('Workout'),
