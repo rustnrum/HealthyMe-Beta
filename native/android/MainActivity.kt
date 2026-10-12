@@ -50,6 +50,16 @@ class MainActivity : FlutterFragmentActivity() {
                             ?: DEFAULT_SCAN_MS).coerceIn(1000L, 30000L)
                     scanBle(durationMs, result)
                 }
+                "readBleDeviceInfo" -> {
+                    val deviceId = call.argument<String>("deviceId")
+                    if (deviceId.isNullOrBlank()) {
+                        result.error("BLE_DEVICE_ID_MISSING", "Bluetooth device id is required.", null)
+                    } else if (!hasBluetoothPermission()) {
+                        result.error("BLE_PERMISSION_DENIED", "Bluetooth permission is required.", null)
+                    } else {
+                        SalusBleDeviceInfoReader.read(this, deviceId, result)
+                    }
+                }
                 "inspectBle" -> {
                     val deviceId = call.argument<String>("deviceId")
                     if (deviceId.isNullOrBlank()) {
@@ -179,6 +189,10 @@ class MainActivity : FlutterFragmentActivity() {
                             protocolId,
                             enabled,
                         )
+                        if (protocolId == "garmin-family") {
+                            if (enabled) SalusGarminNotificationSender.watch(this, deviceId, true)
+                            else SalusGarminNotificationSender.unwatch(deviceId)
+                        }
                         if (protocolId == "garmin-family") {
                             if (enabled) SalusGarminNotificationSender.watch(this, deviceId, true)
                             else SalusGarminNotificationSender.unwatch(deviceId)

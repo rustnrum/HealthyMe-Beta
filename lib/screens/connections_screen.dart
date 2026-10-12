@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/debug_flags.dart';
 import '../core/theme/app_theme.dart';
 import '../services/ble_discovery_service.dart';
+import 'device_information_screen.dart';
 import '../services/device_category_service.dart';
 import '../services/direct_device_store.dart';
 import '../services/direct_metric_service.dart';
@@ -475,6 +476,9 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
                 syncing: _syncing.contains(device.id),
                 onSync: () => _syncSaved(device),
                 onRemove: () => _remove(device),
+                onInfo: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => DeviceInformationScreen(device: device),
+                )),
                 onOpen: () {
                   if (device.protocolId == 'cpap-family') {
                     Navigator.of(context)
@@ -705,6 +709,7 @@ class _SavedCard extends StatelessWidget {
   final bool syncing;
   final VoidCallback onSync;
   final VoidCallback onRemove;
+  final VoidCallback onInfo;
   final VoidCallback onOpen;
 
   const _SavedCard({
@@ -713,6 +718,7 @@ class _SavedCard extends StatelessWidget {
     required this.syncing,
     required this.onSync,
     required this.onRemove,
+    required this.onInfo,
     required this.onOpen,
   });
 
@@ -772,6 +778,11 @@ class _SavedCard extends StatelessWidget {
                 ],
               ],
             ),
+          ),
+          IconButton(
+            tooltip: 'Device information and capabilities',
+            onPressed: onInfo,
+            icon: const Icon(Icons.info_outline_rounded),
           ),
           IconButton(
             tooltip: 'Sync',
