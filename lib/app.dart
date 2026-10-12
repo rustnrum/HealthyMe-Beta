@@ -12,6 +12,7 @@ import 'screens/home_shell.dart';
 import 'screens/device_gallery_screen.dart';
 import 'screens/sleep_screen.dart';
 import 'screens/activity_screen.dart';
+import 'screens/ai_coach_screen.dart';
 import 'screens/metric_detail_screen.dart';
 import 'screens/labs_screen.dart';
 import 'screens/body_visual_screen.dart';
@@ -70,19 +71,7 @@ class HealthyMeApp extends ConsumerWidget {
         '/sources-debug': (_) => const SourcesScreen(),
         '/cpap': (_) => const CpapScreenV38(),
         '/watch-device': (_) => const WatchDeviceScreen(),
-        '/coach': (_) => Scaffold(
-          appBar: AppBar(title: const Text('Salus AI')),
-          body: const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'Salus AI is not available in this beta. Your health data and '
-                'manual tracking still work without an AI connection.',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ),
+        '/coach': (_) => const AiCoachScreen(),
       },
       home: state.profile.completed
           ? const MorningCheckInGate(child: HomeShell())

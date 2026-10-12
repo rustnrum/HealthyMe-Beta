@@ -42,7 +42,7 @@ void main() {
 
   test('beta AI entry does not open a pretend functioning chat', () {
     final app = File('lib/app.dart').readAsStringSync();
-    expect(app, contains('Salus AI is not available in this beta'));
-    expect(app, isNot(contains('const AiCoachScreen()')));
+    expect(app, contains("'/coach': (_) => const AiCoachScreen()"));
+    expect(app, isNot(contains('Salus AI is not available in this beta')));
   });
 }

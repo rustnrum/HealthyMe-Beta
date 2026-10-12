@@ -6,6 +6,7 @@ import '../../state/diet_log_state.dart';
 import '../../state/today_plan_state.dart';
 import '../../widgets/salus_widgets.dart';
 import 'food_entry_dialog.dart';
+import 'food_photo_analysis_screen.dart';
 import 'food_catalog_screen.dart';
 import 'food_visual_overview.dart';
 
@@ -57,7 +58,26 @@ class DietHomeScreen extends ConsumerWidget {
           ]),
         ])),
         const SizedBox(height: 14),
-        // Camera-first daily action. Typed nutrients remain an optional fallback.
+        // Photo recognition is explicit, reviewable and always optional.
+        SalusPaper(glow: true,
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => const FoodPhotoAnalysisScreen())),
+          child: const Row(children: [
+            Icon(Icons.camera_alt_rounded, color: AppTheme.mint, size: 37),
+            SizedBox(width: 14),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Take a food photo', style: TextStyle(
+                  color: AppTheme.textPrimary, fontSize: 20,
+                  fontWeight: FontWeight.w800)),
+                SizedBox(height: 5),
+                Text('AI estimate → review → log', style: TextStyle(
+                  color: AppTheme.textSecondary, fontSize: 12.5)),
+              ])),
+            Icon(Icons.chevron_right_rounded, color: AppTheme.mint),
+          ])),
+        const SizedBox(height: 10),
+        // Barcode uses the local camera decoder and Open Food Facts.
         SalusPaper(glow: true,
           onTap: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => const FoodCatalogScreen(barcodeMode: true))),

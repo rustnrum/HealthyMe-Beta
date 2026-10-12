@@ -1,333 +1,194 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_theme.dart';
-import '../state/app_state.dart';
-import '../widgets/salus_widgets.dart';
+import '../services/chatgpt_connection_service.dart';
+import '../services/salus_ai_service.dart';
 
-class AiCoachScreen extends ConsumerStatefulWidget {
+/// ChatGPT account is optional. No AI reply is fabricated while disconnected.
+class AiCoachScreen extends StatefulWidget {
   const AiCoachScreen({super.key});
-
   @override
-  ConsumerState<AiCoachScreen> createState() => _AiCoachScreenState();
+  State<AiCoachScreen> createState() => _AiCoachScreenState();
 }
 
-class _AiCoachScreenState extends ConsumerState<AiCoachScreen> {
+class _AiCoachScreenState extends State<AiCoachScreen> {
   final _controller = TextEditingController();
+  final _scroll = ScrollController();
+  final _accountService = const ChatGptConnectionService();
+  final _ai = const SalusAiService();
+  final _messages = <Map<String, String>>[];
+  Map<String, dynamic>? _account;
+  bool _busy = false;
+  String? _error;
+  String _tab = 'Chat';
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  void initState() { super.initState(); _loadAccount(); }
+  Future<void> _loadAccount() async {
+    final account = await _accountService.account();
+    if (mounted) setState(() => _account = account);
+  }
+  @override
+  void dispose() { _controller.dispose(); _scroll.dispose(); super.dispose(); }
+
+  Future<void> _connect() async {
+    if (_busy) return;
+    setState(() { _busy = true; _error = null; });
+    try {
+      final result = await _accountService.connect();
+      if (mounted) setState(() => _account = result);
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally { if (mounted) setState(() => _busy = false); }
   }
 
-  void _submit([String? value]) {
-    final prompt = (value ?? _controller.text).trim();
-    if (prompt.isEmpty) return;
-    _controller.text = prompt;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Salus AI chat is staged visually. The conversation engine will be connected after the health-data pipeline is validated.'),
-      ),
-    );
+  Future<void> _disconnect() async {
+    await _accountService.disconnect();
+    if (mounted) setState(() { _account = null; _messages.clear(); _error = null; });
+  }
+
+  Future<void> _send([String? preset]) async {
+    if (_busy || _account == null) return;
+    final question = (preset ?? _controller.text).trim();
+    if (question.isEmpty) return;
+    final past = List<Map<String, String>>.from(_messages);
+    setState(() {
+      _controller.clear();
+      _messages.add({'role': 'user', 'text': question});
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final reply = await _ai.ask(question, prior: past);
+      if (mounted) setState(() => _messages.add({'role': 'assistant', 'text': reply}));
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scroll.hasClients) {
+            _scroll.animateTo(_scroll.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+          }
+        });
+      }
+    }
+  }
+
+  Widget _connectCard() => Card(child: Padding(
+    padding: const EdgeInsets.all(22),
+    child: Column(children: [
+      const Icon(Icons.auto_awesome, size: 42, color: AppTheme.mint),
+      const SizedBox(height: 10),
+      const Text('Connect Salus AI', style: TextStyle(
+        fontSize: 23, fontWeight: FontWeight.w900, color: AppTheme.textPrimary)),
+      const SizedBox(height: 8),
+      const Text('Sign in through ChatGPT to ask questions and analyze meal photos. '
+          'Use of your ChatGPT plan is optional and requires your authorization.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: AppTheme.textSecondary)),
+      const SizedBox(height: 16),
+      SizedBox(width: double.infinity, child: FilledButton.icon(
+        onPressed: _busy ? null : _connect,
+        icon: const Icon(Icons.login),
+        label: Text(_busy ? 'Opening ChatGPT sign-in…' : 'Continue with ChatGPT'))),
+      const SizedBox(height: 10),
+      const Text('Your health data is not automatically uploaded to ChatGPT. '
+          'Salus only sends what you ask it to analyze.',
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+    ]),
+  ));
+
+  Widget _connectionStatus() => Card(child: Padding(
+    padding: const EdgeInsets.all(13),
+    child: Row(children: [
+      const Icon(Icons.verified_user_outlined, color: AppTheme.mint),
+      const SizedBox(width: 10),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('ChatGPT connected', style: TextStyle(
+          color: AppTheme.textPrimary, fontWeight: FontWeight.w800)),
+        Text((_account?['email'] ?? 'Signed in').toString(),
+          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+      ])),
+      TextButton(onPressed: _busy ? null : _disconnect, child: const Text('Disconnect')),
+    ]),
+  ));
+
+  Widget _bubble(Map<String, String> msg) {
+    final human = msg['role'] == 'user';
+    return Align(alignment: human ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 370),
+        margin: const EdgeInsets.symmetric(vertical: 5),
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: human ? AppTheme.cyan.withValues(alpha: 0.2) : AppTheme.surfaceHigh,
+          borderRadius: BorderRadius.circular(17),
+          border: Border.all(color: AppTheme.border)),
+        child: Text(msg['text'] ?? '', style: const TextStyle(color: AppTheme.textPrimary)),
+      ));
   }
 
   @override
-  Widget build(BuildContext context) {
-    final app = ref.watch(appStateProvider);
-    final firstName = app.profile.firstName.trim().isEmpty
-        ? 'there'
-        : app.profile.firstName.trim().split(RegExp(r'\s+')).first;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Salus AI'),
-        actions: [
-          IconButton(
-            tooltip: 'History',
-            onPressed: () {},
-            icon: const Icon(Icons.history_rounded),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: SalusPageBackground(
-        child: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-                  children: [
-                    const Text(
-                      'SALUS AI',
-                      style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 34,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.8,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'Y O U R   W E L L N E S S   C O A C H',
-                      style: TextStyle(
-                        color: AppTheme.textMuted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 2.4,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SalusPaper(
-                      glow: true,
-                      padding: const EdgeInsets.fromLTRB(20, 20, 16, 18),
-                      child: Stack(
-                        children: [
-                          Positioned(
-                            right: -2,
-                            top: -8,
-                            width: 180,
-                            height: 190,
-                            child: Opacity(
-                              opacity: 0.94,
-                              child: Image.asset(
-                                SalusAssets.aiOrb,
-                                fit: BoxFit.cover,
-                                filterQuality: FilterQuality.high,
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(right: 118),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'MEET YOUR AI COACH',
-                                  style: TextStyle(
-                                    color: AppTheme.textSecondary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 2.4,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'Hi $firstName,\nI’m Salus AI',
-                                  style: const TextStyle(
-                                    color: AppTheme.textPrimary,
-                                    fontSize: 36,
-                                    height: 1.05,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -1.2,
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-                                const Text(
-                                  'Use your own data to explore meals, workouts, biomarkers, sleep and recovery.',
-                                  style: TextStyle(
-                                    color: AppTheme.textSecondary,
-                                    fontSize: 14.5,
-                                    height: 1.42,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            child: SizedBox(height: 1),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    const _CapabilityRow(),
-                    const SizedBox(height: 25),
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'TRY ASKING',
-                            style: TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 2.4,
-                            ),
-                          ),
-                        ),
-                        TextButton(onPressed: () {}, child: const Text('See all')),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    _PromptGrid(onPrompt: _submit),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  18,
-                  8,
-                  18,
-                  12 + MediaQuery.paddingOf(context).bottom,
-                ),
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(8, 6, 7, 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xF20A1117),
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(color: AppTheme.cyan.withValues(alpha: 0.55)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.cyan.withValues(alpha: 0.12),
-                        blurRadius: 24,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed: () {},
-                        icon: const Icon(Icons.add_rounded, color: AppTheme.textPrimary),
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: _controller,
-                          minLines: 1,
-                          maxLines: 3,
-                          textInputAction: TextInputAction.send,
-                          onSubmitted: _submit,
-                          decoration: const InputDecoration(
-                            hintText: 'Ask Salus AI anything…',
-                            filled: false,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => _submit(),
-                        icon: const Icon(Icons.arrow_upward_rounded, color: AppTheme.cyan),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CapabilityRow extends StatelessWidget {
-  const _CapabilityRow();
-
-  static const items = [
-    (Icons.restaurant_rounded, 'Food', AppTheme.mint),
-    (Icons.fitness_center_rounded, 'Workout', AppTheme.cyan),
-    (Icons.bar_chart_rounded, 'Biomarkers', AppTheme.purple),
-    (Icons.bedtime_rounded, 'Sleep', AppTheme.blue),
-    (Icons.favorite_border_rounded, 'Recovery', AppTheme.rose),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        for (var i = 0; i < items.length; i++) ...[
-          if (i > 0) const SizedBox(width: 6),
-          Expanded(
-            child: Column(
-              children: [
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: items[i].$3.withValues(alpha: 0.08),
-                    border: Border.all(color: items[i].$3.withValues(alpha: 0.25)),
-                  ),
-                  child: Icon(items[i].$1, color: items[i].$3, size: 23),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  items[i].$2,
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Salus AI'), actions: [
+      if (_messages.isNotEmpty) IconButton(
+        tooltip: 'Clear this conversation',
+        onPressed: _busy ? null : () => setState(() => _messages.clear()),
+        icon: const Icon(Icons.delete_outline)),
+    ]),
+    body: SafeArea(child: Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      child: Column(children: [
+        const Align(alignment: Alignment.centerLeft, child: Text('YOUR WELLNESS COACH',
+            style: TextStyle(color: AppTheme.textMuted, letterSpacing: 2))),
+        const SizedBox(height: 12),
+        if (_account == null) _connectCard() else _connectionStatus(),
+        if (_error != null) Padding(padding: const EdgeInsets.all(8),
+          child: Text(_error!, style: const TextStyle(color: AppTheme.amber))),
+        if (_account != null) ...[
+          const SizedBox(height: 7),
+          Row(children: [for (final value in ['Chat', 'Nutrition', 'Training', 'Health'])
+            Expanded(child: Padding(padding: const EdgeInsets.only(right: 5),
+              child: ChoiceChip(label: Text(value), selected: _tab == value,
+                onSelected: (_) => setState(() => _tab = value)))),
+          ]),
+          Expanded(child: ListView(controller: _scroll, children: [
+            if (_messages.isEmpty) ...[
+              const Padding(padding: EdgeInsets.symmetric(vertical: 30),
+                child: Text('Ask Salus about meals, healthy habits or training. '
+                    'Medical decisions still belong with your healthcare team.',
                   textAlign: TextAlign.center,
-                  maxLines: 2,
-                  style: const TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _PromptGrid extends StatelessWidget {
-  final ValueChanged<String> onPrompt;
-
-  const _PromptGrid({required this.onPrompt});
-
-  static const prompts = [
-    (Icons.restaurant_rounded, 'Log my breakfast', 'Track calories and nutrition', AppTheme.mint),
-    (Icons.fitness_center_rounded, 'Plan a workout for today', 'Use my current goals', AppTheme.cyan),
-    (Icons.bar_chart_rounded, 'Review my biomarkers', 'Explain my latest results', AppTheme.purple),
-    (Icons.bedtime_rounded, 'How did I sleep last night?', 'Use sleep and recovery signals', AppTheme.blue),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: prompts.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 1.15,
-      ),
-      itemBuilder: (context, index) {
-        final item = prompts[index];
-        return SalusPaper(
-          onTap: () => onPrompt(item.$2),
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: item.$4.withValues(alpha: 0.09),
-                  border: Border.all(color: item.$4.withValues(alpha: 0.28)),
-                ),
-                child: Icon(item.$1, color: item.$4, size: 21),
-              ),
-              const Spacer(),
-              Text(item.$2, maxLines: 2, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 4),
-              Text(item.$3, maxLines: 2, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12.5, height: 1.25)),
+                  style: TextStyle(color: AppTheme.textSecondary))),
+              for (final suggestion in [
+                'Help me plan a protein-rich dinner.',
+                'What should I log after my workout?',
+                'How can I improve my meal consistency?',
+              ]) ListTile(title: Text(suggestion),
+                trailing: const Icon(Icons.arrow_outward, size: 17),
+                onTap: _busy ? null : () => _send(suggestion)),
             ],
-          ),
-        );
-      },
-    );
-  }
+            for (final msg in _messages) _bubble(msg),
+            if (_busy) const Padding(padding: EdgeInsets.all(12),
+              child: Align(alignment: Alignment.centerLeft,
+                child: CircularProgressIndicator())),
+          ])),
+          Row(children: [
+            Expanded(child: TextField(controller: _controller,
+              decoration: InputDecoration(hintText: 'Ask Salus about $_tab…'),
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => _send())),
+            const SizedBox(width: 7),
+            IconButton(onPressed: _busy ? null : () => _send(),
+              icon: const Icon(Icons.send, color: AppTheme.mint)),
+          ]),
+          const Text('AI answers can be incorrect. Conversations here are not synced to ChatGPT history.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 10.5, color: AppTheme.textMuted)),
+        ] else const Spacer(),
+      ]),
+    )),
+  );
 }
