@@ -11,7 +11,7 @@ import '../widgets/module_menu_button.dart';
 import '../widgets/salus_voice_launcher.dart';
 import 'activity_screen.dart';
 import 'body_screen.dart';
-import 'premium/salus_premium_home.dart';
+import 'premium/salus_home_77.dart';
 import 'more_screen.dart';
 import 'sleep_screen.dart';
 
@@ -70,7 +70,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   Widget build(BuildContext context) {
     final index = ref.watch(navigationProvider);
     const screens = [
-      SalusPremiumHome(),
+      SalusHome77(),
       ActivityScreen(),
       SleepScreen(),
       BodyScreen(),
@@ -115,7 +115,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                 const SizedBox(width: 8),
               ],
             ),
-      body: SafeArea(top: false, bottom: false, child: IndexedStack(index: index, children: screens)),
+      body: SafeArea(top: index == 0, bottom: false, child: IndexedStack(index: index, children: screens)),
       bottomNavigationBar: _SalusBottomNav(
         index:index, onChanged:ref.read(navigationProvider.notifier).go),
     );

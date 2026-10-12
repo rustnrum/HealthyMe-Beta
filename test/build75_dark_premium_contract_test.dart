@@ -6,7 +6,7 @@ import 'package:healthy_me/widgets/salus_premium_visuals.dart';
 void main(){
   test('Build 75 has authored dark assets and no missing files',(){
     final pubspec=File('pubspec.yaml').readAsStringSync();
-    expect(RegExp(r'^version: 0\.21\.(37|38)\+(75|76)$',multiLine:true).hasMatch(pubspec),isTrue);
+    expect(RegExp(r'^version: 0\.21\.(37|38|39)\+(75|76|77)$',multiLine:true).hasMatch(pubspec),isTrue);
     expect(pubspec,contains('assets/premium/'));
     for(final filename in ['training_hero.jpg',
       'meal_illustration.jpg','muscle_reference.jpg']){
@@ -19,7 +19,7 @@ void main(){
     expect(theme,contains('ValueNotifier<bool>(false)'));
     expect(theme,contains('salus_premium_light_v2'));
     expect(File('lib/screens/health/health_shell.dart').readAsStringSync(),
-      contains('SalusPremiumHealth()'));
+      contains('SalusHealth77()'));
   });
   testWidgets('Colored gauge paints with double precision geometry',(tester)async{
     await tester.pumpWidget(const MaterialApp(home:Scaffold(body:Center(

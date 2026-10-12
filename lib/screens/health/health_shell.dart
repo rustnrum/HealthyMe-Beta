@@ -4,7 +4,7 @@ import '../../widgets/module_menu_button.dart';
 import '../../widgets/salus_voice_launcher.dart';
 import '../../widgets/salus_widgets.dart';
 import '../labs_screen.dart';
-import '../premium/salus_premium_health.dart';
+import '../premium/salus_health_77.dart';
 import 'health_vitals_screen.dart';
 
 class HealthPalette {
@@ -28,7 +28,7 @@ class HealthShell extends StatefulWidget {
 
 class _HealthShellState extends State<HealthShell> {
   int _index = 0;
-  static const _pages = [SalusPremiumHealth(), HealthVitalsScreen(), LabsScreen(embedded: true)];
+  static const _pages = [SalusHealth77(), HealthVitalsScreen(), LabsScreen(embedded: true)];
   static const _titles = ['Health', 'Vitals', 'Labs'];
 
   @override
@@ -56,7 +56,7 @@ class _HealthShellState extends State<HealthShell> {
           }
         }), const SizedBox(width: 6)],
       ),
-      body: SafeArea(top: false, child: IndexedStack(index: _index, children: _pages)),
+      body: SafeArea(top: _index == 0, child: IndexedStack(index: _index, children: _pages)),
       bottomNavigationBar: _HealthBottomNav(index:_index,onChanged:(value)=>setState(()=>_index=value)),
     ),
   );

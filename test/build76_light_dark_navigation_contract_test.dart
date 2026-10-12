@@ -32,7 +32,7 @@ void main() {
     expect(home, contains('SalusColorHero('));
     expect(home, isNot(contains('salus_night_mountains.jpg')));
     expect(File('assets/premium/salus_night_mountains.jpg').existsSync(), false);
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.38+76'));
+    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.39+77'));
   });
   testWidgets('Default premium card padding is compile-time constant', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: Scaffold(

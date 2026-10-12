@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/formatters.dart';
 import '../core/theme/app_theme.dart';
-import 'premium/salus_training_overview.dart';
+import 'premium/salus_training_77.dart';
 import '../models/models.dart';
 import '../models/workout_models.dart';
 import '../state/app_state.dart';
@@ -90,7 +90,7 @@ class _WorkoutScreenState extends ConsumerState<WorkoutScreen> {
       'Schedule' => _ScheduleView(library: library),
       'Templates' => _TemplatesView(library: library),
       'History' => _HistoryView(library: library, connected: health.workouts),
-      'Overview' => SalusTrainingOverview(
+      'Overview' => SalusTraining77(
         onToday:()=>setState(()=>_tab='Today'),
         onSchedule:()=>setState(()=>_tab='Schedule'),
         onHistory:()=>setState(()=>_tab='History')),
