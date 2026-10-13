@@ -158,7 +158,7 @@ class SalusEnergyService {
       quality: 'Provisional estimate',
       used: used,
       missing: missing,
-      explanation: 'Experimental daily energy estimate, not Garmin Body Battery or a medical measure. '
+      explanation: 'Experimental daily estimate, not a medical measure. '
           'It does not reproduce Garmin\'s continuous charging and draining.',
     );
   }

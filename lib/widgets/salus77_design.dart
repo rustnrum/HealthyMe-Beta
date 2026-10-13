@@ -21,6 +21,26 @@ class S77 {
   static const double gutter = 17;
 }
 
+/// A full-screen scene behind the entire Home page, including its cards.
+/// Never blocks scrolling, taps, or existing module selection.
+class SalusMountainBackdrop extends StatelessWidget {
+  const SalusMountainBackdrop({super.key,required this.child,required this.light});
+  final Widget child;
+  final bool light;
+  @override Widget build(BuildContext context)=>Stack(fit:StackFit.expand,children:[
+    ColoredBox(color:S77.bg),
+    Positioned.fill(child:Opacity(opacity:light?0.34:0.83,
+      child:Image.asset('assets/premium/salus_mountain_79.webp',
+        fit:BoxFit.cover,alignment:Alignment.topCenter))),
+    Positioned.fill(child:DecoratedBox(decoration:BoxDecoration(
+      gradient:LinearGradient(begin:Alignment.topCenter,end:Alignment.bottomCenter,
+        stops:const [0.0,0.38,1.0],
+        colors:light?[const Color(0x9cf4f8fc),const Color(0xcaf4f8fc),const Color(0xf1f4f8fc)]:
+          [const Color(0x67030d18),const Color(0xa5050d18),const Color(0xe8040b13)])))),
+    child,
+  ]);
+}
+
 class S77Surface extends StatelessWidget {
   const S77Surface({super.key,required this.child,this.accent,this.onTap,this.padding=const EdgeInsets.all(15),this.radius=19});
   final Widget child;
@@ -115,20 +135,21 @@ class S77RingTile extends StatelessWidget {
   final VoidCallback? onTap;
   @override Widget build(BuildContext context) {
     final progress=fraction==null?null:fraction!.clamp(0.0,1.0).toDouble();
-    return S77Surface(accent:color,onTap:onTap,padding:const EdgeInsets.all(11),child:SizedBox(height:116,
+    final ringDiameter=MediaQuery.sizeOf(context).width<392?74.0:82.0;
+    return S77Surface(accent:color,onTap:onTap,padding:const EdgeInsets.all(11),child:SizedBox(height:132,
       child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         Row(children:[Icon(icon,color:color,size:18),const SizedBox(width:6),
           Expanded(child:Text(label,maxLines:1,overflow:TextOverflow.ellipsis,
             style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800,fontSize:12)))]),
         const Spacer(),Row(children:[
-          S77Arc(size:68,center:progress==null?'—':'${(progress*100).round()}%',
+          S77Arc(size:ringDiameter,center:progress==null?'—':'${(progress*100).round()}%',
             caption:progress==null?'No goal':'of goal',
             segments:progress==null?const []:[
               (value:progress*100,color:color),
               (value:(1-progress)*100,color:S77.edge)]),
-          const SizedBox(width:9),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          const SizedBox(width:6),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
             Text(value,maxLines:1,overflow:TextOverflow.ellipsis,
-              style:TextStyle(color:S77.ink,fontWeight:FontWeight.w900,fontSize:19)),
+              style:TextStyle(color:S77.ink,fontWeight:FontWeight.w900,fontSize:16)),
             if(detail!=null)Text(detail!,maxLines:2,overflow:TextOverflow.ellipsis,
               style:TextStyle(color:S77.sub,fontSize:10,height:1.35))])),
         ]),
@@ -145,8 +166,8 @@ class S77Arc extends StatelessWidget {
   @override Widget build(BuildContext context)=>SizedBox(width:size,height:size,child:Stack(alignment:Alignment.center,children:[
     CustomPaint(size:Size.square(size),painter:_S77ArcPainter(segments,S77.edge.withValues(alpha:.65))),
     Column(mainAxisSize:MainAxisSize.min,children:[
-      Text(center,style:TextStyle(fontSize:size>140?29:22,fontWeight:FontWeight.w900,color:S77.ink)),
-      const SizedBox(height:2),Text(caption,textAlign:TextAlign.center,style:TextStyle(fontSize:10,color:S77.sub))])
+      Text(center,style:TextStyle(fontSize:size>140?25:size>100?21:16,fontWeight:FontWeight.w900,color:S77.ink)),
+      const SizedBox(height:2),Text(caption,textAlign:TextAlign.center,style:TextStyle(fontSize:size>100?10:9,color:S77.sub))])
   ]));
 }
 class _S77ArcPainter extends CustomPainter {
@@ -168,6 +189,56 @@ class _S77ArcPainter extends CustomPainter {
   }
   @override bool shouldRepaint(covariant _S77ArcPainter o)=>o.data!=data||o.track!=track;
 }
+
+/// Recorded resting heart rate only. Each point is an observed daily value;
+/// the y-axis is an expanded bpm range rather than exaggerated auto-zoom.
+class S77RestingHeartChart extends StatelessWidget {
+  const S77RestingHeartChart({super.key,required this.values,this.height=120,this.color=const Color(0xffff607a)});
+  final List<double?> values;
+  final double height;
+  final Color color;
+  @override Widget build(BuildContext context) {
+    final usable=values.whereType<double>().where((v)=>v.isFinite&&v>=30&&v<=180).toList();
+    if(usable.length<2)return SizedBox(height:height,child:Center(child:Text(
+      'More recorded days needed for a trend',style:TextStyle(color:S77.sub,fontSize:11))));
+    return SizedBox(height:height,child:CustomPaint(painter:_S77RestingHeartPainter(usable,color,S77.edge,S77.sub)));
+  }
+}
+class _S77RestingHeartPainter extends CustomPainter {
+  _S77RestingHeartPainter(this.values,this.accent,this.grid,this.ink);
+  final List<double> values;
+  final Color accent,grid,ink;
+  @override void paint(Canvas c,Size s){
+    if(values.length<2||s.width<=52||s.height<=28)return;
+    final lowRaw=values.reduce(math.min),highRaw=values.reduce(math.max);
+    var low=((lowRaw-5)/5).floorToDouble()*5;
+    var high=((highRaw+5)/5).ceilToDouble()*5;
+    if(high-low<15){final center=(high+low)/2;low=center-7.5;high=center+7.5;}
+    final left=31.0,right=s.width-7.0,top=9.0,bottom=s.height-17.0;
+    final width=right-left,height=bottom-top;
+    if(width<=0||height<=0)return;
+    for(var i=0;i<=3;i++){
+      final y=top+height*i/3;
+      c.drawLine(Offset(left,y),Offset(right,y),Paint()..color=grid.withValues(alpha:.55)..strokeWidth=.8);
+      final bpm=(high-(high-low)*i/3).round().toString();
+      final tp=TextPainter(text:TextSpan(text:bpm,style:TextStyle(color:ink,fontSize:9)),textDirection:TextDirection.ltr)..layout();
+      tp.paint(c,Offset(1,y-tp.height/2));
+    }
+    final points=<Offset>[];
+    for(var i=0;i<values.length;i++){
+      final x=left+width*i/(values.length-1);
+      final y=bottom-(values[i]-low)/(high-low)*height;
+      points.add(Offset(x,y));
+    }
+    final path=Path()..moveTo(points.first.dx,points.first.dy);
+    for(final point in points.skip(1)){path.lineTo(point.dx,point.dy);}
+    c.drawPath(path,Paint()..color=accent..style=PaintingStyle.stroke..strokeWidth=2.4..strokeCap=StrokeCap.round..strokeJoin=StrokeJoin.round);
+    for(final point in points){c.drawCircle(point,3.2,Paint()..color=accent);}
+  }
+  @override bool shouldRepaint(covariant _S77RestingHeartPainter old)=>
+    old.values!=values||old.accent!=accent||old.grid!=grid||old.ink!=ink;
+}
+
 class S77Progress extends StatelessWidget {
   const S77Progress({super.key,required this.label,required this.color,this.value,this.target,this.unit='g'});
   final String label,unit;

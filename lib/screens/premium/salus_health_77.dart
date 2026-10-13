@@ -102,7 +102,7 @@ class _SalusHealth77State extends ConsumerState<SalusHealth77>{
           const SizedBox(width:10),Expanded(child:Column(
             crossAxisAlignment:CrossAxisAlignment.start,children:[
               Text('Salus Energy',style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800)),
-              Text('Experimental daily estimate · not Garmin Body Battery',
+              Text('Experimental estimate · sleep & heart trends',
                 style:TextStyle(color:S77.sub,fontSize:10)),
               Text(energy.quality,style:TextStyle(color:S77.dim,fontSize:10)),
           ])),Text(energy.score==null?'—':'${energy.score} / 100',

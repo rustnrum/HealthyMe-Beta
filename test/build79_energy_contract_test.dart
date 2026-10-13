@@ -66,14 +66,16 @@ void main() {
     expect(report.score!, lessThan(80), reason: 'Preliminary score needs confidence shrinkage');
   });
 
-  test('The mountain art and both battery labels are part of Home', () {
+  test('The mountain art and cross-device Salus Energy are part of Home', () {
     final home = File('lib/screens/premium/salus_home_77.dart').readAsStringSync();
-    expect(home, contains('salus_mountain_79.webp'));
+    expect(home, contains('SalusMountainBackdrop('));
+    expect(File('lib/widgets/salus77_design.dart').readAsStringSync(), contains('salus_mountain_79.webp'));
     expect(home, contains('SalusEnergyService.estimate'));
-    expect(home, contains("s.metric == 'Body battery'"));
+    expect(home, isNot(contains("s.metric == 'Body battery'")));
+    expect(home, contains("'Salus Energy'"));
     expect(home, contains('Activity Load'));
     expect(File('assets/premium/salus_mountain_79.webp').lengthSync(), greaterThan(10000));
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.41+79'));
+    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.42+80'));
   });
 
   test('A profile without age does not invent an adult sleep score', () {

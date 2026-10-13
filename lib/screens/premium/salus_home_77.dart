@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/recovery_service.dart';
 import '../../services/salus_energy_service.dart';
-import '../../services/direct_metric_service.dart';
 import '../../services/home_insight_service.dart';
 import '../../state/app_state.dart';
 import '../../state/diet_log_state.dart';
@@ -19,20 +18,7 @@ class SalusHome77 extends ConsumerStatefulWidget {
 }
 class _SalusHome77State extends ConsumerState<SalusHome77> {
   double? _calorieGoal;
-  DirectMetricSample? _deviceBodyBattery;
-  @override void initState(){super.initState();SalusAppearance.load();_loadTarget();_loadBattery();}
-  Future<void> _loadBattery() async {
-    try {
-      final records = await const DirectMetricService().loadSamples();
-      final now = DateTime.now();
-      final values = records.where((s) => s.metric == 'Body battery' &&
-          s.value.isFinite && s.value >= 1 && s.value <= 100 &&
-          !s.capturedAt.isAfter(now) &&
-          now.difference(s.capturedAt) <= const Duration(hours: 12)).toList()
-        ..sort((a,b) => a.capturedAt.compareTo(b.capturedAt));
-      if (mounted) setState(() => _deviceBodyBattery = values.isEmpty ? null : values.last);
-    } catch (_) { /* Device-only telemetry must not block Home. */ }
-  }
+  @override void initState(){super.initState();SalusAppearance.load();_loadTarget();}
   Future<void> _loadTarget() async {
     try { final p=await SharedPreferences.getInstance();
       final value=p.getDouble('salus_nutrition_target_Calories');
@@ -62,7 +48,7 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
     final workTarget=app.profile.workoutGoalPerWeek;
     final day='${now.month}/${now.day}/${now.year}';
     return ValueListenableBuilder<bool>(valueListenable:SalusAppearance.light,builder:(context,light,_)=>
-      ColoredBox(color:S77.bg,child:ListView(padding:const EdgeInsets.fromLTRB(17,11,17,40),children:[
+      SalusMountainBackdrop(light:light,child:ListView(padding:const EdgeInsets.fromLTRB(17,11,17,40),children:[
         Row(children:[Expanded(child:Text('S A L U S',style:TextStyle(color:S77.ink,fontSize:19,
           fontWeight:FontWeight.w900,letterSpacing:3))),
           HealthyMeModuleMenuButton(iconColor:S77.ink,showLabel:true,lightSurface:light,current:HealthyMeModule.fitness,
@@ -72,30 +58,23 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
               case HealthyMeModule.diet:Navigator.of(context).pushNamed('/diet');break;
               case HealthyMeModule.health:Navigator.of(context).pushNamed('/health');break;
             }}),const PremiumThemeButton()]),
-        const SizedBox(height:8),ClipRRect(borderRadius:BorderRadius.circular(20),
-          child:SizedBox(height:208,child:Stack(fit:StackFit.expand,children:[
-            Image.asset('assets/premium/salus_mountain_79.webp',fit:BoxFit.cover,
-              alignment:Alignment.centerRight),
-            DecoratedBox(decoration:BoxDecoration(gradient:LinearGradient(
-              begin:Alignment.centerLeft,end:Alignment.centerRight,
-              colors:[const Color(0xea020f1d),const Color(0x88031323),const Color(0x14031323)]))),
-            Padding(padding:const EdgeInsets.fromLTRB(20,18,12,16),child:Column(
-              crossAxisAlignment:CrossAxisAlignment.start,
-              mainAxisAlignment:MainAxisAlignment.center,children:[
-                Text(day,style:const TextStyle(color:Color(0xffbde5f6),fontSize:12)),
-                const SizedBox(height:9),
-                Text('Good ${now.hour<12?'morning':now.hour<17?'afternoon':'evening'},',
-                  style:const TextStyle(color:Colors.white,fontSize:24,fontWeight:FontWeight.w800)),
-                Text(name,style:const TextStyle(color:Colors.white,fontSize:29,fontWeight:FontWeight.w900)),
-                const SizedBox(height:10),
-                const Text('Train. Recover. Live better.',
-                  style:TextStyle(color:Color(0xffe9f8ff),fontSize:13,fontWeight:FontWeight.w600)),
-              ])),
+        const SizedBox(height:12),SizedBox(height:210,child:Padding(
+          padding:const EdgeInsets.fromLTRB(12,10,10,14),child:Column(
+          crossAxisAlignment:CrossAxisAlignment.start,
+          mainAxisAlignment:MainAxisAlignment.center,children:[
+            Text(day,style:TextStyle(color:light?S77.sub:const Color(0xffbde5f6),fontSize:12)),
+            const SizedBox(height:9),
+            Text('Good ${now.hour<12?'morning':now.hour<17?'afternoon':'evening'},',
+              style:TextStyle(color:S77.ink,fontSize:24,fontWeight:FontWeight.w800)),
+            Text(name,style:TextStyle(color:S77.ink,fontSize:30,fontWeight:FontWeight.w900)),
+            const SizedBox(height:10),
+            Text('Train. Recover. Live better.',
+              style:TextStyle(color:light?S77.sub:const Color(0xffe9f8ff),fontSize:13,fontWeight:FontWeight.w600)),
           ]))),
         const SizedBox(height:14),S77Section('Recovery Score',action:'Details',onTap:()=>Navigator.pushNamed(context,'/recovery')),
         const SizedBox(height:7),S77Surface(accent:S77.green,onTap:()=>Navigator.pushNamed(context,'/recovery'),
           child:Row(children:[
-            S77Arc(size:135,center:rec.score?.toString()??'—',
+            S77Arc(size:143,center:rec.score?.toString()??'—',
               caption:rec.score==null?'Unavailable':rec.label,
               segments:rec.score==null?const []:[
                 (value:rec.score!.toDouble(),color:S77.green),
@@ -107,16 +86,11 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
                 h.hrvMs==null?'—':'${h.hrvMs!.round()} ms'),
               const SizedBox(height:7),_signal(Icons.favorite,S77.red,'RHR',
                 h.restingHeartRate==null?'—':'${h.restingHeartRate!.round()} bpm'),
-              const SizedBox(height:7),_signal(Icons.battery_charging_full,S77.cyan,
-                _deviceBodyBattery==null?'Salus Energy':'Body Battery',
-                _deviceBodyBattery==null
-                  ? (energy.score==null?'—':'${energy.score} est.')
-                  : '${_deviceBodyBattery!.value.round()}'),
+              const SizedBox(height:7),_signal(Icons.bolt_rounded,S77.cyan,'Salus Energy',
+                energy.score==null?'—':'${energy.score} est.'),
               const SizedBox(height:7),_signal(Icons.fitness_center,S77.orange,'Activity Load',
                 training.reading??(training.score==null?'—':'${training.score} / 100')),
-              const SizedBox(height:7),Text(_deviceBodyBattery!=null
-                ? 'Device reading · ${_deviceBodyBattery!.deviceName}'
-                : 'Salus Energy · ${energy.quality} (${energy.coverage}% inputs)',
+              const SizedBox(height:7),Text('${energy.quality} · ${energy.coverage}% available inputs',
                 maxLines:2,overflow:TextOverflow.ellipsis,
                 style:TextStyle(color:S77.sub,fontSize:9)),
               const SizedBox(height:8),Text('${rec.confidence}% signal coverage',
@@ -168,6 +142,6 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
     S77Surface(onTap:()=>Navigator.pushNamed(context,route),padding:const EdgeInsets.all(10),
       child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         Text(label,style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800,fontSize:12)),
-        const SizedBox(height:5),PremiumLineChart(values:values,color:color,height:108,unit:unit),
+        const SizedBox(height:5),unit=='bpm' ? S77RestingHeartChart(values:values,height:108,color:color) : PremiumLineChart(values:values,color:color,height:108,unit:unit),
       ]));
 }
