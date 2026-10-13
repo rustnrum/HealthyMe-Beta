@@ -13,12 +13,12 @@ class SalusV {
   static Color get secondary => lightMode ? Color(0xff4a6470) : Color(0xffabc0c9);
   static Color get muted => lightMode ? Color(0xff607782) : Color(0xff77919d);
   static Color get shadow => lightMode ? Color(0x160c334d) : Color(0x4a000000);
-  static const cyan = Color(0xff00b4d0);
+  static const cyan = Color(0xff00d9ff);
   static const blue = Color(0xff4b9df9);
-  static const green = Color(0xff12c58e);
+  static const green = Color(0xff00edac);
   static const orange = Color(0xffffa32a);
   static const red = Color(0xffff607a);
-  static const purple = Color(0xffac83e8);
+  static const purple = Color(0xffaf60ff);
   static const yellow = Color(0xfffbd343);
 }
 

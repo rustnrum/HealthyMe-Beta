@@ -126,7 +126,7 @@ class RecoveryService {
       // sleep reading must NEVER be presented as a full readiness score.
       if (objectiveScored.length >= 2 && objectiveScore != null) {
         return RecoveryReport(
-          score: objectiveScore,
+          score: (50 + (objectiveScore - 50) * (objectiveConfidence / 100)).round().clamp(0, 100).toInt(),
           confidence: objectiveConfidence,
           band: RecoveryBand.noData,
           label: 'Preliminary',
@@ -341,13 +341,13 @@ class RecoveryService {
 
   static RecoveryContributor _restingHeartRateContributor(HealthSnapshot h) {
     final current = h.restingHeartRate;
-    if (current == null || h.restingHeartRate30.length < 4) {
+    if (current == null || h.restingHeartRate30.length < 3) {
       return RecoveryContributor(
         name: 'Resting HR', score: null,
         reading: current == null ? null : '${current.round()} bpm',
         detail: current == null
             ? 'No resting-heart-rate value from the selected source'
-            : 'Measured resting heart rate available · ${h.restingHeartRate30.length} of 4 baseline readings. No comparison score yet.',
+            : 'Measured resting heart rate available · ${h.restingHeartRate30.length} of 3 baseline readings. No comparison score yet.',
         available: false, weight: _rhrWeight,
       );
     }
@@ -370,8 +370,9 @@ class RecoveryService {
       name: 'Resting HR',
       score: score,
       detail:
-          '${current.round()} bpm • ${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)} vs baseline',
-      weight: _rhrWeight,
+          '${current.round()} bpm • ${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(1)} vs baseline'
+          '${h.restingHeartRate30.length == 3 ? ' • early baseline' : ''}',
+      weight: h.restingHeartRate30.length == 3 ? 10 : _rhrWeight,
     );
   }
 

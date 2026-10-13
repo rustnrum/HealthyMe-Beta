@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/recovery_service.dart';
+import '../../services/salus_energy_service.dart';
 import '../../state/app_state.dart';
 import '../../state/workout_state.dart';
 import '../../widgets/module_menu_button.dart';
@@ -17,6 +18,7 @@ class _SalusHealth77State extends ConsumerState<SalusHealth77>{
   @override Widget build(BuildContext context){
     final app=ref.watch(appStateProvider),workouts=ref.watch(workoutStateProvider);
     final health=app.health,rec=RecoveryService.build(app,completedWorkouts:workouts.history);
+    final energy=SalusEnergyService.estimate(health,app.profile);
     final hasStages=health.sleepDeepMinutes+health.sleepRemMinutes+health.sleepLightMinutes>0;
     return ValueListenableBuilder<bool>(valueListenable:SalusAppearance.light,builder:(context,light,_)=>ColoredBox(color:S77.bg,
       child:ListView(padding:const EdgeInsets.fromLTRB(17,17,17,38),children:[
@@ -93,6 +95,18 @@ class _SalusHealth77State extends ConsumerState<SalusHealth77>{
               value:c.score==null?0.0:c.score!/100,minHeight:6,backgroundColor:S77.edge,color:c.score==null?S77.edge:S77.green)),
             const SizedBox(height:3),Text(c.detail,maxLines:2,overflow:TextOverflow.ellipsis,style:TextStyle(color:S77.dim,fontSize:10)),
           ]))
+        ])),
+        const SizedBox(height:14),S77Section('Energy & workload'),
+        const SizedBox(height:6),S77Surface(accent:S77.cyan,child:Row(children:[
+          Icon(Icons.battery_charging_full,color:S77.cyan,size:27),
+          const SizedBox(width:10),Expanded(child:Column(
+            crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text('Salus Energy',style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800)),
+              Text('Experimental daily estimate · not Garmin Body Battery',
+                style:TextStyle(color:S77.sub,fontSize:10)),
+              Text(energy.quality,style:TextStyle(color:S77.dim,fontSize:10)),
+          ])),Text(energy.score==null?'—':'${energy.score} / 100',
+            style:TextStyle(color:S77.cyan,fontSize:18,fontWeight:FontWeight.w900)),
         ])),
         const SizedBox(height:14),S77Section('More Health Data',action:'All trends',onTap:()=>Navigator.pushNamed(context,'/trends')),
         const SizedBox(height:6),S77Surface(accent:S77.purple,onTap:()=>Navigator.pushNamed(context,'/health-intelligence'),child:Row(children:[

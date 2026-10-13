@@ -6,7 +6,7 @@ import 'package:healthy_me/widgets/salus_premium_visuals.dart';
 void main(){
   test('Build 75 has authored dark assets and no missing files',(){
     final pubspec=File('pubspec.yaml').readAsStringSync();
-    expect(RegExp(r'^version: 0\.21\.(37|38|39|40)\+(75|76|77|78)$',multiLine:true).hasMatch(pubspec),isTrue);
+    expect(RegExp(r'^version: 0\.21\.(37|38|39|40|41)\+(75|76|77|78|79)$',multiLine:true).hasMatch(pubspec),isTrue);
     expect(pubspec,contains('assets/premium/'));
     for(final filename in ['training_hero.jpg',
       'meal_illustration.jpg','muscle_reference.jpg']){

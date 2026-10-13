@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/recovery_service.dart';
+import '../../services/salus_energy_service.dart';
+import '../../services/direct_metric_service.dart';
 import '../../services/home_insight_service.dart';
 import '../../state/app_state.dart';
 import '../../state/diet_log_state.dart';
@@ -17,7 +19,20 @@ class SalusHome77 extends ConsumerStatefulWidget {
 }
 class _SalusHome77State extends ConsumerState<SalusHome77> {
   double? _calorieGoal;
-  @override void initState(){super.initState();SalusAppearance.load();_loadTarget();}
+  DirectMetricSample? _deviceBodyBattery;
+  @override void initState(){super.initState();SalusAppearance.load();_loadTarget();_loadBattery();}
+  Future<void> _loadBattery() async {
+    try {
+      final records = await const DirectMetricService().loadSamples();
+      final now = DateTime.now();
+      final values = records.where((s) => s.metric == 'Body battery' &&
+          s.value.isFinite && s.value >= 1 && s.value <= 100 &&
+          !s.capturedAt.isAfter(now) &&
+          now.difference(s.capturedAt) <= const Duration(hours: 12)).toList()
+        ..sort((a,b) => a.capturedAt.compareTo(b.capturedAt));
+      if (mounted) setState(() => _deviceBodyBattery = values.isEmpty ? null : values.last);
+    } catch (_) { /* Device-only telemetry must not block Home. */ }
+  }
   Future<void> _loadTarget() async {
     try { final p=await SharedPreferences.getInstance();
       final value=p.getDouble('salus_nutrition_target_Calories');
@@ -33,6 +48,8 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
     final app=ref.watch(appStateProvider),h=app.health;
     final log=ref.watch(dietLogStateProvider),work=ref.watch(workoutStateProvider);
     final rec=RecoveryService.build(app,completedWorkouts:work.history);
+    final energy=SalusEnergyService.estimate(h,app.profile);
+    final training=rec.contributors.where((c)=>c.name=='Training load').first;
     final insight=HomeInsightService.build(app);
     final now=DateTime.now();
     final name=app.profile.firstName.trim().isEmpty?'there':app.profile.firstName.trim().split(' ').first;
@@ -55,12 +72,26 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
               case HealthyMeModule.diet:Navigator.of(context).pushNamed('/diet');break;
               case HealthyMeModule.health:Navigator.of(context).pushNamed('/health');break;
             }}),const PremiumThemeButton()]),
-        const SizedBox(height:5),Text('Good ${now.hour<12?'morning':now.hour<17?'afternoon':'evening'}, $name',
-          style:TextStyle(color:S77.ink,fontWeight:FontWeight.w900,fontSize:25)),
-        const SizedBox(height:2),Text(day,style:TextStyle(color:S77.sub,fontSize:12)),
-        const SizedBox(height:12),S77Hero(asset:'assets/premium/training_hero.jpg',height:126,
-          title:'Train. Recover.\nLive better.',caption:'Your health, food and movement in one place.',
-          onTap:()=>Navigator.pushNamed(context,'/recovery')),
+        const SizedBox(height:8),ClipRRect(borderRadius:BorderRadius.circular(20),
+          child:SizedBox(height:208,child:Stack(fit:StackFit.expand,children:[
+            Image.asset('assets/premium/salus_mountain_79.webp',fit:BoxFit.cover,
+              alignment:Alignment.centerRight),
+            DecoratedBox(decoration:BoxDecoration(gradient:LinearGradient(
+              begin:Alignment.centerLeft,end:Alignment.centerRight,
+              colors:[const Color(0xea020f1d),const Color(0x88031323),const Color(0x14031323)]))),
+            Padding(padding:const EdgeInsets.fromLTRB(20,18,12,16),child:Column(
+              crossAxisAlignment:CrossAxisAlignment.start,
+              mainAxisAlignment:MainAxisAlignment.center,children:[
+                Text(day,style:const TextStyle(color:Color(0xffbde5f6),fontSize:12)),
+                const SizedBox(height:9),
+                Text('Good ${now.hour<12?'morning':now.hour<17?'afternoon':'evening'},',
+                  style:const TextStyle(color:Colors.white,fontSize:24,fontWeight:FontWeight.w800)),
+                Text(name,style:const TextStyle(color:Colors.white,fontSize:29,fontWeight:FontWeight.w900)),
+                const SizedBox(height:10),
+                const Text('Train. Recover. Live better.',
+                  style:TextStyle(color:Color(0xffe9f8ff),fontSize:13,fontWeight:FontWeight.w600)),
+              ])),
+          ]))),
         const SizedBox(height:14),S77Section('Recovery Score',action:'Details',onTap:()=>Navigator.pushNamed(context,'/recovery')),
         const SizedBox(height:7),S77Surface(accent:S77.green,onTap:()=>Navigator.pushNamed(context,'/recovery'),
           child:Row(children:[
@@ -76,6 +107,18 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
                 h.hrvMs==null?'—':'${h.hrvMs!.round()} ms'),
               const SizedBox(height:7),_signal(Icons.favorite,S77.red,'RHR',
                 h.restingHeartRate==null?'—':'${h.restingHeartRate!.round()} bpm'),
+              const SizedBox(height:7),_signal(Icons.battery_charging_full,S77.cyan,
+                _deviceBodyBattery==null?'Salus Energy':'Body Battery',
+                _deviceBodyBattery==null
+                  ? (energy.score==null?'—':'${energy.score} est.')
+                  : '${_deviceBodyBattery!.value.round()}'),
+              const SizedBox(height:7),_signal(Icons.fitness_center,S77.orange,'Activity Load',
+                training.reading??(training.score==null?'—':'${training.score} / 100')),
+              const SizedBox(height:7),Text(_deviceBodyBattery!=null
+                ? 'Device reading · ${_deviceBodyBattery!.deviceName}'
+                : 'Salus Energy · ${energy.quality} (${energy.coverage}% inputs)',
+                maxLines:2,overflow:TextOverflow.ellipsis,
+                style:TextStyle(color:S77.sub,fontSize:9)),
               const SizedBox(height:8),Text('${rec.confidence}% signal coverage',
                 style:TextStyle(color:S77.green,fontSize:10,fontWeight:FontWeight.w800)),
             ])),
