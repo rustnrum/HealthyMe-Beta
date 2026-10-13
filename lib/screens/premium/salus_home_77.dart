@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/recovery_service.dart';
 import '../../services/direct_metric_service.dart';
+import '../../services/hrv_source_service.dart';
 import '../../services/salus_energy_service.dart';
 import '../../services/home_insight_service.dart';
 import '../../state/app_state.dart';
@@ -23,8 +24,7 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
   Future<void> _loadRingHrvHistory() async {
     try {
       final samples = await const DirectMetricService().loadSamples();
-      if (mounted) setState(() => _ringHrvHistory = samples.where((s) =>
-          s.metric == 'Ring HRV proxy' && s.value >= 1 && s.value <= 254).toList());
+      if (mounted) setState(() => _ringHrvHistory = samples);
     } catch (_) { /* Failed history read must not block the Home page. */ }
   }
   @override void initState(){super.initState();SalusAppearance.load();_loadTarget();_loadRingHrvHistory();}
@@ -42,12 +42,10 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
   @override Widget build(BuildContext context){
     final app=ref.watch(appStateProvider),h=app.health;
     ref.listen(appStateProvider, (previous, next) {
-      if (previous?.health.lastSync != next.health.lastSync) _loadRingHrvHistory();
+      if (previous?.health != next.health) _loadRingHrvHistory();
     });
-    final ringSource=app.metricSources['HRV'];
-    final selectedRingHrv=ringSource != null && ringSource.startsWith('ble:')
-        ? _ringHrvHistory.where((s) => s.sourceId == ringSource).toList()
-        : <DirectMetricSample>[];
+    final hrvView=HrvSourceService.resolve(health:h,
+        selectedSource:app.metricSources['HRV'], directSamples:_ringHrvHistory);
     final log=ref.watch(dietLogStateProvider),work=ref.watch(workoutStateProvider);
     final rec=RecoveryService.build(app,completedWorkouts:work.history);
     final energy=SalusEnergyService.estimate(h,app.profile);
@@ -98,8 +96,10 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
             const SizedBox(width:13),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
               _signal(Icons.bedtime,S77.purple,'Sleep',
                 sleepKnown?'${h.sleepMinutes~/60}h ${h.sleepMinutes%60}m':'—'),
-              const SizedBox(height:7),_signal(Icons.monitor_heart,S77.blue,'HRV',
-                h.hrvMs==null?'—':'${h.hrvMs!.round()} ms'),
+              const SizedBox(height:7),_signal(Icons.monitor_heart,S77.blue,
+                hrvView.hasRmssd?'HRV':hrvView.hasIndex?'HRV index':'HRV',
+                hrvView.hasRmssd?'${hrvView.rmssdMs!.round()} ms':
+                hrvView.hasIndex?'${hrvView.latestIndex!.value.round()}':'—'),
               const SizedBox(height:7),_signal(Icons.favorite,S77.red,'RHR',
                 h.restingHeartRate==null?'—':'${h.restingHeartRate!.round()} bpm'),
               const SizedBox(height:7),_signal(Icons.bolt_rounded,S77.cyan,'Salus Energy',
@@ -141,9 +141,9 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
         const SizedBox(height:16),S77Section('Vital Trends',action:'All trends',onTap:()=>Navigator.pushNamed(context,'/trends')),
         const SizedBox(height:7),Row(children:[
           Expanded(child:_trend(context,'Resting HR',h.restingHeartRate30.map((v)=>v.toDouble()).toList(),S77.red,'bpm','/metric-resting-heart-rate')),
-          const SizedBox(width:9),Expanded(child:h.hrv30.length < 2 && selectedRingHrv.isNotEmpty
-              ? _ringIndexTrend(context,selectedRingHrv)
-              : _trend(context,'HRV',h.hrv30.map((v)=>v.toDouble()).toList(),S77.blue,'ms','/metric-hrv')),
+          const SizedBox(width:9),Expanded(child:hrvView.rmssdHistory.length < 2 && hrvView.hasIndex
+              ? _ringIndexTrend(context,hrvView.indexHistory)
+              : _trend(context,'HRV',hrvView.rmssdHistory.map((v)=>v.toDouble()).toList(),S77.blue,'ms','/metric-hrv')),
         ]),
         const SizedBox(height:11),S77Surface(onTap:()=>Navigator.pushNamed(context,'/health'),child:Row(children:[
           Icon(Icons.favorite_outline,color:S77.purple),const SizedBox(width:9),
@@ -155,8 +155,8 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
     S77Surface(onTap:()=>Navigator.pushNamed(context,'/metric-hrv'),
       padding:const EdgeInsets.all(10),
       child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        Text('Ring HRV index',style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800,fontSize:12)),
-        Text('${values.length} ring records • not RMSSD',
+        Text('Device HRV index',style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800,fontSize:12)),
+        Text('${values.length} device records • not RMSSD',
           style:TextStyle(color:S77.sub,fontSize:9)),
         const SizedBox(height:4),
         PremiumLineChart(values:values.map((s)=>s.value).toList(),

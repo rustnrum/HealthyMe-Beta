@@ -82,7 +82,7 @@ class BleProtocolProfiles {
         'SpO2',
         'Steps',
         'Sleep',
-        'HRV',
+        'Ring HRV proxy',
         'Raw motion',
         'Battery',
       ],

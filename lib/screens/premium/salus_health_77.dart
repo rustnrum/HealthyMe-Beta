@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/recovery_service.dart';
+import '../../services/direct_metric_service.dart';
+import '../../services/hrv_source_service.dart';
 import '../../services/salus_energy_service.dart';
 import '../../state/app_state.dart';
 import '../../state/workout_state.dart';
@@ -14,10 +16,22 @@ class SalusHealth77 extends ConsumerStatefulWidget {
   @override ConsumerState<SalusHealth77> createState()=>_SalusHealth77State();
 }
 class _SalusHealth77State extends ConsumerState<SalusHealth77>{
-  @override void initState(){super.initState();SalusAppearance.load();}
+  List<DirectMetricSample> _hrvSamples=const [];
+  Future<void> _loadHrvSamples() async {
+    try {
+      final samples=await const DirectMetricService().loadSamples();
+      if(mounted) setState(()=>_hrvSamples=samples);
+    } catch (_) { /* A missing history must not block Health. */ }
+  }
+  @override void initState(){super.initState();SalusAppearance.load();_loadHrvSamples();}
   @override Widget build(BuildContext context){
     final app=ref.watch(appStateProvider),workouts=ref.watch(workoutStateProvider);
     final health=app.health,rec=RecoveryService.build(app,completedWorkouts:workouts.history);
+    ref.listen(appStateProvider,(previous,next){
+      if(previous?.health!=next.health) _loadHrvSamples();
+    });
+    final hrvView=HrvSourceService.resolve(health:health,
+        selectedSource:app.metricSources['HRV'],directSamples:_hrvSamples);
     final energy=SalusEnergyService.estimate(health,app.profile);
     final hasStages=health.sleepDeepMinutes+health.sleepRemMinutes+health.sleepLightMinutes>0;
     return ValueListenableBuilder<bool>(valueListenable:SalusAppearance.light,builder:(context,light,_)=>ColoredBox(color:S77.bg,
@@ -66,8 +80,13 @@ class _SalusHealth77State extends ConsumerState<SalusHealth77>{
         const SizedBox(height:6),Row(children:[
           Expanded(child:S77Metric(label:'Resting HR',value:health.restingHeartRate==null?'—':'${health.restingHeartRate!.round()}',
             caption:'bpm',icon:Icons.favorite,color:S77.red,height:91,onTap:()=>Navigator.pushNamed(context,'/metric-resting-heart-rate'))),
-          const SizedBox(width:9),Expanded(child:S77Metric(label:'HRV',value:health.hrvMs==null?'—':'${health.hrvMs!.round()}',
-            caption:'ms',icon:Icons.monitor_heart,color:S77.cyan,height:91,onTap:()=>Navigator.pushNamed(context,'/metric-hrv'))),
+          const SizedBox(width:9),Expanded(child:S77Metric(
+            label:hrvView.hasRmssd?'HRV':hrvView.hasIndex?'HRV device index':'HRV',
+            value:hrvView.hasRmssd?'${hrvView.rmssdMs!.round()}':
+                hrvView.hasIndex?'${hrvView.latestIndex!.value.round()}':'—',
+            caption:hrvView.hasIndex&&!hrvView.hasRmssd?'index · not RMSSD':'ms',
+            icon:Icons.monitor_heart,color:S77.cyan,height:91,
+            onTap:()=>Navigator.pushNamed(context,'/metric-hrv'))),
         ]),const SizedBox(height:9),Row(children:[
           Expanded(child:S77Metric(label:'Blood oxygen',value:health.bloodOxygenPercent==null?'—':'${health.bloodOxygenPercent!.round()}',
             caption:'%',icon:Icons.water_drop_outlined,color:S77.blue,height:91,onTap:()=>Navigator.pushNamed(context,'/spo2-history'))),
@@ -80,8 +99,16 @@ class _SalusHealth77State extends ConsumerState<SalusHealth77>{
             const SizedBox(height:8),PremiumLineChart(values:health.restingHeartRate30.map((x)=>x.toDouble()).toList(),color:S77.red,height:118,unit:'bpm'),
           ]))),const SizedBox(width:9),
           Expanded(child:S77Surface(accent:S77.cyan,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            Text('HRV history',style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800,fontSize:12)),
-            const SizedBox(height:8),PremiumLineChart(values:health.hrv30.map((x)=>x.toDouble()).toList(),color:S77.cyan,height:118,unit:'ms'),
+            Text(hrvView.hasIndex&&!hrvView.hasRmssd?'HRV device index':'HRV history',
+                style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800,fontSize:12)),
+            const SizedBox(height:8),PremiumLineChart(
+              values:hrvView.hasRmssd
+                ? hrvView.rmssdHistory.map((x)=>x.toDouble()).toList()
+                : hrvView.indexHistory.map((x)=>x.value).toList(),
+              color:S77.cyan,height:118,unit:hrvView.hasRmssd?'ms':'index'),
+            if(hrvView.hasIndex&&!hrvView.hasRmssd) Text(
+              'Firmware index • excluded from Recovery',
+              style:TextStyle(color:S77.sub,fontSize:9)),
           ]))),
         ]),
         const SizedBox(height:6),Text('Charts contain only available device readings; missing history remains blank.',

@@ -37,12 +37,12 @@ void main() {
   test('Home shows the recorded ring index trend without affecting Recovery', () {
     final home = File('lib/screens/premium/salus_home_77.dart').readAsStringSync();
     final recovery = File('lib/services/recovery_service.dart').readAsStringSync();
-    expect(home, contains('Ring HRV index'));
-    expect(home, contains("s.metric == 'Ring HRV proxy'"));
+    expect(home, contains('Device HRV index'));
+    expect(home, contains('HrvSourceService.resolve('));
     expect(home, contains("app.metricSources['HRV']"));
     expect(home, contains('_ringIndexTrend('));
     expect(recovery, contains("_hrvContributor(app.health)"));
     expect(recovery.contains('Ring HRV proxy'), isFalse);
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.44+82'));
+    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.45+83'));
   });
 }

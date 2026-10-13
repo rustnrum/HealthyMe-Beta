@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_theme.dart';
 import '../services/direct_metric_service.dart';
+import '../services/hrv_source_service.dart';
 import '../services/metric_history_service.dart';
 import '../services/source_name_service.dart';
 import '../state/app_state.dart';
@@ -23,6 +24,7 @@ class _MetricDetailScreenState extends ConsumerState<MetricDetailScreen> {
   late Future<MetricHistoryResult> _future;
   String _range = '7 days';
   String? _selectedSource;
+  String? _refreshStatus;
 
   @override
   void initState() {
@@ -36,9 +38,15 @@ class _MetricDetailScreenState extends ConsumerState<MetricDetailScreen> {
       );
 
   Future<void> _syncAndLoad() async {
-    await ref.read(healthSyncProvider.notifier).sync(forceDirect: true);
-    if (!mounted) return;
-    setState(() => _future = _load());
+    final source=ref.read(appStateProvider).metricSources[widget.metric];
+    String? result;
+    if(widget.metric=='HRV' && source != null && source.startsWith('ble:')) {
+      result=await ref.read(healthSyncProvider.notifier).refreshSelectedHrv();
+    } else {
+      await ref.read(healthSyncProvider.notifier).sync(forceDirect:true);
+    }
+    if(!mounted)return;
+    setState(() { _refreshStatus=result; _future=_load(); });
   }
 
   @override
@@ -63,10 +71,10 @@ class _MetricDetailScreenState extends ConsumerState<MetricDetailScreen> {
         builder: (context, snapshot) {
           final all = snapshot.data?.readings ?? const <DirectMetricSample>[];
           final ringHistory = snapshot.data?.ringHrvProxy ?? const <DirectMetricSample>[];
-          final ringSelected = configured != null && configured.startsWith('ble:');
-          final selectedRingHistory = ringSelected
-              ? ringHistory.where((s) => SourceNameService.sameProvider(s.sourceId, configured)).toList()
-              : ringHistory;
+          final hrvView = HrvSourceService.resolve(
+            health: app.health, selectedSource: configured,
+            directSamples: ringHistory);
+          final selectedRingHistory = hrvView.indexHistory;
 
           final sources = <String, String>{};
           for (final sample in all) {
@@ -102,6 +110,11 @@ class _MetricDetailScreenState extends ConsumerState<MetricDetailScreen> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
             children: [
+              if (_refreshStatus != null) ...[
+                Text(_refreshStatus!, style: const TextStyle(
+                  color: AppTheme.textSecondary, fontSize: 12)),
+                const SizedBox(height: 10),
+              ],
               Text(MetricHistoryService.labelFor(widget.metric),
                   style: const TextStyle(color: AppTheme.textPrimary,
                       fontSize: 24, fontWeight: FontWeight.w800)),

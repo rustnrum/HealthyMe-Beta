@@ -840,7 +840,13 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
     required HealthSnapshot health,
     required bool authorized,
   }) async {
-    final choices = SourceHubService.healthChoicesForMetric(health, metric);
+    final qualifiedChoices = SourceHubService.healthChoicesForMetric(health, metric);
+    final indexChoices = metric == 'HRV'
+        ? SourceHubService.healthChoicesForMetric(health, 'Ring HRV proxy')
+            .where((s) => !qualifiedChoices.any((q) =>
+                SourceNameService.sameProvider(q.id, s.id))).toList()
+        : <HealthyDataSource>[];
+    final choices = [...qualifiedChoices, ...indexChoices];
     final unavailable = SourceHubService.healthSourcesMissingMetric(
       health,
       metric,
@@ -872,7 +878,7 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
               const SizedBox(height: 5),
               if (metric == 'HRV') const Padding(
                 padding: EdgeInsets.only(top: 6, bottom: 9),
-                child: Text('COLMI ring firmware HRV-index data is not verified RMSSD. Choosing the ring cannot turn its index into HRV milliseconds; ring history is shown separately in the HRV detail screen.',
+                child: Text('Some providers expose an HRV firmware index rather than RMSSD in milliseconds. Their real index history is visible, but it is not used as verified HRV in Recovery.',
                   style: TextStyle(color: AppTheme.amber, fontSize: 12)),
               ),
               const Text(
@@ -892,7 +898,9 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
               for (final source in choices)
                 _SourceChoice(
                   title: source.label,
-                  subtitle: '${source.transportLabel} • ${source.recordsFor(metric)} records • use only for $metric',
+                  subtitle: metric == 'HRV' && !source.provides('HRV')
+                      ? '${source.transportLabel} • ${source.recordsFor('Ring HRV proxy')} index records • not RMSSD or Recovery'
+                      : '${source.transportLabel} • ${source.recordsFor(metric)} records • use only for $metric',
                   selected: SourceNameService.sameProvider(
                     selected,
                     source.id,

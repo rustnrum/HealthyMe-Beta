@@ -118,6 +118,53 @@ class HealthSyncNotifier extends AsyncNotifier<void> {
     }
   }
 
+  Future<String> refreshSelectedHrv() async {
+    if (state.isLoading) return 'A health sync is already running. Try again shortly.';
+    final app = ref.read(appStateProvider);
+    final source = app.metricSources['HRV'];
+    if (source == null || !source.startsWith('ble:')) {
+      return 'The selected HRV provider is not a direct Bluetooth device.';
+    }
+    state = const AsyncLoading();
+    try {
+      final saved = await _savedDevices.load();
+      SavedDirectDevice? selected;
+      for (final device in saved) {
+        if ('ble:${device.id}' == source) { selected = device; break; }
+      }
+      if (selected == null) {
+        state = const AsyncData(null);
+        return 'The selected HRV device is not saved in Connections.';
+      }
+      if (!await Permission.bluetoothConnect.isGranted ||
+          !await Permission.bluetoothScan.isGranted) {
+        state = const AsyncData(null);
+        return 'Bluetooth permissions are missing for Salus.';
+      }
+      final reading = await _directService.readAndStore(
+        _candidate(selected), protocolId: selected.protocolId,
+        duration: const Duration(seconds: 30),
+      );
+      final stored = await _directService.loadSamples();
+      final latest = ref.read(appStateProvider);
+      final merged = _directService.mergeIntoSnapshot(latest.health,
+        metricSources: latest.metricSources, samples: stored,
+        registeredDevices: saved);
+      ref.read(appStateProvider.notifier).setHealthSnapshot(merged);
+      final qualified = stored.where((s) =>
+          s.sourceId == source && s.metric == 'HRV').length;
+      final indexed = stored.where((s) =>
+          s.sourceId == source && s.metric == 'Ring HRV proxy').length;
+      state = const AsyncData(null);
+      return '${selected.name}: $qualified RMSSD records, $indexed firmware-index records saved. '
+          'Reader: ${reading.reader}. ${reading.message} '
+          'Diagnostics: ${reading.diagnostics}';
+    } catch (error, stack) {
+      state = AsyncError(error, stack);
+      return 'Selected HRV device refresh failed: $error';
+    }
+  }
+
   BleDeviceCandidate _candidate(SavedDirectDevice device) =>
       BleDeviceCandidate(
         id: device.id,

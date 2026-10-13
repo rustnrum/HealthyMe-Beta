@@ -1,11 +1,12 @@
 package com.rustnrum.healthyme.beta03
 
 /**
- * Read-only decoder for COLMI/QRing command 0x39 (57), split-array HRV PROXY.
- * These firmware buckets are not RR intervals, clinical RMSSD, or AFib evidence.
- * The array header supplies the number of data pages and minutes per slot.
- * Each data page uses byte 2 as a SLOT OFFSET, NOT a health measurement.
- * No Bluetooth I/O or writes take place in this class.
+ * Read-only COLMI/QRing command 57 (0x39) firmware HRV-index history.
+ * This is a proprietary per-slot index; it is NOT verified RMSSD in ms.
+ * Packet 0: page count + minutes per slot.
+ * Packet 1: start-slot offset in byte 2 followed by 12 values (bytes 3..14).
+ * Packets 2..N: 13 values (bytes 2..14), no start-slot byte.
+ * CRC is the low eight bits of the sum of bytes 0..14.
  */
 class SalusRingHrvLogDecoder {
     data class Bucket(val slot: Int, val value: Int, val timestampMs: Long)
@@ -20,6 +21,7 @@ class SalusRingHrvLogDecoder {
         private set
     var invalidPackets: Int = 0
         private set
+    private var nextSlot: Int = 0
 
     val headerReceived: Boolean get() = pageCount > 0
     val completed: Boolean get() = headerReceived && expectedPage > pageCount
@@ -29,47 +31,55 @@ class SalusRingHrvLogDecoder {
             invalidPackets++
             return emptyList()
         }
+        val checksum = (0 until 15).sumOf { packet[it].toInt() and 0xff } and 0xff
+        if (checksum != (packet[15].toInt() and 0xff)) {
+            invalidPackets++
+            return emptyList()
+        }
         val index = packet[1].toInt() and 0xff
-        if (index == 0xff) { // Firmware explicitly says no data.
+        if (index == 0xff) {
             pageCount = 0
-            expectedPage = 0
             rangeMinutes = 0
+            expectedPage = 0
+            decoded = 0
+            nextSlot = 0
             return emptyList()
         }
         if (index == 0) {
-            val count = packet[2].toInt() and 0xff
-            val range = packet[3].toInt() and 0xff
-            // Do not infer interval or records from damaged / unknown headers.
-            if (count !in 1..32 || range !in 1..120) {
+            val pages = packet[2].toInt() and 0xff
+            val minutes = packet[3].toInt() and 0xff
+            if (pages !in 1..64 || minutes !in 1..120) {
                 invalidPackets++
                 pageCount = 0
                 expectedPage = 0
                 return emptyList()
             }
-            pageCount = count
-            rangeMinutes = range
+            pageCount = pages
+            rangeMinutes = minutes
             expectedPage = 1
+            nextSlot = 0
             decoded = 0
             return emptyList()
         }
-        if (pageCount == 0 || index != expectedPage) {
+        if (!headerReceived || completed || index != expectedPage || index > pageCount) {
             invalidPackets++
             return emptyList()
         }
-        // Page 1 and all subsequent pages: byte 2 = slot index offset;
-        // bytes 3..14 are up to 12 firmware proxy values. 0/255 = empty.
-        val startSlot = packet[2].toInt() and 0xff
+        val first = index == 1
+        val startSlot = if (first) (packet[2].toInt() and 0xff) else nextSlot
+        val valueStart = if (first) 3 else 2
+        val count = if (first) 12 else 13
         val samples = mutableListOf<Bucket>()
-        for (offset in 0 until 12) {
-            val raw = packet[3 + offset].toInt() and 0xff
-            if (raw == 0 || raw == 255) continue
+        for (offset in 0 until count) {
+            val value = packet[valueStart + offset].toInt() and 0xff
+            if (value == 0 || value == 255) continue
             val slot = startSlot + offset
-            val timestamp = localMidnightMs + slot.toLong() * rangeMinutes * 60_000L
-            // No reading may be stamped in the future or outside the day.
-            if (slot.toLong() * rangeMinutes >= 1440 ||
-                timestamp < localMidnightMs || timestamp > nowMs + 300_000L) continue
-            samples.add(Bucket(slot, raw, timestamp))
+            val minute = slot.toLong() * rangeMinutes
+            val time = localMidnightMs + minute * 60_000L
+            if (minute >= 1440 || time < localMidnightMs || time > nowMs) continue
+            samples.add(Bucket(slot, value, time))
         }
+        nextSlot = startSlot + count
         decoded += samples.size
         expectedPage++
         return samples

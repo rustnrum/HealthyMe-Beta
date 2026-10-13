@@ -2,14 +2,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:healthy_me/services/ble_protocol_profiles.dart';
 
 void main() {
-  test('QRing UART fingerprint identifies ring capabilities', () {
+  test('QRing UART advertises firmware HRV index, not verified RMSSD', () {
     final report = BleProtocolProfiles.analyze(
       const [BleProtocolProfiles.ringUartService],
       name: 'R02',
     );
     expect(report.protocolProfile?.id, 'ring-uart-v1');
     expect(report.deviceKind, 'Ring');
-    expect(report.allCapabilities, contains('HRV'));
+    expect(report.allCapabilities, contains('Ring HRV proxy'));
+    expect(report.allCapabilities, isNot(contains('HRV')));
     expect(report.allCapabilities, contains('Raw motion'));
   });
 
@@ -74,5 +75,4 @@ void main() {
     expect(report.protocolProfile?.id, 'cpap-family');
     expect(report.deviceKind, 'CPAP / respiratory');
   });
-
 }
