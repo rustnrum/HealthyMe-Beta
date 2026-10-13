@@ -17,7 +17,7 @@ void main() {
     expect(home, contains('S77RestingHeartChart('));
     expect(shell, contains('bottomNavigationBar: _SalusBottomNav('));
     expect(File('assets/premium/salus_mountain_79.webp').lengthSync(), greaterThan(10000));
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.42+80'));
+    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.43+81'));
   });
 
   test('Main energy is source independent and device telemetry is not faked', () {

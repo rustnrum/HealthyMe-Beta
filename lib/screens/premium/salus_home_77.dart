@@ -142,6 +142,17 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
     S77Surface(onTap:()=>Navigator.pushNamed(context,route),padding:const EdgeInsets.all(10),
       child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         Text(label,style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800,fontSize:12)),
-        const SizedBox(height:5),unit=='bpm' ? S77RestingHeartChart(values:values,height:108,color:color) : PremiumLineChart(values:values,color:color,height:108,unit:unit),
+        const SizedBox(height:5),unit=='bpm'
+          ? S77RestingHeartChart(values:values,height:108,color:color)
+          : values.whereType<double>().where((v)=>v.isFinite).length<2
+            ? SizedBox(height:108,child:Column(
+                crossAxisAlignment:CrossAxisAlignment.start,
+                mainAxisAlignment:MainAxisAlignment.center,children:[
+                  Text('No verified HRV trend yet',style:TextStyle(color:S77.sub,fontSize:12)),
+                  const SizedBox(height:7),
+                  Text('Tap to check your HRV source and history',
+                    style:TextStyle(color:S77.cyan,fontSize:10)),
+                ]))
+            : PremiumLineChart(values:values,color:color,height:108,unit:unit),
       ]));
 }

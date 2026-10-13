@@ -201,7 +201,7 @@ class S77RestingHeartChart extends StatelessWidget {
     final usable=values.whereType<double>().where((v)=>v.isFinite&&v>=30&&v<=180).toList();
     if(usable.length<2)return SizedBox(height:height,child:Center(child:Text(
       'More recorded days needed for a trend',style:TextStyle(color:S77.sub,fontSize:11))));
-    return SizedBox(height:height,child:CustomPaint(painter:_S77RestingHeartPainter(usable,color,S77.edge,S77.sub)));
+    return SizedBox(width:double.infinity,height:height,child:CustomPaint(painter:_S77RestingHeartPainter(usable,color,S77.edge,S77.sub)));
   }
 }
 class _S77RestingHeartPainter extends CustomPainter {
