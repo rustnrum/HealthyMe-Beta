@@ -55,7 +55,7 @@ class _SalusTraining77State extends ConsumerState<SalusTraining77>{
     return ValueListenableBuilder<bool>(valueListenable:SalusAppearance.light,builder:(context,light,_)=>ColoredBox(color:S77.bg,
       child:ListView(padding:const EdgeInsets.fromLTRB(17,17,17,40),children:[
         S77Title('Training',subtitle:'TRAIN · PROGRESS · REPEAT',trailing:Row(mainAxisSize:MainAxisSize.min,children:[
-          HealthyMeModuleMenuButton(current:HealthyMeModule.workout,onSelected:(m){switch(m){
+          HealthyMeModuleMenuButton(iconColor:S77.ink,showLabel:true,lightSurface:light,current:HealthyMeModule.workout,onSelected:(m){switch(m){
             case HealthyMeModule.fitness:Navigator.of(context).popUntil((r)=>r.isFirst);break;
             case HealthyMeModule.workout:break;
             case HealthyMeModule.diet:Navigator.of(context).pushReplacementNamed('/diet');break;

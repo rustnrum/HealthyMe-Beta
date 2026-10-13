@@ -6,13 +6,27 @@ enum HealthyMeModule { fitness, workout, diet, health }
 class HealthyMeModuleMenuButton extends StatelessWidget {
   final HealthyMeModule current;
   final ValueChanged<HealthyMeModule> onSelected;
-  const HealthyMeModuleMenuButton({super.key, required this.current, required this.onSelected});
+  final Color? iconColor;
+  final bool showLabel, lightSurface;
+  const HealthyMeModuleMenuButton({super.key, required this.current, required this.onSelected,
+    this.iconColor, this.showLabel=false, this.lightSurface=false});
 
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<HealthyMeModule>(
       tooltip: 'Salus modules',
-      icon: const Icon(Icons.grid_view_rounded, size: 22),
+      icon: showLabel?null:Icon(Icons.grid_view_rounded, size:22,color:iconColor),
+      child: showLabel ? Container(
+        padding:const EdgeInsets.symmetric(horizontal:10,vertical:7),
+        decoration:BoxDecoration(
+          color:lightSurface?const Color(0xffd8edf6):const Color(0xff102936),
+          borderRadius:BorderRadius.circular(13),
+          border:Border.all(color:lightSurface?const Color(0xff80b7c9):const Color(0xff285264))),
+        child:Row(mainAxisSize:MainAxisSize.min,children:[
+          Icon(Icons.grid_view_rounded,color:iconColor,size:18),
+          const SizedBox(width:5),Text('Modules',style:TextStyle(
+            color:iconColor,fontSize:11,fontWeight:FontWeight.w900)),
+        ])) : null,
       onSelected: onSelected,
       itemBuilder: (context) => [
         const PopupMenuItem<HealthyMeModule>(enabled: false, child: Text('SALUS MODULES', style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1.8))),

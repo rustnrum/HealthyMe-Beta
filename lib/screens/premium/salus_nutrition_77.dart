@@ -151,7 +151,7 @@ class _SalusNutrition77State extends ConsumerState<SalusNutrition77> {
       final isPast=_offset<0;
       return ColoredBox(color:S77.bg,child:ListView(padding:const EdgeInsets.fromLTRB(17,16,17,40),children:[
         S77Title('Nutrition',subtitle:'PLAN · TRACK · IMPROVE',trailing:Row(mainAxisSize:MainAxisSize.min,children:[
-          HealthyMeModuleMenuButton(current:HealthyMeModule.diet,onSelected:(m){switch(m){
+          HealthyMeModuleMenuButton(iconColor:S77.ink,showLabel:true,lightSurface:light,current:HealthyMeModule.diet,onSelected:(m){switch(m){
             case HealthyMeModule.fitness:Navigator.of(context).popUntil((r)=>r.isFirst);break;
             case HealthyMeModule.workout:Navigator.of(context).pushReplacementNamed('/workout');break;
             case HealthyMeModule.diet:break;

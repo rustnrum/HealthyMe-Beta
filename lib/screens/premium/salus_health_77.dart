@@ -21,7 +21,7 @@ class _SalusHealth77State extends ConsumerState<SalusHealth77>{
     return ValueListenableBuilder<bool>(valueListenable:SalusAppearance.light,builder:(context,light,_)=>ColoredBox(color:S77.bg,
       child:ListView(padding:const EdgeInsets.fromLTRB(17,17,17,38),children:[
         S77Title('Health',subtitle:'YOUR WHOLE HEALTH IN FOCUS',trailing:Row(mainAxisSize:MainAxisSize.min,children:[
-          HealthyMeModuleMenuButton(current:HealthyMeModule.health,onSelected:(m){switch(m){
+          HealthyMeModuleMenuButton(iconColor:S77.ink,showLabel:true,lightSurface:light,current:HealthyMeModule.health,onSelected:(m){switch(m){
             case HealthyMeModule.fitness:Navigator.of(context).popUntil((r)=>r.isFirst);break;
             case HealthyMeModule.workout:Navigator.of(context).pushReplacementNamed('/workout');break;
             case HealthyMeModule.diet:Navigator.of(context).pushReplacementNamed('/diet');break;
@@ -72,11 +72,18 @@ class _SalusHealth77State extends ConsumerState<SalusHealth77>{
           const SizedBox(width:9),Expanded(child:S77Metric(label:'Breathing',value:health.respiratoryRate==null?'—':health.respiratoryRate!.toStringAsFixed(1),
             caption:'breaths/min',icon:Icons.air_rounded,color:S77.orange,height:91,onTap:()=>Navigator.pushNamed(context,'/metric-respiratory-rate'))),
         ]),
-        const SizedBox(height:11),S77Surface(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          Text('HRV · recorded history',style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800,fontSize:13)),
-          const SizedBox(height:8),PremiumLineChart(values:health.hrv30.map((x)=>x.toDouble()).toList(),color:S77.cyan,height:139),
-          Text('Trend reflects saved readings only. Missing dates do not imply a normal reading.',style:TextStyle(color:S77.dim,fontSize:10)),
-        ])),
+        const SizedBox(height:11),Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Expanded(child:S77Surface(accent:S77.red,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text('Resting heart rate',style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800,fontSize:12)),
+            const SizedBox(height:8),PremiumLineChart(values:health.restingHeartRate30.map((x)=>x.toDouble()).toList(),color:S77.red,height:118,unit:'bpm'),
+          ]))),const SizedBox(width:9),
+          Expanded(child:S77Surface(accent:S77.cyan,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text('HRV history',style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800,fontSize:12)),
+            const SizedBox(height:8),PremiumLineChart(values:health.hrv30.map((x)=>x.toDouble()).toList(),color:S77.cyan,height:118,unit:'ms'),
+          ]))),
+        ]),
+        const SizedBox(height:6),Text('Charts contain only available device readings; missing history remains blank.',
+          style:TextStyle(color:S77.dim,fontSize:10)),
         const SizedBox(height:17),S77Section('Contributing Factors',action:'Recovery details',onTap:()=>Navigator.pushNamed(context,'/recovery')),
         const SizedBox(height:6),S77Surface(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           for(final c in rec.contributors)Padding(padding:const EdgeInsets.symmetric(vertical:6),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[

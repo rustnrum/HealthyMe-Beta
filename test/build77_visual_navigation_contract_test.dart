@@ -16,7 +16,7 @@ void main(){
     expect(File('lib/screens/home_shell.dart').readAsStringSync(),contains('bottomNavigationBar: _SalusBottomNav('));
     expect(File('lib/screens/diet/diet_shell.dart').readAsStringSync(),contains('bottomNavigationBar: _DietBottomNav('));
     expect(File('lib/screens/health/health_shell.dart').readAsStringSync(),contains('bottomNavigationBar: _HealthBottomNav('));
-    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.39+77'));
+    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.40+78'));
   });
   test('No mountains or invented biometric readings in replacement screens',(){
     for(final path in ['lib/screens/premium/salus_home_77.dart','lib/screens/premium/salus_nutrition_77.dart',

@@ -17,7 +17,7 @@ class S77 {
   static Color get orange => SalusV.orange;
   static Color get purple => SalusV.purple;
   static Color get red => SalusV.red;
-  static Color get surface => SalusV.lightMode ? const Color(0xfff6faff) : const Color(0xff0a1724);
+  static Color get surface => SalusV.lightMode ? const Color(0xffe5f0f7) : const Color(0xff0a1724);
   static const double gutter = 17;
 }
 
@@ -32,9 +32,9 @@ class S77Surface extends StatelessWidget {
     final g=accent??S77.cyan;
     return DecoratedBox(decoration:BoxDecoration(
       borderRadius:BorderRadius.circular(radius),
-      border:Border.all(color:accent==null?S77.edge:g.withValues(alpha:0.47),width:0.9),
+      border:Border.all(color:accent==null?S77.edge:g.withValues(alpha:SalusV.lightMode?0.67:0.47),width:SalusV.lightMode?1.25:0.9),
       gradient:LinearGradient(begin:Alignment.topLeft,end:Alignment.bottomRight,colors:[
-        g.withValues(alpha:SalusV.lightMode?0.13:0.20),S77.panel,S77.surface]),
+        g.withValues(alpha:SalusV.lightMode?0.20:0.20),S77.panel,S77.surface]),
       boxShadow:[BoxShadow(color:Colors.black.withValues(alpha:SalusV.lightMode?0.06:0.18),blurRadius:13,offset:const Offset(0,5))]),
       child:Material(color:Colors.transparent,child:InkWell(
         borderRadius:BorderRadius.circular(radius),onTap:onTap,
@@ -101,6 +101,39 @@ class S77Metric extends StatelessWidget {
         minHeight:4,value:progress?.clamp(0.0,1.0).toDouble() ?? 0.0,color:color,
         backgroundColor:S77.edge.withValues(alpha:.75))),
     ])));
+}
+
+/// Compact circular metric tile; unmeasured targets stay hollow, never 0%.
+class S77RingTile extends StatelessWidget {
+  const S77RingTile({super.key,required this.label,required this.value,
+    required this.icon,required this.color,this.detail,this.fraction,this.onTap});
+  final String label,value;
+  final IconData icon;
+  final Color color;
+  final String? detail;
+  final double? fraction;
+  final VoidCallback? onTap;
+  @override Widget build(BuildContext context) {
+    final progress=fraction==null?null:fraction!.clamp(0.0,1.0).toDouble();
+    return S77Surface(accent:color,onTap:onTap,padding:const EdgeInsets.all(11),child:SizedBox(height:116,
+      child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Row(children:[Icon(icon,color:color,size:18),const SizedBox(width:6),
+          Expanded(child:Text(label,maxLines:1,overflow:TextOverflow.ellipsis,
+            style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800,fontSize:12)))]),
+        const Spacer(),Row(children:[
+          S77Arc(size:68,center:progress==null?'—':'${(progress*100).round()}%',
+            caption:progress==null?'No goal':'of goal',
+            segments:progress==null?const []:[
+              (value:progress*100,color:color),
+              (value:(1-progress)*100,color:S77.edge)]),
+          const SizedBox(width:9),Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(value,maxLines:1,overflow:TextOverflow.ellipsis,
+              style:TextStyle(color:S77.ink,fontWeight:FontWeight.w900,fontSize:19)),
+            if(detail!=null)Text(detail!,maxLines:2,overflow:TextOverflow.ellipsis,
+              style:TextStyle(color:S77.sub,fontSize:10,height:1.35))])),
+        ]),
+      ])));
+  }
 }
 
 class S77Arc extends StatelessWidget {
