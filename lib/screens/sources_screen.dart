@@ -870,6 +870,11 @@ class _SourcesScreenState extends ConsumerState<SourcesScreen> {
                 ),
               ),
               const SizedBox(height: 5),
+              if (metric == 'HRV') const Padding(
+                padding: EdgeInsets.only(top: 6, bottom: 9),
+                child: Text('COLMI ring firmware HRV-index data is not verified RMSSD. Choosing the ring cannot turn its index into HRV milliseconds; ring history is shown separately in the HRV detail screen.',
+                  style: TextStyle(color: AppTheme.amber, fontSize: 12)),
+              ),
               const Text(
                 'Salus routes this metric to the provider you choose.',
                 style: TextStyle(

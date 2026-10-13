@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/recovery_service.dart';
+import '../../services/direct_metric_service.dart';
 import '../../services/salus_energy_service.dart';
 import '../../services/home_insight_service.dart';
 import '../../state/app_state.dart';
@@ -18,7 +19,15 @@ class SalusHome77 extends ConsumerStatefulWidget {
 }
 class _SalusHome77State extends ConsumerState<SalusHome77> {
   double? _calorieGoal;
-  @override void initState(){super.initState();SalusAppearance.load();_loadTarget();}
+  List<DirectMetricSample> _ringHrvHistory = const [];
+  Future<void> _loadRingHrvHistory() async {
+    try {
+      final samples = await const DirectMetricService().loadSamples();
+      if (mounted) setState(() => _ringHrvHistory = samples.where((s) =>
+          s.metric == 'Ring HRV proxy' && s.value >= 1 && s.value <= 254).toList());
+    } catch (_) { /* Failed history read must not block the Home page. */ }
+  }
+  @override void initState(){super.initState();SalusAppearance.load();_loadTarget();_loadRingHrvHistory();}
   Future<void> _loadTarget() async {
     try { final p=await SharedPreferences.getInstance();
       final value=p.getDouble('salus_nutrition_target_Calories');
@@ -32,6 +41,13 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
   }
   @override Widget build(BuildContext context){
     final app=ref.watch(appStateProvider),h=app.health;
+    ref.listen(appStateProvider, (previous, next) {
+      if (previous?.health.lastSync != next.health.lastSync) _loadRingHrvHistory();
+    });
+    final ringSource=app.metricSources['HRV'];
+    final selectedRingHrv=ringSource != null && ringSource.startsWith('ble:')
+        ? _ringHrvHistory.where((s) => s.sourceId == ringSource).toList()
+        : <DirectMetricSample>[];
     final log=ref.watch(dietLogStateProvider),work=ref.watch(workoutStateProvider);
     final rec=RecoveryService.build(app,completedWorkouts:work.history);
     final energy=SalusEnergyService.estimate(h,app.profile);
@@ -125,7 +141,9 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
         const SizedBox(height:16),S77Section('Vital Trends',action:'All trends',onTap:()=>Navigator.pushNamed(context,'/trends')),
         const SizedBox(height:7),Row(children:[
           Expanded(child:_trend(context,'Resting HR',h.restingHeartRate30.map((v)=>v.toDouble()).toList(),S77.red,'bpm','/metric-resting-heart-rate')),
-          const SizedBox(width:9),Expanded(child:_trend(context,'HRV',h.hrv30.map((v)=>v.toDouble()).toList(),S77.blue,'ms','/metric-hrv')),
+          const SizedBox(width:9),Expanded(child:h.hrv30.length < 2 && selectedRingHrv.isNotEmpty
+              ? _ringIndexTrend(context,selectedRingHrv)
+              : _trend(context,'HRV',h.hrv30.map((v)=>v.toDouble()).toList(),S77.blue,'ms','/metric-hrv')),
         ]),
         const SizedBox(height:11),S77Surface(onTap:()=>Navigator.pushNamed(context,'/health'),child:Row(children:[
           Icon(Icons.favorite_outline,color:S77.purple),const SizedBox(width:9),
@@ -133,6 +151,17 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
             style:TextStyle(color:S77.sub,fontSize:12))),Icon(Icons.chevron_right,color:S77.cyan)])),
       ])));
   }
+  Widget _ringIndexTrend(BuildContext context,List<DirectMetricSample> values)=>
+    S77Surface(onTap:()=>Navigator.pushNamed(context,'/metric-hrv'),
+      padding:const EdgeInsets.all(10),
+      child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Text('Ring HRV index',style:TextStyle(color:S77.ink,fontWeight:FontWeight.w800,fontSize:12)),
+        Text('${values.length} ring records • not RMSSD',
+          style:TextStyle(color:S77.sub,fontSize:9)),
+        const SizedBox(height:4),
+        PremiumLineChart(values:values.map((s)=>s.value).toList(),
+          color:S77.blue,height:90,unit:'index'),
+      ]));
   Widget _signal(IconData icon,Color color,String label,String reading)=>Row(children:[
     Icon(icon,color:color,size:15),const SizedBox(width:6),Expanded(child:Text(label,
       style:TextStyle(color:S77.sub,fontSize:11))),

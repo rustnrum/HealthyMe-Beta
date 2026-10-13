@@ -11,8 +11,10 @@ class MetricHistoryResult {
   final String? warning;
   /// Prior short Garmin BLE estimates; displayed but excluded from all stats.
   final List<DirectMetricSample> excludedGarminHrv;
+  /// COLMI command-57 firmware index, NOT validated RMSSD (milliseconds).
+  final List<DirectMetricSample> ringHrvProxy;
   const MetricHistoryResult({required this.readings, this.warning,
-      this.excludedGarminHrv = const []});
+      this.excludedGarminHrv = const [], this.ringHrvProxy = const []});
 }
 
 /// All metric detail screens use the same origin-preserving history reader.
@@ -101,6 +103,10 @@ class MetricHistoryService {
     required bool healthConnectAuthorized,
   }) async {
     final stored = await DirectMetricService().loadSamples();
+    final ringHrvProxy = metric == 'HRV'
+        ? normalize('Ring HRV proxy', stored.where((s) =>
+            s.metric == 'Ring HRV proxy' && s.value >= 1 && s.value <= 254))
+        : <DirectMetricSample>[];
     final readings = <DirectMetricSample>[...stored];
     final excludedGarmin = metric == 'HRV'
         ? stored.where((s) => s.metric ==
@@ -156,6 +162,7 @@ class MetricHistoryService {
       readings: normalize(metric, readings),
       warning: warning,
       excludedGarminHrv: excludedGarmin,
+      ringHrvProxy: ringHrvProxy,
     );
   }
 }

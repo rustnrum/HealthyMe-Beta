@@ -62,6 +62,12 @@ class _MetricDetailScreenState extends ConsumerState<MetricDetailScreen> {
         future: _future,
         builder: (context, snapshot) {
           final all = snapshot.data?.readings ?? const <DirectMetricSample>[];
+          final ringHistory = snapshot.data?.ringHrvProxy ?? const <DirectMetricSample>[];
+          final ringSelected = configured != null && configured.startsWith('ble:');
+          final selectedRingHistory = ringSelected
+              ? ringHistory.where((s) => SourceNameService.sameProvider(s.sourceId, configured)).toList()
+              : ringHistory;
+
           final sources = <String, String>{};
           for (final sample in all) {
             sources[sample.sourceId] = sample.deviceName;
@@ -108,17 +114,52 @@ class _MetricDetailScreenState extends ConsumerState<MetricDetailScreen> {
                     style: const TextStyle(color: AppTheme.amber)),
                 const SizedBox(height: 10),
               ],
-              if (widget.metric == 'HRV' && sources.isEmpty) ...[
+              if (widget.metric == 'HRV') ...[
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceHigh,
+                    border: Border.all(color: AppTheme.border),
+                    borderRadius: BorderRadius.circular(16)),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('Ring HRV firmware history', style: TextStyle(
+                        color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 5),
+                    Text('${selectedRingHistory.length} saved index readings from the selected ring',
+                        style: const TextStyle(color: AppTheme.textSecondary)),
+                    const SizedBox(height: 7),
+                    const Text('These are real device-reported firmware index values, not verified RMSSD in milliseconds. They cannot count toward the Recovery HRV baseline.',
+                        style: TextStyle(color: AppTheme.amber, fontSize: 12)),
+                    if (selectedRingHistory.isNotEmpty) ...[
+                      const SizedBox(height: 13),
+                      Text('Last index: ${selectedRingHistory.last.value.round()} • ${_time(selectedRingHistory.last.capturedAt)}',
+                          style: const TextStyle(color: AppTheme.textPrimary)),
+                      const SizedBox(height: 8),
+                      SizedBox(height: 180, child: CustomPaint(
+                        painter: _MetricChartPainter(selectedRingHistory),
+                        child: const SizedBox.expand())),
+                    ] else ...[
+                      const SizedBox(height: 7),
+                      const Text('No ring-index records have been imported into Salus from this source. QRing may have its own separate history. Tap Refresh to request a new Bluetooth read.',
+                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                    ],
+                    TextButton.icon(onPressed: _syncAndLoad,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Refresh ring history')),
+                  ]),
+                ),
+                const SizedBox(height: 14),
+              ],
+              if (widget.metric == 'HRV' && sources.isEmpty && ringHistory.isEmpty) ...[
                 const Text('No validated HRV available yet',
                     style: TextStyle(color: AppTheme.amber,
                         fontSize: 15, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 6),
                 const Text(
-                    'The vívoactive 6 Bluetooth stream does not supply a '
-                    'verified overnight HRV average through this Salus reader. '
-                    'Your previous brief R–R estimates cannot establish a '
-                    'reliable HRV baseline. Recovery will exclude them. '
-                    'A source that provides timestamped RMSSD records is needed.',
+                    'The selected device has not supplied verified RMSSD HRV '
+                    'readings through Salus. Ring firmware-index records are '
+                    'shown separately when available and cannot substitute '
+                    'for a verified HRV baseline in Recovery. Recovery will exclude them.',
                     style: TextStyle(color: AppTheme.textSecondary,
                         fontSize: 12.5)),
                 const SizedBox(height: 15),
