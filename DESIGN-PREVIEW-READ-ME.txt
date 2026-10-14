@@ -1,0 +1,16 @@
+Salus Build 84 — original assets / 3-screen design preview
+
+Destination: rustnrum/HealthyMe-Beta ONLY
+Upload this file AS HealthyMe-v0.9-SOURCE-DISCOVERY.zip to main.
+The existing workflow unpacks it, prepares native code, analyzes, runs all tests,
+builds, signs and validates the APK. If any step fails, no claim of success.
+
+Preview: open Salus Home, tap "Preview new Home". Three mockup screens:
+Home / Health Overview / Trends. The complete original graphic set is included.
+Tap "Original Home" to return. Existing modules and Android app ID are preserved.
+WARNING: preview's 82 recovery, sleep, HRV, RHR, energy and charts are DESIGN
+SAMPLES, not current device measurements. Real legacy Salus data remains unchanged.
+Do not use preview scores as medical/training advice.
+
+Build 84 narrow-screen correction: responsive Steps/Calories card sizing and
+flexible header text eliminate the horizontal RenderFlex at 360 px.

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+if grep -Eq '^version: 0\.21\.46\+84$' pubspec.yaml; then
+  echo 'Build84: migrations already applied'
+else
 if ! grep -Eq '^version: 0\.21\.(36\+74|37\+75|38\+76|39\+77|40\+78|41\+79|42\+80|43\+81|44\+82|45\+83)$' pubspec.yaml; then
 python3 scripts/patch_build47.py
 if ! grep -Eq '^version: 0\.21\.(19\+57|20\+58|21\+59|22\+60|23\+61|24\+62|25\+63|26\+64|27\+65|28\+66|29\+67|30\+68|31\+69|32\+70|33\+71|34\+72|35\+73)$' pubspec.yaml; then
@@ -88,6 +91,7 @@ if ! grep -Eq '^version: 0\.21\.45\+83$' pubspec.yaml; then
 fi
 python3 scripts/patch_build83.py
 
+fi
 test -f lib/widgets/garmin_body_battery_panel.dart
 test -f native/android/MainActivity.kt
 test -f native/android/SalusBleDeviceInfoReader.kt

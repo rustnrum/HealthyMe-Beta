@@ -1,7 +1,7 @@
 name: healthy_me
 description: Salus by Rust N Rum - a personal health journal and body command center.
 publish_to: 'none'
-version: 0.21.45+83
+version: 0.21.46+84
 environment:
   sdk: '>=3.12.0 <4.0.0'
 
@@ -33,6 +33,7 @@ flutter:
   assets:
     - lib/assets/images/hero_mountains.jpg
     - assets/premium/
+    - assets/preview84/img/
     - lib/assets/salus/
     - assets/protocols/
     - assets/devices/

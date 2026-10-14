@@ -72,6 +72,15 @@ class _SalusHome77State extends ConsumerState<SalusHome77> {
               case HealthyMeModule.diet:Navigator.of(context).pushNamed('/diet');break;
               case HealthyMeModule.health:Navigator.of(context).pushNamed('/health');break;
             }}),const PremiumThemeButton()]),
+        const SizedBox(height: 4),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () => Navigator.of(context).pushNamed('/preview84'),
+            icon: const Icon(Icons.auto_awesome_rounded, size: 15),
+            label: const Text('Preview new Home'),
+          ),
+        ),
         const SizedBox(height:12),SizedBox(height:210,child:Padding(
           padding:const EdgeInsets.fromLTRB(12,10,10,14),child:Column(
           crossAxisAlignment:CrossAxisAlignment.start,

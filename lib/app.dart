@@ -24,6 +24,7 @@ import 'screens/recovery_detail_screen.dart';
 import 'screens/sources_screen.dart';
 import 'screens/spo2_history_screen.dart';
 import 'screens/trends_screen.dart';
+import 'screens/preview84/screens/shell.dart';
 import 'screens/workout_screen.dart';
 import 'screens/watch_device_screen.dart';
 import 'state/app_state.dart';
@@ -51,6 +52,7 @@ class HealthyMeApp extends ConsumerWidget {
         '/backup': (_) => const SalusBackupScreen(),
         '/workout': (_) => const WorkoutScreen(),
         '/trends': (_) => const TrendsScreen(),
+        '/preview84': (_) => const PreviewShell(),
         '/metric-heart-rate': (_) => const MetricDetailScreen(metric: 'Heart rate'),
         '/metric-resting-heart-rate': (_) => const MetricDetailScreen(metric: 'Resting heart rate'),
         '/metric-hrv': (_) => const MetricDetailScreen(metric: 'HRV'),
