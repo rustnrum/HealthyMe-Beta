@@ -4,7 +4,7 @@ import '../../widgets/module_menu_button.dart';
 import '../../widgets/salus_voice_launcher.dart';
 import '../../widgets/salus_widgets.dart';
 import 'diet_home_screen.dart';
-import '../premium/salus_nutrition_77.dart';
+import '../premium/salus_nutrition_87.dart';
 import 'diet_menu_screen.dart';
 import 'ai_meal_discovery_screen.dart';
 import 'meal_calendar_screen.dart';
@@ -38,7 +38,7 @@ class _DietShellState extends State<DietShell> {
     return Theme(
       data: Theme.of(context).copyWith(scaffoldBackgroundColor: DietPalette.background),
       child: Scaffold(
-      floatingActionButton: SalusVoiceLauncher(
+      floatingActionButton: _index == 0 ? null : SalusVoiceLauncher(
         onPressed: () => Navigator.of(context).pushNamed('/voice')),
         appBar: _index == 0 ? null : AppBar(
           flexibleSpace: Container(decoration: const BoxDecoration(image: DecorationImage(image: AssetImage(SalusAssets.leatherTexture), fit: BoxFit.cover, opacity: 0.88))),
@@ -60,7 +60,7 @@ class _DietShellState extends State<DietShell> {
           }), const SizedBox(width: 6)],
         ),
         body: SafeArea(top: _index == 0, child: IndexedStack(index: _index, children: [
-          SalusNutrition77(
+          SalusNutrition87(
             onDiscover:()=>setState(()=>_index=1),
             onCalendar:()=>setState(()=>_index=3),
             onMeals:()=>setState(()=>_index=2),

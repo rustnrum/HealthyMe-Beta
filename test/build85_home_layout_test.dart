@@ -11,7 +11,7 @@ void main() {
     final shell = File('lib/screens/home_shell.dart').readAsStringSync();
     expect(home, contains('assets/premium/salus_mountain_85.webp'));
     expect(home, contains('assets/preview84/img/ring_recovery.png'));
-    expect(shell, contains('SalusHome77()'));
+    expect(shell, contains('SalusHome87()'));
     expect(shell, isNot(contains('SalusHome85()')));
     expect(shell, contains('SalusVoiceLauncher('));
     expect(shell, contains('bottomNavigationBar: _SalusBottomNav('));

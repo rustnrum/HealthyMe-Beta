@@ -11,7 +11,7 @@ import '../widgets/module_menu_button.dart';
 import '../widgets/salus_voice_launcher.dart';
 import 'activity_screen.dart';
 import 'body_screen.dart';
-import 'premium/salus_home_77.dart';
+import 'premium/salus_home_87.dart';
 import 'more_screen.dart';
 import 'sleep_screen.dart';
 
@@ -72,7 +72,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     final index = ref.watch(navigationProvider);
     // Keep the original data-connected Home and every existing module.
     const screens = [
-      SalusHome77(),
+      SalusHome87(),
       ActivityScreen(),
       SleepScreen(),
       BodyScreen(),
@@ -98,7 +98,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     }
 
     return Scaffold(
-      floatingActionButton: SalusVoiceLauncher(
+      floatingActionButton: index == 0 ? null : SalusVoiceLauncher(
           onPressed: () => Navigator.of(context).pushNamed('/voice')),
       appBar: index == 0
           ? null // Home owns the SALUS hero/header.
