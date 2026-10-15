@@ -75,7 +75,7 @@ void main() {
     expect(home, contains("'Salus Energy'"));
     expect(home, contains('Activity Load'));
     expect(File('assets/premium/salus_mountain_79.webp').lengthSync(), greaterThan(10000));
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.49+87'));
+    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.50+88'));
   });
 
   test('A profile without age does not invent an adult sleep score', () {

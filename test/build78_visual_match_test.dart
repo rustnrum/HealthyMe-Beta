@@ -12,7 +12,7 @@ void main(){
     expect(home.split('S77RingTile(').length-1,4);
     expect(home,contains('PremiumLineChart('));
     expect(home.contains('salus_night_mountains.jpg'),false);
-    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.49+87'));
+    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.50+88'));
   });
   test('Existing module navigation remains unchanged',(){
     final home=File('lib/screens/home_shell.dart').readAsStringSync();

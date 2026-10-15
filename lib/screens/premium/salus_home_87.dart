@@ -11,6 +11,8 @@ import '../../state/app_state.dart';
 import '../../state/diet_log_state.dart';
 import '../../state/workout_state.dart';
 import '../../widgets/module_menu_button.dart';
+import '../../widgets/salus77_design.dart';
+import '../../widgets/salus_premium_ui.dart';
 import 'salus87_ui.dart';
 
 class SalusHome87 extends ConsumerStatefulWidget {
@@ -61,6 +63,16 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
       '${hrv.latestIndex!.value.round()} index':'—';
     final load=rec.contributors.where((c)=>c.name=='Training load').first;
     final activity=load.reading??(load.score==null?'—':'${load.score} / 100');
+    // Body Battery is a device-reported measurement, not Salus Energy.
+    // A recent, source-attributed record is required; never synthesize it.
+    final bodyBatteryRecords=_ringHrvHistory.where((sample)=>
+      sample.metric=='Body battery' && sample.deviceId.isNotEmpty &&
+      sample.sourceId.isNotEmpty && sample.value.isFinite &&
+      sample.value>=1 && sample.value<=100 &&
+      !sample.capturedAt.isAfter(now.add(const Duration(minutes:2))) &&
+      !sample.capturedAt.isBefore(now.subtract(const Duration(hours:48)))
+    ).toList()..sort((a,b)=>a.capturedAt.compareTo(b.capturedAt));
+    final bodyBattery=bodyBatteryRecords.isEmpty?null:bodyBatteryRecords.last;
     final kcal=diet.knownTotal(now,(e)=>e.calories);
     final stepsKnown=health.resolvedSources.containsKey('Steps');
     final completedToday=work.history.where((w)=>_sameDay(w.completedAt,now)).length;
@@ -119,8 +131,11 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
                   S87MetricLine(label:hrv.hasIndex&&!hrv.hasRmssd?'HRV index':'HRV',value:hrvValue,
                     icon:Icons.monitor_heart_rounded,color:S87.blue),
                   S87MetricLine(label:'RHR',value:hr,icon:Icons.favorite_rounded,color:S87.red),
-                  S87MetricLine(label:'Salus Energy',value:energy.score==null?'—':'${energy.score} est.',
+                  S87MetricLine(label:'Body Battery',
+                    value:bodyBattery==null?'—':'${bodyBattery.value.round()} / 100',
                     icon:Icons.battery_charging_full_rounded,color:S87.green),
+                  S87MetricLine(label:'Salus Energy',value:energy.score==null?'—':'${energy.score} est.',
+                    icon:Icons.bolt_rounded,color:S87.teal),
                   S87MetricLine(label:'Activity Load',value:activity,
                     icon:Icons.bar_chart_rounded,color:S87.orange),
                 ])),
@@ -129,6 +144,12 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
             const SizedBox(height:9),
             Text('${rec.confidence}% signal coverage • ${energy.quality.toLowerCase()} energy estimate',
               style:const TextStyle(color:S87.muted,fontSize:10)),
+            if(bodyBattery!=null)Padding(
+              padding:const EdgeInsets.only(top:5),
+              child:Text('Body Battery · ${bodyBattery.deviceName} · '
+                  '${bodyBattery.capturedAt.toLocal().month}/${bodyBattery.capturedAt.toLocal().day}',
+                maxLines:1,overflow:TextOverflow.ellipsis,
+                style:const TextStyle(color:S87.muted,fontSize:10))),
           ])),
         const SizedBox(height:14),
         S87Panel(accent:S87.purple,onTap:()=>Navigator.of(context).pushNamed('/health-intelligence'),
@@ -175,8 +196,92 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
         const SizedBox(height:20),
         S87Heading('Vital Trends',action:'View trends',onTap:()=>Navigator.of(context).pushNamed('/trends')),
         const SizedBox(height:8),
+        // The existing verified 30-day RHR/HRV series must always have a
+        // visible place in Home, even when no trend can yet be drawn.
+        LayoutBuilder(builder:(context,constraints){
+          final compact=constraints.maxWidth<360;
+          final rhrPanel=S87Panel(accent:S87.red,
+            onTap:()=>Navigator.of(context).pushNamed('/metric-resting-heart-rate'),
+            padding:const EdgeInsets.all(12),
+            child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              const Text('Resting Heart Rate',maxLines:1,overflow:TextOverflow.ellipsis,
+                style:TextStyle(color:S87.ink,fontSize:13,fontWeight:FontWeight.w700)),
+              const SizedBox(height:5),
+              Text(hr,style:const TextStyle(color:S87.red,fontSize:17,fontWeight:FontWeight.w800)),
+              const SizedBox(height:7),
+              S77RestingHeartChart(values:health.restingHeartRate30,
+                height:112,color:S87.red),
+              const SizedBox(height:6),
+              Text('${health.restingHeartRate30.length} recorded days',
+                style:const TextStyle(color:S87.muted,fontSize:10)),
+            ]));
+          final hasRmssdHistory=hrv.hasRmssd&&hrv.rmssdHistory.length>=2;
+          final hasIndexHistory=!hrv.hasRmssd&&hrv.indexHistory.length>=2;
+          final hrvChartValues=hasRmssdHistory?hrv.rmssdHistory:
+            hasIndexHistory?hrv.indexHistory.map((v)=>v.value).toList():<double>[];
+          final hrvPanel=S87Panel(accent:S87.blue,
+            onTap:()=>Navigator.of(context).pushNamed('/metric-hrv'),
+            padding:const EdgeInsets.all(12),
+            child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(hrv.hasIndex&&!hrv.hasRmssd?'Device HRV Index':'HRV (RMSSD)',
+                maxLines:1,overflow:TextOverflow.ellipsis,
+                style:const TextStyle(color:S87.ink,fontSize:13,fontWeight:FontWeight.w700)),
+              const SizedBox(height:5),
+              Text(hrvValue,style:const TextStyle(color:S87.blue,fontSize:17,fontWeight:FontWeight.w800)),
+              const SizedBox(height:7),
+              if(hasRmssdHistory||hasIndexHistory)
+                PremiumLineChart(values:hrvChartValues,height:112,color:S87.blue,
+                  unit:hasRmssdHistory?'ms':'index')
+              else const SizedBox(height:112,child:Center(child:Text(
+                  'No verified HRV trend yet. Tap to check your source.',
+                  textAlign:TextAlign.center,
+                  style:TextStyle(color:S87.muted,fontSize:11)))),
+              const SizedBox(height:6),
+              Text(hrv.hasIndex&&!hrv.hasRmssd?
+                '${hrv.indexHistory.length} device index records · not RMSSD':
+                hrv.hasRmssd?'${hrv.rmssdHistory.length} recorded RMSSD values':
+                'Source: ${hrv.sourceLabel}',
+                maxLines:2,overflow:TextOverflow.ellipsis,
+                style:const TextStyle(color:S87.muted,fontSize:10)),
+            ]));
+          if(compact)return Column(children:[rhrPanel,
+            const SizedBox(height:10),hrvPanel]);
+          return Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Expanded(child:rhrPanel),const SizedBox(width:10),Expanded(child:hrvPanel)]);
+        }),
+        const SizedBox(height:12),
         S87Panel(child:Text(rec.summary,style:const TextStyle(
           color:S87.muted,fontSize:12,height:1.5))),
+        const SizedBox(height:18),
+        S87Heading('Additional Health Metrics',action:'Sources',
+          onTap:()=>Navigator.of(context).pushNamed('/sources')),
+        const SizedBox(height:8),
+        Row(children:[
+          Expanded(child:S87Stat(icon:Icons.favorite_rounded,title:'Heart Rate',
+            value:health.latestHeartRate==null?'—':'${health.latestHeartRate!.round()} bpm',
+            detail:'latest recorded',color:S87.red,
+            onTap:()=>Navigator.of(context).pushNamed('/metric-heart-rate'))),
+          const SizedBox(width:9),
+          Expanded(child:S87Stat(icon:Icons.bloodtype_outlined,title:'Blood Oxygen',
+            value:health.bloodOxygenPercent==null?'—':'${health.bloodOxygenPercent!.round()}%',
+            detail:'SpO₂',color:S87.blue,
+            onTap:()=>Navigator.of(context).pushNamed('/spo2-history'))),
+        ]),const SizedBox(height:9),
+        Row(children:[
+          Expanded(child:S87Stat(icon:Icons.air_rounded,title:'Respiratory Rate',
+            value:health.respiratoryRate==null?'—':'${health.respiratoryRate!.toStringAsFixed(1)}',
+            detail:'breaths per minute',color:S87.purple,
+            onTap:()=>Navigator.of(context).pushNamed('/health'))),
+          const SizedBox(width:9),
+          Expanded(child:S87Stat(icon:Icons.local_fire_department_outlined,title:'Active Calories',
+            value:((health.resolvedSources.keys.any((k)=>k.toLowerCase()=='active calories') ||
+                (health.authorized && health.activeCaloriesToday>0)) &&
+                health.activeCaloriesToday.isFinite &&
+                health.activeCaloriesToday>=0 && health.activeCaloriesToday<=15000)?
+                '${health.activeCaloriesToday.round()}':'—',
+            detail:'kcal from activity',color:S87.orange,
+            onTap:()=>Navigator.of(context).pushNamed('/metric-active-calories'))),
+        ]),
       ])),
     ]));
   }

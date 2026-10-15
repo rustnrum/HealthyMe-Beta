@@ -1,3 +1,3 @@
-"""Build 87 validated graphics integration, no destructive historical replay."""
+"""Build 88: only the approved in-place Home metrics integration."""
 from runpy import run_path
-run_path('scripts/build87_apply.py', run_name='__main__')
+run_path('scripts/build88_apply.py', run_name='__main__')
