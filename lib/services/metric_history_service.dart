@@ -1,24 +1,16 @@
 import 'dart:io';
-
 import 'package:health/health.dart';
 
 import 'direct_metric_service.dart';
 import 'source_name_service.dart';
 
-/// A provider-preserving timeline of measured values, not interpolated data.
 class MetricHistoryResult {
   final List<DirectMetricSample> readings;
   final String? warning;
-  /// Prior short Garmin BLE estimates; displayed but excluded from all stats.
-  final List<DirectMetricSample> excludedGarminHrv;
-  /// COLMI command-57 firmware index, NOT validated RMSSD (milliseconds).
-  final List<DirectMetricSample> ringHrvProxy;
-  const MetricHistoryResult({required this.readings, this.warning,
-      this.excludedGarminHrv = const [], this.ringHrvProxy = const []});
+  const MetricHistoryResult({required this.readings, this.warning});
 }
 
-/// All metric detail screens use the same origin-preserving history reader.
-/// Health Connect supplies *records*, not a synthetic blended metric history.
+/// Reads timestamped Health Connect records, retaining their original app ID.
 class MetricHistoryService {
   const MetricHistoryService();
 
@@ -34,25 +26,19 @@ class MetricHistoryService {
     'Distance': HealthDataType.DISTANCE_DELTA,
   };
 
-  static String unitFor(String metric) => switch (metric) {
+  static String unitFor(String metric) => switch(metric) {
     'Heart rate' || 'Resting heart rate' => 'bpm',
-    'HRV' => 'ms',
-    'SpO2' => '%',
-    'Respiratory rate' => '/min',
-    'Weight' => 'lb',
-    'Steps' => 'steps',
-    'Active calories' => 'kcal',
-    'Distance' => 'mi',
-    _ => '',
+    'HRV' => 'ms', 'SpO2' => '%', 'Respiratory rate' => '/min',
+    'Weight' => 'lb', 'Steps' => 'steps', 'Active calories' => 'kcal',
+    'Distance' => 'mi', _ => '',
   };
 
-  static String labelFor(String metric) => switch (metric) {
+  static String labelFor(String metric) => switch(metric) {
     'SpO2' => 'Blood oxygen (SpO₂)',
     'HRV' => 'Heart-rate variability',
     'Resting heart rate' => 'Resting heart rate',
     'Respiratory rate' => 'Respiratory rate',
     'Heart rate' => 'Heart rate',
-    'Active calories' => 'Active calories',
     _ => metric,
   };
 
@@ -67,102 +53,51 @@ class MetricHistoryService {
     return true;
   }
 
-  static List<DirectMetricSample> normalize(
-    String metric,
-    Iterable<DirectMetricSample> samples,
-  ) {
-    final unique = <String, DirectMetricSample>{};
-    final ordered = samples.toList()
-      ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
-    for (final sample in ordered) {
-      if (sample.metric != metric ||
-          !validValue(metric, sample.value) ||
-          sample.sourceId.trim().isEmpty ||
-          SourceNameService.isTransportOnly(sample.sourceId)) {
-        continue;
-      }
-      final isDailyResting =
-          (metric == 'Resting heart rate' || metric == 'Steps') &&
-          sample.sourceId.startsWith('ble:');
-      final key = isDailyResting
-          ? '${sample.sourceId}|${sample.capturedAt.year}-${sample.capturedAt.month}-${sample.capturedAt.day}'
-          : '${sample.sourceId}|${sample.capturedAt.millisecondsSinceEpoch}|${sample.value}';
-      // Daily step count is cumulative, not additive. Retain the highest
-      // observed total for each source/day from legacy poll-heavy history.
-      final earlier = unique[key];
-      if (metric == 'Steps' && earlier != null &&
-          earlier.value > sample.value) continue;
-      unique[key] = sample;
+  static List<DirectMetricSample> normalize(String metric, Iterable<DirectMetricSample> readings) {
+    final unique = <String,DirectMetricSample>{};
+    for (final item in readings) {
+      if (item.metric != metric || !validValue(metric,item.value) ||
+          item.sourceId.trim().isEmpty || item.sourceId.startsWith('ble:') ||
+          SourceNameService.isTransportOnly(item.sourceId)) continue;
+      final key = '${item.sourceId}|${item.capturedAt.millisecondsSinceEpoch}|${item.value}';
+      unique[key] = item;
     }
-    return unique.values.toList()
-      ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+    return unique.values.toList()..sort((a,b)=>a.capturedAt.compareTo(b.capturedAt));
   }
 
-  Future<MetricHistoryResult> load(
-    String metric, {
-    required bool healthConnectAuthorized,
-  }) async {
-    final stored = await DirectMetricService().loadSamples();
-    final ringHrvProxy = metric == 'HRV'
-        ? normalize('Ring HRV proxy', stored.where((s) =>
-            s.metric == 'Ring HRV proxy' && s.value >= 1 && s.value <= 254))
-        : <DirectMetricSample>[];
-    final readings = <DirectMetricSample>[...stored];
-    final excludedGarmin = metric == 'HRV'
-        ? stored.where((s) => s.metric ==
-            DirectMetricService.experimentalGarminHrv).toList()
-        : <DirectMetricSample>[];
-    String? warning;
-    final type = healthTypes[metric];
-    if (healthConnectAuthorized && Platform.isAndroid && type != null) {
-      try {
-        final health = Health();
-        await health.configure();
-        final now = DateTime.now();
-        final points = await health.getHealthDataFromTypes(
-          types: [type],
-          startTime: now.subtract(const Duration(days: 30)),
-          endTime: now,
-          preferredUnits: {
-            HealthDataType.BLOOD_OXYGEN: HealthDataUnit.PERCENT,
-            HealthDataType.WEIGHT: HealthDataUnit.POUND,
-            HealthDataType.ACTIVE_ENERGY_BURNED: HealthDataUnit.KILOCALORIE,
-            HealthDataType.DISTANCE_DELTA: HealthDataUnit.MILE,
-          },
-        );
-        for (final point in points) {
-          if (point.type != type || point.value is! NumericHealthValue) {
-            continue;
-          }
-          final value = (point.value as NumericHealthValue).numericValue.toDouble();
-          if (!validValue(metric, value)) continue;
-          final sourceId = SourceNameService.key(
-            sourceId: point.sourceId,
-            sourceName: point.sourceName,
-          );
-          if (SourceNameService.isTransportOnly(sourceId)) continue;
-          readings.add(DirectMetricSample(
-            sourceId: sourceId,
-            deviceId: sourceId,
-            deviceName: SourceNameService.displayFor(
-              sourceId: point.sourceId,
-              sourceName: point.sourceName,
-            ),
-            metric: metric,
-            value: value,
-            unit: unitFor(metric),
-            capturedAt: point.dateTo,
-          ));
-        }
-      } catch (_) {
-        warning = 'Could not load this metric from Health Connect. Available direct-device readings are shown.';
-      }
+  Future<MetricHistoryResult> load(String metric, {required bool healthConnectAuthorized}) async {
+    if (!healthConnectAuthorized || !Platform.isAndroid) {
+      return const MetricHistoryResult(readings: [],
+          warning:'Authorize Health Connect to view measured history.');
     }
-    return MetricHistoryResult(
-      readings: normalize(metric, readings),
-      warning: warning,
-      excludedGarminHrv: excludedGarmin,
-      ringHrvProxy: ringHrvProxy,
-    );
+    final type = healthTypes[metric];
+    if(type == null) return const MetricHistoryResult(readings: []);
+    try {
+      final health = Health();
+      await health.configure();
+      final now = DateTime.now();
+      final points = await health.getHealthDataFromTypes(
+        types:[type], startTime:now.subtract(const Duration(days:30)), endTime:now,
+        preferredUnits: const {
+          HealthDataType.BLOOD_OXYGEN: HealthDataUnit.PERCENT,
+          HealthDataType.WEIGHT: HealthDataUnit.POUND,
+          HealthDataType.ACTIVE_ENERGY_BURNED: HealthDataUnit.KILOCALORIE,
+          HealthDataType.DISTANCE_DELTA: HealthDataUnit.MILE,
+        });
+      final records = <DirectMetricSample>[];
+      for(final point in points) {
+        if(point.type != type || point.value is! NumericHealthValue) continue;
+        final value = (point.value as NumericHealthValue).numericValue.toDouble();
+        if (!validValue(metric,value)) continue;
+        final sourceId = SourceNameService.key(sourceId:point.sourceId,sourceName:point.sourceName);
+        if(sourceId.startsWith('ble:') || SourceNameService.isTransportOnly(sourceId)) continue;
+        records.add(DirectMetricSample(sourceId:sourceId,deviceId:sourceId,
+          deviceName:SourceNameService.displayFor(sourceId:point.sourceId,sourceName:point.sourceName),
+          metric:metric,value:value,unit:unitFor(metric),capturedAt:point.dateTo));
+      }
+      return MetricHistoryResult(readings:normalize(metric,records));
+    } catch (error) {
+      return MetricHistoryResult(readings:const [],warning:'Health Connect history unavailable: $error');
+    }
   }
 }

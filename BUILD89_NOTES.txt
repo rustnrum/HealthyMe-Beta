@@ -1,0 +1,28 @@
+SALUS BUILD 89 — HEALTH CONNECT ONLY
+
+Target: rustnrum/HealthyMe-Beta, same beta package identity and signing workflow.
+Base: Build 88, version 0.21.50+88. Build 89: 0.21.51+89.
+
+Removes Bluetooth device discovery, pairing, protocol readers,
+watch-notification relaying, ring-index HRV display, and direct device sync.
+Only Health Connect measurement imports remain. HRV is RMSSD only.
+
+Android manifest: removes Bluetooth and former Bluetooth location permissions
+and the experimental watch NotificationListenerService.
+Native Android: copy only MainActivity.kt and SalusBackupBridge.kt.
+Old hardware classes and obsolete hardware tests are deleted on migration;
+the generated docs/build89_removed_hardware.txt records exactly what changed.
+
+Existing persistent user data and backup keys are not deleted. Old
+Bluetooth-associated cached measurements are excluded from live displays.
+A watch or ring must publish measurements to Health Connect via another app
+for Salus to read them. Unsupported metrics stay unavailable.
+
+Verification: Python migration syntax and source anchors are checked.
+Flutter analysis, tests, Android build and manifest merge MUST complete on
+GitHub Actions before the artifact can be treated as an APK. No claim is
+made that this source is already compiled or Google Play approved.
+
+The current workflow builds a debug APK signed with the permanent beta key.
+Google Play needs a compliant release Android App Bundle and disclosure of
+Health Connect permission use, privacy policy, and health declaration.

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/recovery_service.dart';
-import '../../services/direct_metric_service.dart';
 import '../../services/hrv_source_service.dart';
 import '../../services/salus_energy_service.dart';
 import '../../services/home_insight_service.dart';
@@ -21,15 +20,9 @@ class SalusHome87 extends ConsumerStatefulWidget {
 }
 class _SalusHome87State extends ConsumerState<SalusHome87> {
   double? _calorieGoal;
-  List<DirectMetricSample> _ringHrvHistory=const [];
   @override void initState(){
     super.initState();
-    _loadRingHrvHistory();_loadTarget();
-  }
-  Future<void> _loadRingHrvHistory() async {
-    try {final x=await const DirectMetricService().loadSamples();
-      if(mounted)setState(()=>_ringHrvHistory=x);
-    }catch(_){/* Data access must never block Home. */}
+    _loadTarget();
   }
   Future<void> _loadTarget() async {
     try {final prefs=await SharedPreferences.getInstance();
@@ -45,13 +38,10 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
   String _day(DateTime d)=>'${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.month-1]} ${d.day}';
   @override Widget build(BuildContext context) {
     final app=ref.watch(appStateProvider),health=app.health;
-    ref.listen(appStateProvider,(previous,next){
-      if(previous?.health!=next.health)_loadRingHrvHistory();
-    });
     final work=ref.watch(workoutStateProvider),diet=ref.watch(dietLogStateProvider);
     final rec=RecoveryService.build(app,completedWorkouts:work.history);
     final hrv=HrvSourceService.resolve(health:health,
-      selectedSource:app.metricSources['HRV'],directSamples:_ringHrvHistory);
+      selectedSource:app.metricSources['HRV']);
     final energy=SalusEnergyService.estimate(health,app.profile);
     final insight=HomeInsightService.build(app);
     final now=DateTime.now();
@@ -59,20 +49,9 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
     final greeting=now.hour<12?'Good morning':now.hour<17?'Good afternoon':'Good evening';
     final sleep=health.sleepMinutes>0?'${health.sleepMinutes~/60}h ${health.sleepMinutes%60}m':'—';
     final hr=health.restingHeartRate==null?'—':'${health.restingHeartRate!.round()} bpm';
-    final hrvValue=hrv.hasRmssd?'${hrv.rmssdMs!.round()} ms':hrv.hasIndex?
-      '${hrv.latestIndex!.value.round()} index':'—';
+    final hrvValue=hrv.displayedValue;
     final load=rec.contributors.where((c)=>c.name=='Training load').first;
     final activity=load.reading??(load.score==null?'—':'${load.score} / 100');
-    // Body Battery is a device-reported measurement, not Salus Energy.
-    // A recent, source-attributed record is required; never synthesize it.
-    final bodyBatteryRecords=_ringHrvHistory.where((sample)=>
-      sample.metric=='Body battery' && sample.deviceId.isNotEmpty &&
-      sample.sourceId.isNotEmpty && sample.value.isFinite &&
-      sample.value>=1 && sample.value<=100 &&
-      !sample.capturedAt.isAfter(now.add(const Duration(minutes:2))) &&
-      !sample.capturedAt.isBefore(now.subtract(const Duration(hours:48)))
-    ).toList()..sort((a,b)=>a.capturedAt.compareTo(b.capturedAt));
-    final bodyBattery=bodyBatteryRecords.isEmpty?null:bodyBatteryRecords.last;
     final kcal=diet.knownTotal(now,(e)=>e.calories);
     final stepsKnown=health.resolvedSources.containsKey('Steps');
     final completedToday=work.history.where((w)=>_sameDay(w.completedAt,now)).length;
@@ -128,12 +107,9 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
                 const SizedBox(width:9),
                 Expanded(child:Column(children:[
                   S87MetricLine(label:'Sleep',value:sleep,icon:Icons.nightlight_round,color:S87.purple),
-                  S87MetricLine(label:hrv.hasIndex&&!hrv.hasRmssd?'HRV index':'HRV',value:hrvValue,
+                  S87MetricLine(label:'HRV',value:hrvValue,
                     icon:Icons.monitor_heart_rounded,color:S87.blue),
                   S87MetricLine(label:'RHR',value:hr,icon:Icons.favorite_rounded,color:S87.red),
-                  S87MetricLine(label:'Body Battery',
-                    value:bodyBattery==null?'—':'${bodyBattery.value.round()} / 100',
-                    icon:Icons.battery_charging_full_rounded,color:S87.green),
                   S87MetricLine(label:'Salus Energy',value:energy.score==null?'—':'${energy.score} est.',
                     icon:Icons.bolt_rounded,color:S87.teal),
                   S87MetricLine(label:'Activity Load',value:activity,
@@ -144,12 +120,6 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
             const SizedBox(height:9),
             Text('${rec.confidence}% signal coverage • ${energy.quality.toLowerCase()} energy estimate',
               style:const TextStyle(color:S87.muted,fontSize:10)),
-            if(bodyBattery!=null)Padding(
-              padding:const EdgeInsets.only(top:5),
-              child:Text('Body Battery · ${bodyBattery.deviceName} · '
-                  '${bodyBattery.capturedAt.toLocal().month}/${bodyBattery.capturedAt.toLocal().day}',
-                maxLines:1,overflow:TextOverflow.ellipsis,
-                style:const TextStyle(color:S87.muted,fontSize:10))),
           ])),
         const SizedBox(height:14),
         S87Panel(accent:S87.purple,onTap:()=>Navigator.of(context).pushNamed('/health-intelligence'),
@@ -215,31 +185,26 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
               Text('${health.restingHeartRate30.length} recorded days',
                 style:const TextStyle(color:S87.muted,fontSize:10)),
             ]));
-          final hasRmssdHistory=hrv.hasRmssd&&hrv.rmssdHistory.length>=2;
-          final hasIndexHistory=!hrv.hasRmssd&&hrv.indexHistory.length>=2;
-          final hrvChartValues=hasRmssdHistory?hrv.rmssdHistory:
-            hasIndexHistory?hrv.indexHistory.map((v)=>v.value).toList():<double>[];
+          final hrvChartValues=hrv.rmssdHistory;
           final hrvPanel=S87Panel(accent:S87.blue,
             onTap:()=>Navigator.of(context).pushNamed('/metric-hrv'),
             padding:const EdgeInsets.all(12),
             child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-              Text(hrv.hasIndex&&!hrv.hasRmssd?'Device HRV Index':'HRV (RMSSD)',
+              Text('HRV (RMSSD)',
                 maxLines:1,overflow:TextOverflow.ellipsis,
                 style:const TextStyle(color:S87.ink,fontSize:13,fontWeight:FontWeight.w700)),
               const SizedBox(height:5),
               Text(hrvValue,style:const TextStyle(color:S87.blue,fontSize:17,fontWeight:FontWeight.w800)),
               const SizedBox(height:7),
-              if(hasRmssdHistory||hasIndexHistory)
+              if(hrv.hasRmssd&&hrvChartValues.length>=2)
                 PremiumLineChart(values:hrvChartValues,height:112,color:S87.blue,
-                  unit:hasRmssdHistory?'ms':'index')
+                  unit:'ms')
               else const SizedBox(height:112,child:Center(child:Text(
                   'No verified HRV trend yet. Tap to check your source.',
                   textAlign:TextAlign.center,
                   style:TextStyle(color:S87.muted,fontSize:11)))),
               const SizedBox(height:6),
-              Text(hrv.hasIndex&&!hrv.hasRmssd?
-                '${hrv.indexHistory.length} device index records · not RMSSD':
-                hrv.hasRmssd?'${hrv.rmssdHistory.length} recorded RMSSD values':
+              Text(hrv.hasRmssd?'${hrv.rmssdHistory.length} recorded RMSSD values':
                 'Source: ${hrv.sourceLabel}',
                 maxLines:2,overflow:TextOverflow.ellipsis,
                 style:const TextStyle(color:S87.muted,fontSize:10)),

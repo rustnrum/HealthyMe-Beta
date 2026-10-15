@@ -30,7 +30,7 @@ void main() {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     expect(manifest, contains('android:label="Salus"'));
     expect(script, contains('com.rustnrum.healthyme.beta03'));
-    expect(pubspec, contains('version: 0.21.50+88'));
+    expect(pubspec, contains('version: 0.21.51+89'));
     for (final name in [
       'assets/premium/salus_mountain_79.webp',
       'assets/premium/salus_mountain_85.webp',

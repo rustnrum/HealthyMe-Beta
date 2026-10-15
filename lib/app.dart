@@ -3,15 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme/app_theme.dart';
 import 'screens/connections_screen.dart';
-import 'screens/auto_discovery_screen.dart';
-import 'screens/cpap_screen_v38.dart';
 import 'screens/daily_state_screen.dart';
 import 'screens/diet/diet_shell.dart';
 import 'screens/health/health_shell.dart';
 import 'screens/health/salus_health_intelligence_screen.dart';
 import 'screens/health/salus_backup_screen.dart';
 import 'screens/home_shell.dart';
-import 'screens/device_gallery_screen.dart';
 import 'screens/sleep_screen.dart';
 import 'screens/activity_screen.dart';
 import 'screens/ai_coach_screen.dart';
@@ -21,12 +18,10 @@ import 'screens/labs_screen.dart';
 import 'screens/body_visual_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/recovery_detail_screen.dart';
-import 'screens/sources_screen.dart';
 import 'screens/spo2_history_screen.dart';
 import 'screens/trends_screen.dart';
 import 'screens/preview84/screens/shell.dart';
 import 'screens/workout_screen.dart';
-import 'screens/watch_device_screen.dart';
 import 'state/app_state.dart';
 import 'widgets/morning_checkin_gate.dart';
 
@@ -63,7 +58,7 @@ class HealthyMeApp extends ConsumerWidget {
         '/metric-weight': (_) => const MetricDetailScreen(metric: 'Weight'),
         '/labs': (_) => const LabsScreen(),
         '/body-visual': (_) => const BodyVisualScreen(),
-        '/device-gallery': (_) => const DeviceGalleryScreen(),
+        '/device-gallery': (_) => const ConnectionsScreen(),
         '/sleep-detail': (_) => Scaffold(
           appBar: AppBar(title: const Text('Sleep')),
           body: const SleepScreen(),
@@ -76,11 +71,11 @@ class HealthyMeApp extends ConsumerWidget {
         '/recovery': (_) => const RecoveryDetailScreen(),
         '/daily-state': (_) => const DailyStateScreen(),
         '/sources': (_) => const ConnectionsScreen(),
-        '/auto-discover': (_) => const AutoDiscoveryScreen(),
+        '/auto-discover': (_) => const ConnectionsScreen(),
         '/connections-advanced': (_) => const ConnectionsScreen(),
-        '/sources-debug': (_) => const SourcesScreen(),
-        '/cpap': (_) => const CpapScreenV38(),
-        '/watch-device': (_) => const WatchDeviceScreen(),
+        '/sources-debug': (_) => const ConnectionsScreen(),
+        '/cpap': (_) => const ConnectionsScreen(),
+        '/watch-device': (_) => const ConnectionsScreen(),
         '/coach': (_) => const AiCoachScreen(),
         '/voice': (_) => const SalusVoiceScreen(),
       },

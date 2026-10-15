@@ -59,7 +59,7 @@ class _SalusHealthIntelligenceScreenState extends ConsumerState<SalusHealthIntel
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 40), children: [
         const SalusSectionTitle(title: 'Temperature & trends', eyebrow: 'Measured, source-attributed'),
         const SizedBox(height: 8),
-        const Text('Skin temperature is not core body temperature. Ring support is firmware-dependent; '
+        const Text('Skin temperature is not core body temperature. '
           'Salus shows only valid readings actually returned by your devices.',
           style: TextStyle(color: AppTheme.textSecondary)),
         const SizedBox(height: 14),
@@ -84,7 +84,7 @@ class _SalusHealthIntelligenceScreenState extends ConsumerState<SalusHealthIntel
           label: Text(_working ? 'Reading Health Connect…' : 'Import temperatures from Health Connect')),
         const SizedBox(height: 6),
         OutlinedButton.icon(onPressed: () => Navigator.of(context).pushNamed('/sources'),
-          icon: const Icon(Icons.bluetooth_searching), label: const Text('Sync your ring / manage sources')),
+          icon: const Icon(Icons.monitor_heart_outlined), label: const Text('Health Connect sources')),
         if (_message != null) Padding(padding: const EdgeInsets.symmetric(vertical: 10),
           child: Text(_message!, style: const TextStyle(color: AppTheme.textSecondary))),
         const SizedBox(height: 18),
@@ -103,7 +103,7 @@ class _SalusHealthIntelligenceScreenState extends ConsumerState<SalusHealthIntel
         const Text('Recent skin-temperature readings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
         if (recentSkin.isEmpty) const Text('No verified skin-temperature measurements yet. '
-          'Try a ring sync, or import permissioned Health Connect records.',
+          'Import permissioned Health Connect records.',
           style: TextStyle(color: AppTheme.textSecondary))
         else for (final s in recentSkin)
           Padding(padding: const EdgeInsets.symmetric(vertical: 5),

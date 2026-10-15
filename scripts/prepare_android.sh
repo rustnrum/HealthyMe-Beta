@@ -8,22 +8,14 @@ python3 scripts/build85_release_preflight.py
 
 # Preserve the original beta Android identity, manifest, native features,
 # minSdk and app icon setup from the existing build workflow.
-test -f lib/widgets/garmin_body_battery_panel.dart
 test -f native/android/MainActivity.kt
-test -f native/android/SalusBleDeviceInfoReader.kt
-test -f native/android/SalusRingHrvLogDecoder.kt
-test -f native/android/SalusRingTemperatureDecoder.kt
 test -f native/android/SalusBackupBridge.kt
-test -f native/android/SalusProtocolReader.kt
-test -f native/android/SalusNotificationListenerService.kt
-test -f native/android/SalusWatchNotificationStore.kt
-test -f native/android/SalusWatchNotificationSender.kt
 test -f native/android/AndroidManifest.xml
 
 PKG_DIR="android/app/src/main/kotlin/com/rustnrum/healthyme/beta03"
 rm -rf android/app/src/main/kotlin
 mkdir -p "$PKG_DIR"
-cp native/android/*.kt "$PKG_DIR"/
+cp native/android/MainActivity.kt native/android/SalusBackupBridge.kt "$PKG_DIR"/
 cp native/android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
 if [ -f android/app/build.gradle.kts ]; then

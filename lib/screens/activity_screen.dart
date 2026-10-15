@@ -26,20 +26,10 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     if (_refreshingSteps) return;
     setState(() => _refreshingSteps = true);
     try {
-      final app = ref.read(appStateProvider);
-      final route = app.metricSources['Steps'];
-      final selected = route != null && route != 'Auto'
-          ? route : app.health.resolvedSources['Steps'];
-      String result;
-      if (selected?.startsWith('ble:') == true) {
-        result = await ref.read(healthSyncProvider.notifier)
-            .refreshSelectedDirectSteps();
-      } else {
-        await ref.read(healthSyncProvider.notifier).sync();
-        result = ref.read(healthSyncProvider).hasError
-            ? 'Steps sync failed. Check Connections.'
-            : 'Health Connect Steps sync completed. Check the source timestamp.';
-      }
+      await ref.read(healthSyncProvider.notifier).sync();
+      final result = ref.read(healthSyncProvider).hasError
+          ? 'Health Connect sync failed. Check permissions.'
+          : 'Health Connect steps sync completed.';
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(result), duration: const Duration(seconds: 6)),
@@ -53,9 +43,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
   Widget build(BuildContext context) {
     final app = ref.watch(appStateProvider);
     final health = app.health;
-    final directStepSource =
-        health.resolvedSources['Steps']?.startsWith('ble:') == true;
-    final hasSteps = health.authorized || directStepSource;
+    final hasSteps = health.authorized;
     final syncState = ref.watch(healthSyncProvider);
     final goal = app.profile.stepGoal <= 0 ? 10000 : app.profile.stepGoal;
     final progress = (health.stepsToday / goal).clamp(0.0, 1.0);
@@ -68,10 +56,10 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     final activeMinutes = todayWorkouts.fold<int>(0, (sum, w) => sum + w.minutes);
 
     final chartValues = switch (_range) {
-      'Day' => directStepSource ? const <int>[] : health.hourlySteps,
+      'Day' => health.hourlySteps,
       'Week' => _tail(health.dailySteps30, 7),
       'Month' => health.dailySteps30,
-      _ => directStepSource ? const <int>[] : health.monthlySteps12,
+      _ => health.monthlySteps12,
     };
 
     final stepSourceKey = health.resolvedSources['Steps'] ?? app.metricSources['Steps'];
@@ -80,8 +68,6 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
         : (health.sourceLabels[stepSourceKey] ??
             SourceNameService.friendly(stepSourceKey));
     final stepFreshness = health.freshness['Steps'];
-    final stepIsStale = directStepSource && stepFreshness != null &&
-        DateTime.now().difference(stepFreshness) > const Duration(hours: 1);
     final caloriesPlausible = health.activeCaloriesToday >= 0 &&
         health.activeCaloriesToday <= 15000;
 
@@ -150,12 +136,6 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        if (stepIsStale) ...[
-                          const SizedBox(height: 4),
-                          const Text('Last saved Garmin total — not current',
-                              style: TextStyle(color: AppTheme.amber,
-                                  fontSize: 12, fontWeight: FontWeight.w800)),
-                        ],
                         if (stepFreshness != null) ...[
                           const SizedBox(height: 2),
                           Text(
@@ -220,16 +200,6 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              if (directStepSource) ...[
-                const Text(
-                  'Garmin direct sync provides daily step-total snapshots. '
-                  'Missing days are unknown; hourly and yearly history are '
-                  'not available until imported from a source with timestamps.',
-                  style: TextStyle(color: AppTheme.textSecondary,
-                      fontSize: 12.5),
-                ),
-                const SizedBox(height: 10),
-              ],
               StepBarChart(
                 values: chartValues,
                 target: _range == 'Day' ? null : goal.toDouble(),

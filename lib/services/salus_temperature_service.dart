@@ -45,8 +45,7 @@ class SalusTemperatureService {
         }
       } catch (_) { /* damaged imported data cannot overwrite direct readings */ }
     }
-    final direct = await const DirectMetricService().loadSamples();
-    return distinct([...stored, ...direct]);
+    return distinct(stored.where((s)=>s.sourceId.startsWith('hc:')));
   }
 
   /// Invoked only by an explicit user action; asks for separate HC permissions.

@@ -74,7 +74,7 @@ class _SpO2HistoryScreenState extends ConsumerState<SpO2HistoryScreen> {
                   fontWeight: FontWeight.w700)),
               const SizedBox(height: 7),
               const Text(
-                'Actual direct-device and Health Connect readings only. One source at a time; no invented history.',
+                'Health Connect readings only. One originating provider at a time; no invented history.',
                 style: TextStyle(color: AppTheme.textSecondary),
               ),
               const SizedBox(height: 16),

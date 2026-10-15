@@ -83,21 +83,22 @@ class HealthyMeState {
 
   static HealthSnapshot _safeRestoredHealth(Map<String, dynamic> raw) {
     final saved = HealthSnapshot.fromJson(raw);
-    final source = saved.resolvedSources['HRV'];
-    final label = (source == null ? '' : saved.sourceLabels[source] ?? '')
-        .toLowerCase();
-    final garminBleHrv = source?.startsWith('ble:') == true &&
-        (label.contains('garmin') || label.contains('voactive') ||
-         label.contains('forerunner') || label.contains('fenix') ||
-         label.contains('fēnix') || label.contains('venu') ||
-         label.contains('instinct') || label.contains('epix'));
-    if (!garminBleHrv) return saved;
-    final resolved = Map<String, String>.from(saved.resolvedSources)
-      ..remove('HRV');
-    final freshness = Map<String, DateTime>.from(saved.freshness)
-      ..remove('HRV');
-    return saved.copyWith(clearHrv: true, hrv30: const [],
-        resolvedSources: resolved, freshness: freshness);
+    final json = saved.toJson();
+    final origins = Map<String,String>.from(saved.resolvedSources);
+    final old = origins.entries.where((e)=>e.value.startsWith('ble:')).map((e)=>e.key).toList();
+    if (old.isEmpty) return saved;
+    for (final metric in old) {
+      origins.remove(metric);
+      const field = <String,String>{'Steps':'stepsToday','Sleep':'sleepMinutes',
+        'Heart rate':'latestHeartRate','Resting heart rate':'restingHeartRate',
+        'HRV':'hrvMs','SpO2':'bloodOxygenPercent',
+        'Respiratory rate':'respiratoryRate','Active calories':'activeCaloriesToday'};
+      final key=field[metric];
+      if(key!=null) json[key]=key=='stepsToday'||key=='sleepMinutes'||key=='activeCaloriesToday'?0:null;
+      if(metric=='HRV') json['hrv30']=<double>[];
+    }
+    json['resolvedSources']=origins;
+    return HealthSnapshot.fromJson(json);
   }
 
   factory HealthyMeState.fromJson(Map<String, dynamic> json) {
@@ -128,7 +129,8 @@ class HealthyMeState {
               .toList(),
       metricSources:
           (json['metricSources'] as Map<String, dynamic>? ?? const {})
-              .map((key, value) => MapEntry(key, value.toString())),
+              .map((key, value) => MapEntry(key, value.toString()))
+              ..removeWhere((metric, source)=>source.startsWith('ble:')),
       dailyStateEnabled: json['dailyStateEnabled'] != false,
       dailyStateStartMinutes:
           ((json['dailyStateStartMinutes'] as num?)?.toInt() ?? 8 * 60)

@@ -20,9 +20,7 @@ class SpO2HistoryService {
   Future<SpO2HistoryResult> load({
     required bool healthConnectAuthorized,
   }) async {
-    final readings = <DirectMetricSample>[
-      ...await DirectMetricService().loadSamples(),
-    ];
+    final readings = <DirectMetricSample>[];
     String? warning;
 
     // Health Connect is a transport, not a source. Preserve each record's
@@ -70,7 +68,7 @@ class SpO2HistoryService {
         }
       } catch (_) {
         warning = 'Health Connect SpO₂ history could not be loaded. '
-            'Direct-device readings are still shown.';
+            'Please check Health Connect permissions and the originating provider.';
       }
     }
     return SpO2HistoryResult(readings: normalized(readings), warning: warning);

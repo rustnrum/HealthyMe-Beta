@@ -1,3 +1,3 @@
-"""Build 88: only the approved in-place Home metrics integration."""
+"""Production data-source transition: only Health Connect (Build 89)."""
 from runpy import run_path
-run_path('scripts/build88_apply.py', run_name='__main__')
+run_path('scripts/build89_remove_bluetooth.py', run_name='__main__')

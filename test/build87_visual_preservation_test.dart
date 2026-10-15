@@ -33,7 +33,7 @@ void main() {
       'assets/preview84/img/ring_recovery.png',
       'assets/preview84/img/ring_calories.png',
     ]) {expect(File(asset).existsSync(),isTrue,reason:asset);}
-    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.50+88'));
+    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.51+89'));
   });
 
   for(final width in [320.0, 360.0, 412.0, 820.0]){
