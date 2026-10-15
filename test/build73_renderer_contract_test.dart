@@ -21,6 +21,6 @@ void main() {
     final app = File('lib/app.dart').readAsStringSync();
     expect(app, contains('MorningCheckInGate(child: HomeShell())'));
     final home = File('lib/screens/home_shell.dart').readAsStringSync();
-    expect(home, contains('SalusHome85()'));
+    expect(home, contains('SalusHome77()'));
   });
 }

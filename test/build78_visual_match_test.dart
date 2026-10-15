@@ -12,11 +12,11 @@ void main(){
     expect(home.split('S77RingTile(').length-1,4);
     expect(home,contains('PremiumLineChart('));
     expect(home.contains('salus_night_mountains.jpg'),false);
-    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.47+85'));
+    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.48+86'));
   });
   test('Existing module navigation remains unchanged',(){
     final home=File('lib/screens/home_shell.dart').readAsStringSync();
-    expect(home,contains('SalusHome85Nav('));
+    expect(home,contains('bottomNavigationBar: _SalusBottomNav('));
     for(final path in ['lib/screens/diet/diet_shell.dart','lib/screens/health/health_shell.dart']){
       expect(File(path).readAsStringSync(),contains('HealthyMeModuleMenuButton('));
     }

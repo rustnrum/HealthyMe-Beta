@@ -78,6 +78,6 @@ void main() {
     expect(picker, contains('qualifiedChoices'));
     expect(picker, contains("'Ring HRV proxy'"));
     expect(profile, contains("'Ring HRV proxy'"));
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.47+85'));
+    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.48+86'));
   });
 }

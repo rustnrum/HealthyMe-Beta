@@ -11,8 +11,11 @@ void main() {
     final shell = File('lib/screens/home_shell.dart').readAsStringSync();
     expect(home, contains('assets/premium/salus_mountain_85.webp'));
     expect(home, contains('assets/preview84/img/ring_recovery.png'));
-    expect(shell, contains('SalusHome85()'));
-    expect(shell, contains('index == 0'));
+    expect(shell, contains('SalusHome77()'));
+    expect(shell, isNot(contains('SalusHome85()')));
+    expect(shell, contains('SalusVoiceLauncher('));
+    expect(shell, contains('bottomNavigationBar: _SalusBottomNav('));
+    // Archived mockup remains available for design reference, not active Home.
   });
 
   for (final size in const [
@@ -23,7 +26,7 @@ void main() {
     Size(820, 960),
     Size(1100, 980),
   ]) {
-    testWidgets('Approved Home layout has no exceptions at ${size.width} x ${size.height}',
+    testWidgets('Archived design preview layout has no exceptions at ${size.width} x ${size.height}',
         (tester) async {
       await tester.binding.setSurfaceSize(size);
       addTearDown(() => tester.binding.setSurfaceSize(null));

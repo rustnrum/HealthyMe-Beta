@@ -6,7 +6,7 @@ import 'package:healthy_me/widgets/salus_premium_visuals.dart';
 void main() {
   test('Build 76 keeps Home subnavigation and original module selector', () {
     final home = File('lib/screens/home_shell.dart').readAsStringSync();
-    expect(home, contains('SalusHome85Nav('));
+    expect(home, contains('bottomNavigationBar: _SalusBottomNav('));
     expect(home, contains('HealthyMeModuleMenuButton('));
     expect(home, isNot(contains('PremiumDestinationBar(index: 0')));
     final diet = File('lib/screens/diet/diet_shell.dart').readAsStringSync();
@@ -32,7 +32,7 @@ void main() {
     expect(home, contains('SalusColorHero('));
     expect(home, isNot(contains('salus_night_mountains.jpg')));
     expect(File('assets/premium/salus_night_mountains.jpg').existsSync(), false);
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.47+85'));
+    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.48+86'));
   });
   testWidgets('Default premium card padding is compile-time constant', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: Scaffold(

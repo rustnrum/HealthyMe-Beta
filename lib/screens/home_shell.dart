@@ -11,7 +11,7 @@ import '../widgets/module_menu_button.dart';
 import '../widgets/salus_voice_launcher.dart';
 import 'activity_screen.dart';
 import 'body_screen.dart';
-import 'premium/salus_home_85.dart';
+import 'premium/salus_home_77.dart';
 import 'more_screen.dart';
 import 'sleep_screen.dart';
 
@@ -70,10 +70,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     final index = ref.watch(navigationProvider);
-    // Build 85 is deliberately Home-only. All other pages keep their working
-    // implementations and storage; no wearable/data migration occurs here.
+    // Keep the original data-connected Home and every existing module.
     const screens = [
-      SalusHome85(),
+      SalusHome77(),
       ActivityScreen(),
       SleepScreen(),
       BodyScreen(),
@@ -99,12 +98,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     }
 
     return Scaffold(
-      // The existing floating Voice button would cover the mockup CTA.
-      // Keep it unchanged in other modules; Home has its own future UX.
-      floatingActionButton: index == 0
-          ? null
-          : SalusVoiceLauncher(
-              onPressed: () => Navigator.of(context).pushNamed('/voice')),
+      floatingActionButton: SalusVoiceLauncher(
+          onPressed: () => Navigator.of(context).pushNamed('/voice')),
       appBar: index == 0
           ? null // Home owns the SALUS hero/header.
           : AppBar(
@@ -127,16 +122,10 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         bottom: false,
         child: IndexedStack(index: index, children: screens),
       ),
-      bottomNavigationBar: index == 0
-          ? SalusHome85Nav(
-              onTraining: () => Navigator.of(context).pushNamed('/workout'),
-              onHealth: () => Navigator.of(context).pushNamed('/health'),
-              onDiscover: () => ref.read(navigationProvider.notifier).go(4),
-            )
-          : _SalusBottomNav(
-              index: index,
-              onChanged: ref.read(navigationProvider.notifier).go,
-            ),
+      bottomNavigationBar: _SalusBottomNav(
+        index: index,
+        onChanged: ref.read(navigationProvider.notifier).go,
+      ),
     );
   }
 }
