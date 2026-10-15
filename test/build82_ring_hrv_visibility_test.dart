@@ -43,6 +43,6 @@ void main() {
     expect(home, contains('_ringIndexTrend('));
     expect(recovery, contains("_hrvContributor(app.health)"));
     expect(recovery.contains('Ring HRV proxy'), isFalse);
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.46+84'));
+    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.47+85'));
   });
 }

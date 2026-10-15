@@ -42,6 +42,6 @@ void main() {
     expect(home, contains("'/metric-hrv'"));
     final direct=File('lib/services/direct_metric_service.dart').readAsStringSync();
     expect(direct, contains('isLegacyGarminHrv'));
-    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.46+84'));
+    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.47+85'));
   });
 }

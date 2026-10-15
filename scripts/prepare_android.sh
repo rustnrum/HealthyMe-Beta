@@ -1,97 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
-if grep -Eq '^version: 0\.21\.46\+84$' pubspec.yaml; then
-  echo 'Build84: migrations already applied'
-else
-if ! grep -Eq '^version: 0\.21\.(36\+74|37\+75|38\+76|39\+77|40\+78|41\+79|42\+80|43\+81|44\+82|45\+83)$' pubspec.yaml; then
-python3 scripts/patch_build47.py
-if ! grep -Eq '^version: 0\.21\.(19\+57|20\+58|21\+59|22\+60|23\+61|24\+62|25\+63|26\+64|27\+65|28\+66|29\+67|30\+68|31\+69|32\+70|33\+71|34\+72|35\+73)$' pubspec.yaml; then
-  python3 scripts/patch_build56.py
-fi
-if ! grep -Eq '^version: 0\.21\.(20\+58|21\+59|22\+60|23\+61|24\+62|25\+63|26\+64|27\+65|28\+66|29\+67|30\+68|31\+69|32\+70|33\+71|34\+72|35\+73)$' pubspec.yaml; then
-  python3 scripts/patch_build57.py
-fi
-if ! grep -Eq '^version: 0\.21\.(20\+58|21\+59|22\+60|23\+61|24\+62|25\+63|26\+64|27\+65|28\+66|29\+67|30\+68|31\+69|32\+70|33\+71|34\+72|35\+73)$' pubspec.yaml; then
-  python3 scripts/patch_build58.py
-fi
-if ! grep -Eq '^version: 0\.21\.(22\+60|23\+61|24\+62|25\+63|26\+64|27\+65|28\+66|29\+67|30\+68|31\+69|32\+70|33\+71|34\+72|35\+73)$' pubspec.yaml; then
-  python3 scripts/patch_build59.py
-  python3 scripts/patch_build59_steps.py
-fi
-if ! grep -Eq '^version: 0\.21\.(23\+61|24\+62|25\+63|26\+64|27\+65|28\+66|29\+67|30\+68|31\+69|32\+70|33\+71|34\+72|35\+73)$' pubspec.yaml; then
-  python3 scripts/patch_build60.py
-fi
-if ! grep -Eq '^version: 0\.21\.(24\+62|25\+63|26\+64|27\+65|28\+66|29\+67|30\+68|31\+69|32\+70|33\+71|34\+72|35\+73)$' pubspec.yaml; then
-  python3 scripts/patch_build61.py
-fi
-if ! grep -Eq '^version: 0\.21\.(25\+63|26\+64|27\+65|28\+66|29\+67|30\+68|31\+69|32\+70|33\+71|34\+72|35\+73)$' pubspec.yaml; then
-  python3 scripts/patch_build62.py
-fi
-python3 scripts/patch_build62_test_contracts.py
-if ! grep -Eq '^version: 0\.21\.(26\+64|27\+65|28\+66|29\+67|30\+68|31\+69|32\+70|33\+71|34\+72|35\+73)$' pubspec.yaml; then
-  python3 scripts/patch_build63.py
-fi
-if ! grep -Eq '^version: 0\.21\.(27\+65|28\+66|29\+67|30\+68|31\+69|32\+70|33\+71|34\+72|35\+73)$' pubspec.yaml; then
-  python3 scripts/patch_build64.py
-fi
-if ! grep -Eq '^version: 0\.21\.(28\+66|29\+67|30\+68|31\+69|32\+70|33\+71|34\+72|35\+73)$' pubspec.yaml; then
-  python3 scripts/patch_build65.py
-fi
-if ! grep -Eq '^version: 0\.21\.(29\+67|30\+68|31\+69|32\+70|33\+71|34\+72|35\+73)$' pubspec.yaml; then
-  python3 scripts/patch_build66.py
-fi
-if grep -Eq '^version: 0\.21\.(28\+66|29\+67)$' pubspec.yaml; then
-  python3 scripts/patch_build67.py
-fi
-if grep -Eq '^version: 0\.21\.(29\+67|30\+68)$' pubspec.yaml; then
-  python3 scripts/patch_build68.py
-fi
-if grep -Eq '^version: 0\.21\.(30\+68|31\+69)$' pubspec.yaml; then
-  python3 scripts/patch_build69.py
-fi
-if grep -Eq '^version: 0\.21\.(31\+69|32\+70)$' pubspec.yaml; then
-  python3 scripts/patch_build70.py
-fi
-if grep -Eq '^version: 0\.21\.(32\+70|33\+71)$' pubspec.yaml; then
-  python3 scripts/patch_build71.py
-fi
-if grep -Eq '^version: 0\.21\.(33\+71|34\+72)$' pubspec.yaml; then
-  python3 scripts/patch_build72.py
-fi
 
-python3 scripts/patch_build73.py
+# Build 84 contains the fully migrated application. Build 85 and subsequent
+# app updates must NOT replay historical 47-83 source-rewrite scripts.
+# Those scripts require ancient version anchors and would damage newer source.
+python3 scripts/build85_release_preflight.py
 
-fi
-if ! grep -Eq '^version: 0\.21\.(37\+75|38\+76|39\+77|40\+78|41\+79|42\+80|43\+81|44\+82|45\+83)$' pubspec.yaml; then
-  python3 scripts/patch_build74.py
-fi
-if ! grep -Eq '^version: 0\.21\.(37\+75|38\+76|39\+77|40\+78|41\+79|42\+80|43\+81|44\+82|45\+83)$' pubspec.yaml; then
-  python3 scripts/patch_build75.py
-fi
-if ! grep -Eq '^version: 0\.21\.(39\+77|40\+78|41\+79|42\+80|43\+81|44\+82|45\+83)$' pubspec.yaml; then
-  python3 scripts/patch_build76.py
-fi
-if grep -Eq '^version: 0\.21\.38\+76$' pubspec.yaml; then
-  python3 scripts/patch_build77.py
-fi
-if grep -Eq '^version: 0\.21\.(39\+77|40\+78)$' pubspec.yaml; then
-  python3 scripts/patch_build78.py
-fi
-if grep -Eq '^version: 0\.21\.41\+79$' pubspec.yaml; then
-  python3 scripts/patch_build79.py
-fi
-if grep -Eq '^version: 0\.21\.42\+80$' pubspec.yaml; then
-  python3 scripts/patch_build80.py
-fi
-if ! grep -Eq '^version: 0\.21\.(44\+82|45\+83)$' pubspec.yaml; then
-  python3 scripts/patch_build81.py
-fi
-if ! grep -Eq '^version: 0\.21\.45\+83$' pubspec.yaml; then
-  python3 scripts/patch_build82.py
-fi
-python3 scripts/patch_build83.py
-
-fi
+# Preserve the original beta Android identity, manifest, native features,
+# minSdk and app icon setup from the existing build workflow.
 test -f lib/widgets/garmin_body_battery_panel.dart
 test -f native/android/MainActivity.kt
 test -f native/android/SalusBleDeviceInfoReader.kt

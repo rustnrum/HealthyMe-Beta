@@ -6,17 +6,17 @@ import 'package:healthy_me/widgets/salus_premium_visuals.dart';
 
 void main(){
   test('All four designed overview screens are wired to original module shells',(){
-    expect(File('lib/screens/home_shell.dart').readAsStringSync(),contains('SalusHome77()'));
+    expect(File('lib/screens/home_shell.dart').readAsStringSync(),contains('SalusHome85()'));
     expect(File('lib/screens/diet/diet_shell.dart').readAsStringSync(),contains('SalusNutrition77('));
     expect(File('lib/screens/workout_screen.dart').readAsStringSync(),contains('SalusTraining77('));
     expect(File('lib/screens/health/health_shell.dart').readAsStringSync(),contains('SalusHealth77()'));
     for(final path in ['lib/screens/home_shell.dart','lib/screens/diet/diet_shell.dart','lib/screens/workout_screen.dart', 'lib/screens/health/health_shell.dart']){
       expect(File(path).readAsStringSync(),contains('HealthyMeModuleMenuButton('),reason:path);
     }
-    expect(File('lib/screens/home_shell.dart').readAsStringSync(),contains('bottomNavigationBar: _SalusBottomNav('));
+    expect(File('lib/screens/home_shell.dart').readAsStringSync(),contains('SalusHome85Nav('));
     expect(File('lib/screens/diet/diet_shell.dart').readAsStringSync(),contains('bottomNavigationBar: _DietBottomNav('));
     expect(File('lib/screens/health/health_shell.dart').readAsStringSync(),contains('bottomNavigationBar: _HealthBottomNav('));
-    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.46+84'));
+    expect(File('pubspec.yaml').readAsStringSync(),contains('version: 0.21.47+85'));
   });
   test('No mountains or invented biometric readings in replacement screens',(){
     for(final path in ['lib/screens/premium/salus_home_77.dart','lib/screens/premium/salus_nutrition_77.dart',

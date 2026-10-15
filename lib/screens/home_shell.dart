@@ -11,7 +11,7 @@ import '../widgets/module_menu_button.dart';
 import '../widgets/salus_voice_launcher.dart';
 import 'activity_screen.dart';
 import 'body_screen.dart';
-import 'premium/salus_home_77.dart';
+import 'premium/salus_home_85.dart';
 import 'more_screen.dart';
 import 'sleep_screen.dart';
 
@@ -61,6 +61,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     if (_autoSyncStarted) return;
     _autoSyncStarted = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final app = ref.read(appStateProvider);
       if (app.health.authorized) ref.read(healthSyncProvider.notifier).sync();
     });
@@ -69,8 +70,10 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     final index = ref.watch(navigationProvider);
+    // Build 85 is deliberately Home-only. All other pages keep their working
+    // implementations and storage; no wearable/data migration occurs here.
     const screens = [
-      SalusHome77(),
+      SalusHome85(),
       ActivityScreen(),
       SleepScreen(),
       BodyScreen(),
@@ -96,10 +99,14 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     }
 
     return Scaffold(
-      floatingActionButton: SalusVoiceLauncher(
-        onPressed: () => Navigator.of(context).pushNamed('/voice')),
+      // The existing floating Voice button would cover the mockup CTA.
+      // Keep it unchanged in other modules; Home has its own future UX.
+      floatingActionButton: index == 0
+          ? null
+          : SalusVoiceLauncher(
+              onPressed: () => Navigator.of(context).pushNamed('/voice')),
       appBar: index == 0
-          ? null // Premium dashboard owns its SALUS header.
+          ? null // Home owns the SALUS hero/header.
           : AppBar(
               leading: IconButton(
                 tooltip: 'Back to Home',
@@ -115,9 +122,21 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
                 const SizedBox(width: 8),
               ],
             ),
-      body: SafeArea(top: index == 0, bottom: false, child: IndexedStack(index: index, children: screens)),
-      bottomNavigationBar: _SalusBottomNav(
-        index:index, onChanged:ref.read(navigationProvider.notifier).go),
+      body: SafeArea(
+        top: index == 0,
+        bottom: false,
+        child: IndexedStack(index: index, children: screens),
+      ),
+      bottomNavigationBar: index == 0
+          ? SalusHome85Nav(
+              onTraining: () => Navigator.of(context).pushNamed('/workout'),
+              onHealth: () => Navigator.of(context).pushNamed('/health'),
+              onDiscover: () => ref.read(navigationProvider.notifier).go(4),
+            )
+          : _SalusBottomNav(
+              index: index,
+              onChanged: ref.read(navigationProvider.notifier).go,
+            ),
     );
   }
 }
@@ -185,7 +204,8 @@ class _SalusBottomNav extends StatelessWidget {
                           duration: const Duration(milliseconds: 160),
                           width: i == index ? 7 : 0,
                           height: i == index ? 7 : 0,
-                          decoration: const BoxDecoration(shape: BoxShape.circle, color: AppTheme.cyan),
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle, color: AppTheme.cyan),
                         ),
                       ],
                     ),
