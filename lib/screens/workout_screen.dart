@@ -742,6 +742,8 @@ class _WorkoutBuilderScreen extends ConsumerStatefulWidget {
 class _WorkoutBuilderScreenState extends ConsumerState<_WorkoutBuilderScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _notesController;
+  late final TextEditingController _durationController;
+  late final TextEditingController _focusController;
   late DateTime _date;
   late List<WorkoutExercise> _exercises;
   String? _templateId;
@@ -755,6 +757,9 @@ class _WorkoutBuilderScreenState extends ConsumerState<_WorkoutBuilderScreen> {
       text: template?.name ?? scheduled?.name ?? '',
     );
     _notesController = TextEditingController(text: scheduled?.notes ?? '');
+    _durationController = TextEditingController(
+      text: scheduled?.plannedMinutes?.toString() ?? '');
+    _focusController = TextEditingController(text: scheduled?.focus ?? '');
     _date = scheduled?.scheduledFor ?? widget.initialDate ?? DateTime.now();
     _exercises = [
       ...(template?.exercises ?? scheduled?.exercises ?? const <WorkoutExercise>[]),
@@ -766,6 +771,8 @@ class _WorkoutBuilderScreenState extends ConsumerState<_WorkoutBuilderScreen> {
   void dispose() {
     _nameController.dispose();
     _notesController.dispose();
+    _durationController.dispose();
+    _focusController.dispose();
     super.dispose();
   }
 
@@ -842,6 +849,23 @@ class _WorkoutBuilderScreenState extends ConsumerState<_WorkoutBuilderScreen> {
                       },
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _focusController,
+                    decoration: const InputDecoration(
+                      labelText: 'Workout focus / type',
+                      hintText: 'Upper body, Lower body, Cardio',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _durationController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Planned duration (minutes)',
+                      hintText: 'Leave blank if unknown',
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _notesController,
@@ -994,6 +1018,14 @@ class _WorkoutBuilderScreenState extends ConsumerState<_WorkoutBuilderScreen> {
   }
 
   void _save() {
+    final durationText = _durationController.text.trim();
+    final minutes = durationText.isEmpty ? null : int.tryParse(durationText);
+    if (!widget.templateMode && durationText.isNotEmpty &&
+        (minutes == null || minutes < 1 || minutes > 600)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Enter 1–600 minutes or leave duration empty.')));
+      return;
+    }
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1023,6 +1055,8 @@ class _WorkoutBuilderScreenState extends ConsumerState<_WorkoutBuilderScreen> {
           templateId: _templateId,
           exercises: _exercises,
           notes: _notesController.text.trim(),
+          plannedMinutes: minutes,
+          focus: _focusController.text.trim(),
         ),
       );
     }
@@ -1046,6 +1080,7 @@ class _ExerciseEditorDialogState extends State<_ExerciseEditorDialog> {
   late final TextEditingController _weight;
   late final TextEditingController _rest;
   late final TextEditingController _notes;
+  late String _phase;
 
   @override
   void initState() {
@@ -1059,6 +1094,7 @@ class _ExerciseEditorDialogState extends State<_ExerciseEditorDialog> {
     );
     _rest = TextEditingController(text: exercise.restSeconds.toString());
     _notes = TextEditingController(text: exercise.notes);
+    _phase = exercise.phase;
   }
 
   @override
@@ -1128,6 +1164,17 @@ class _ExerciseEditorDialogState extends State<_ExerciseEditorDialog> {
                 ],
               ),
               const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _phase,
+                decoration: const InputDecoration(labelText: 'Workout section'),
+                items: const [
+                  DropdownMenuItem(value: 'Warm-up', child: Text('Warm-up')),
+                  DropdownMenuItem(value: 'Main', child: Text('Main workout')),
+                  DropdownMenuItem(value: 'Cool-down', child: Text('Cool-down')),
+                ],
+                onChanged: (value) { if (value != null) setState(() => _phase = value); },
+              ),
+              const SizedBox(height: 10),
               TextField(
                 controller: _notes,
                 maxLines: 3,
@@ -1161,6 +1208,7 @@ class _ExerciseEditorDialogState extends State<_ExerciseEditorDialog> {
         weight: double.tryParse(_weight.text.trim()),
         clearWeight: _weight.text.trim().isEmpty,
         restSeconds: _nonNegativeInt(_rest.text),
+        phase: _phase,
         notes: _notes.text.trim(),
       ),
     );

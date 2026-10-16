@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/models.dart';
+import '../../models/workout_models.dart';
 import '../../services/home_insight_service.dart';
 import '../../services/ai_meal_planner_service.dart';
 import '../../services/salus_recipe_photo_service.dart';
@@ -20,6 +21,7 @@ import '../../widgets/salus77_design.dart';
 import '../../widgets/salus_premium_ui.dart';
 import 'salus87_ui.dart';
 import 'salus_home_ai_card.dart';
+import 'salus_workout_portrait_92.dart';
 
 class SalusHome87 extends ConsumerStatefulWidget {
   const SalusHome87({super.key});
@@ -161,6 +163,15 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
         ? completedToday.first.name : 'No workout scheduled');
     final exercises = workout?.exercises.length ??
         (completedToday.isNotEmpty ? completedToday.first.exercises.length : 0);
+    final displayExercises = workout?.exercises ??
+        (completedToday.isNotEmpty ? completedToday.first.exercises : const <WorkoutExercise>[]);
+    final totalSets = displayExercises.fold<int>(0, (sum, e) => sum + e.sets);
+    final workoutFocus = workout?.focus.trim() ?? '';
+    final duration = workout?.plannedMinutes;
+    final segmentCounts = <String, int>{
+      for (final part in ['Warm-up', 'Main', 'Cool-down'])
+        part: displayExercises.where((e) => e.phase == part).length,
+    };
     final lastBp = _lab(app.labs, ['blood pressure', 'systolic', 'bp reading']);
     final lastA1c = _lab(app.labs, ['a1c', 'hba1c', 'hemoglobin a1c']);
     final lastLdl = _lab(app.labs, ['ldl', 'low density lipoprotein']);
@@ -381,26 +392,52 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
                 _sectionHeading("Today's Workout", Icons.fitness_center_rounded,
                   'See module', S87.blue, () => _go('/workout')),
                 const SizedBox(height: 13),
-                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  ClipRRect(borderRadius: BorderRadius.circular(13),
-                    child: Image.asset('assets/premium/training_hero.jpg',
-                      width: 94, height: 108, fit: BoxFit.cover)),
-                  const SizedBox(width: 12),
-                  Expanded(child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(workoutTitle,
-                      style: const TextStyle(color: S87.ink,
-                        fontSize: 19, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 8),
-                    Text(workout != null
-                        ? '$exercises exercises planned for today'
-                        : completedToday.isNotEmpty
-                            ? 'Completed today · $exercises exercises'
-                            : 'Open Training to schedule your workout.',
-                      style: const TextStyle(color: S87.muted,
-                        fontSize: 15, height: 1.35)),
-                  ])),
+                LayoutBuilder(builder: (context, constraints) {
+                  // Wrap naturally on narrow folded screens. Artwork is a
+                  // landscape portrait, shown in full rather than cropped.
+                  final narrow = constraints.maxWidth < 300;
+                  return Row(crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SalusWorkoutPortrait92(
+                        profileSex: app.profile.sex,
+                        profileCompleted: app.profile.completed,
+                        width: narrow ? 99 : 126, height: narrow ? 86 : 95),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(workoutTitle, style: const TextStyle(
+                            color: S87.ink, fontSize: 18,
+                            fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 7),
+                          Text(workout == null && completedToday.isEmpty
+                                ? 'Open Training to plan your session.'
+                                : workoutFocus.isNotEmpty ? workoutFocus
+                                : '$exercises exercises ${workout != null ? 'planned' : 'completed'}',
+                            style: const TextStyle(color: S87.muted,
+                              fontSize: 14, height: 1.3)),
+                        ])),
+                    ]);
+                }),
+                const SizedBox(height: 12),
+                Wrap(spacing: 13, runSpacing: 9, children: [
+                  _workoutMeta('Duration', duration != null && duration > 0
+                      ? '$duration min' : 'Not set'),
+                  _workoutMeta('Exercises', workout != null || completedToday.isNotEmpty
+                      ? '$exercises' : 'Not planned'),
+                  _workoutMeta('Total sets', workout != null || completedToday.isNotEmpty
+                      ? '$totalSets' : 'Not planned'),
                 ]),
+                if (workout != null && displayExercises.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(spacing: 12, runSpacing: 6, children: [
+                    if (segmentCounts['Warm-up']! > 0)
+                      _workoutSection('Warm-up', segmentCounts['Warm-up']!),
+                    if (segmentCounts['Main']! > 0)
+                      _workoutSection('Main workout', segmentCounts['Main']!),
+                    if (segmentCounts['Cool-down']! > 0)
+                      _workoutSection('Cool-down', segmentCounts['Cool-down']!),
+                  ]),
+                ],
                 if (workout != null && workout.exercises.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   for (final exercise in workout.exercises.take(5))
@@ -409,6 +446,7 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
                         const Icon(Icons.check_circle_outline_rounded, color: S87.blue, size: 20),
                         const SizedBox(width: 8),
                         Expanded(child: Text(
+                          '${exercise.phase == 'Main' ? '' : '${exercise.phase} · '}'
                           '${exercise.name} · ${exercise.sets} sets × ${exercise.reps} reps'
                           '${exercise.weight == null ? '' : ' · ${exercise.weight} lb'}'
                           ' · ${exercise.restSeconds}s rest',
@@ -511,6 +549,25 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
       ),
     );
   }
+
+  Widget _workoutMeta(String label, String value) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: const TextStyle(color: S87.muted, fontSize: 12)),
+      Text(value, style: const TextStyle(color: S87.ink, fontSize: 14,
+        fontWeight: FontWeight.w700)),
+    ],
+  );
+
+  Widget _workoutSection(String label, int count) => Row(
+    mainAxisSize: MainAxisSize.min, children: [
+      const Icon(Icons.check_circle_outline_rounded, size: 15, color: S87.blue),
+      const SizedBox(width: 5),
+      Text('$label · $count', style: const TextStyle(
+        color: S87.muted, fontSize: 13)),
+    ],
+  );
 
   Widget _sectionHeading(String title, IconData icon, String action,
       Color tint, VoidCallback onTap) => Row(children: [

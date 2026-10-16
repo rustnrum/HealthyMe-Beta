@@ -1,0 +1,24 @@
+SALUS Build 92 — Workout card and workout planning fields
+Target: rustnrum/HealthyMe-Beta, branch main
+Required ZIP filename: HealthyMe-v0.9-SOURCE-DISCOVERY.zip
+App version: 0.21.54+92. Same application ID and permanent signing certificate.
+
+Only work on the current Home Workout card and its supporting Workout editor/model.
+- The male/female workout artwork is centered and shown using BoxFit.contain,
+  never cropped from the older combined/half-person image.
+- Uses the saved explicit profile choice; incomplete/other profile gets neutral icon.
+- Workout Home displays actual saved name, focus, duration if recorded,
+  exercises, total planned sets, explicit Warm-up/Main/Cool-down sections,
+  per-exercise sets/reps/weight/rest, and optional notes.
+- Empty-state fields show 'Not set' or 'Not planned', never invented demo data.
+- Workout editor provides optional duration and focus fields and a per-exercise
+  workout-section selector. Existing saved workouts remain compatible.
+- Nutrition, Health Connect, medical labs, AI Insight, Recovery, the mountain
+  and SALUS logo, bottom navigation, and data storage keys are unchanged.
+
+Build procedure: Existing GitHub zip overlay workflow extracts this archive,
+runs the version-gated scripts/build85_release_preflight.py, then performs
+Flutter analyze, all tests, APK build, signing verification, and upload.
+
+NOT YET COMPILED when this ZIP was prepared. Do not claim an APK exists before
+GitHub Actions passes and the resulting APK is actually retrieved/verified.

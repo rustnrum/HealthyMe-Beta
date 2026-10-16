@@ -6,6 +6,7 @@ class WorkoutExercise {
   final double? weight;
   final int restSeconds;
   final String notes;
+  final String phase; // Warm-up, Main, or Cool-down
   final String catalogSource;
   final String? externalId;
   final String? mediaUrl;
@@ -18,6 +19,7 @@ class WorkoutExercise {
     this.weight,
     this.restSeconds = 60,
     this.notes = '',
+    this.phase = 'Main',
     this.catalogSource = 'Manual',
     this.externalId,
     this.mediaUrl,
@@ -32,6 +34,7 @@ class WorkoutExercise {
     bool clearWeight = false,
     int? restSeconds,
     String? notes,
+    String? phase,
     String? catalogSource,
     String? externalId,
     String? mediaUrl,
@@ -44,6 +47,7 @@ class WorkoutExercise {
       weight: clearWeight ? null : (weight ?? this.weight),
       restSeconds: restSeconds ?? this.restSeconds,
       notes: notes ?? this.notes,
+      phase: phase ?? this.phase,
       catalogSource: catalogSource ?? this.catalogSource,
       externalId: externalId ?? this.externalId,
       mediaUrl: mediaUrl ?? this.mediaUrl,
@@ -58,6 +62,7 @@ class WorkoutExercise {
         'weight': weight,
         'restSeconds': restSeconds,
         'notes': notes,
+        'phase': phase,
         'catalogSource': catalogSource,
         'externalId': externalId,
         'mediaUrl': mediaUrl,
@@ -72,6 +77,8 @@ class WorkoutExercise {
       weight: (json['weight'] as num?)?.toDouble(),
       restSeconds: (json['restSeconds'] as num?)?.toInt() ?? 60,
       notes: json['notes']?.toString() ?? '',
+      phase: const ['Warm-up', 'Main', 'Cool-down'].contains(json['phase'])
+          ? json['phase'] as String : 'Main',
       catalogSource: json['catalogSource']?.toString() ?? 'Manual',
       externalId: json['externalId']?.toString(),
       mediaUrl: json['mediaUrl']?.toString(),
@@ -145,6 +152,8 @@ class ScheduledWorkout {
   final String? templateId;
   final List<WorkoutExercise> exercises;
   final String notes;
+  final int? plannedMinutes;
+  final String focus;
 
   const ScheduledWorkout({
     required this.id,
@@ -153,6 +162,8 @@ class ScheduledWorkout {
     this.templateId,
     this.exercises = const [],
     this.notes = '',
+    this.plannedMinutes,
+    this.focus = '',
   });
 
   ScheduledWorkout copyWith({
@@ -162,6 +173,8 @@ class ScheduledWorkout {
     String? templateId,
     List<WorkoutExercise>? exercises,
     String? notes,
+    int? plannedMinutes,
+    String? focus,
   }) {
     return ScheduledWorkout(
       id: id ?? this.id,
@@ -170,6 +183,8 @@ class ScheduledWorkout {
       templateId: templateId ?? this.templateId,
       exercises: exercises ?? this.exercises,
       notes: notes ?? this.notes,
+      plannedMinutes: plannedMinutes ?? this.plannedMinutes,
+      focus: focus ?? this.focus,
     );
   }
 
@@ -180,6 +195,8 @@ class ScheduledWorkout {
         'templateId': templateId,
         'exercises': exercises.map((e) => e.toJson()).toList(),
         'notes': notes,
+        'plannedMinutes': plannedMinutes,
+        'focus': focus,
       };
 
   factory ScheduledWorkout.fromJson(Map<String, dynamic> json) {
@@ -194,6 +211,8 @@ class ScheduledWorkout {
           .map(WorkoutExercise.fromJson)
           .toList(),
       notes: json['notes']?.toString() ?? '',
+      plannedMinutes: (json['plannedMinutes'] as num?)?.toInt(),
+      focus: json['focus']?.toString() ?? '',
     );
   }
 }
