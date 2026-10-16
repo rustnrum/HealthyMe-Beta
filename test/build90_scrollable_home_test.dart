@@ -21,6 +21,8 @@ void main() {
       expect(home, contains(title), reason: title);
     }
     expect(home, contains('assets/premium/salus_wordmark_90.png'));
+    expect(home, isNot(contains('SizedBox(height: 52)')));
+    expect(home, contains("Key('salus-home-recovery-row')"));
     expect(home, contains('assets/premium/salus_mountain_85.webp'));
     expect(nav, contains("'Home'"));
     expect(nav, contains("'Training'"));
@@ -50,7 +52,7 @@ void main() {
     expect(tester.takeException(), isNull);
     // Dynamic hero must expand to accommodate text, not clip its children.
     expect(tester.getSize(find.byKey(const Key('salus-home-hero-90'))).height,
-      greaterThan(264));
+      greaterThan(245));
     for (var i = 0; i < 7; i++) {
       await tester.drag(find.byType(ListView), const Offset(0, -480));
       await tester.pumpAndSettle();
@@ -70,6 +72,15 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('Recovery Score'), findsOneWidget);
+      if (width >= 360.0) {
+        // On a standard phone the five metrics must be BESIDE the ring.
+        expect(find.byKey(const Key('salus-home-recovery-row')), findsOneWidget);
+      }
+      if (width <= 412.0) {
+        // No fixed-height hero with a 52px empty region beneath the logo.
+        expect(tester.getSize(find.byKey(const Key('salus-home-hero-90'))).height,
+          lessThan(270));
+      }
       for (var i = 0; i < 7; i++) {
         await tester.drag(find.byType(ListView), const Offset(0, -480));
         await tester.pumpAndSettle();

@@ -1,0 +1,12 @@
+BUILD 90 VISUAL CORRECTION — FOR THE EXISTING rustnrum/HealthyMe-Beta/main
+
+Overwrite only these three files:
+- assets/premium/salus_wordmark_90.png : exact glyphs extracted from user-approved mockup rather than invented font
+- lib/screens/premium/salus_home_87.dart : compact greeting hero and Recovery ring beside metrics on normal phones
+- test/build90_scrollable_home_test.dart : preserve full-scroll and accessibility tests, verify compact hero and side-by-side layout
+
+No other modules, Android identity, signing, data stores, dependencies, or migration scripts changed.
+Install over existing app without uninstalling to retain local data.
+
+Locally verified: ZIP integrity, expected source API identifiers, changed-file diff, artwork transparency/dimensions.
+Not locally compiled: Flutter not installed. GitHub Actions must verify compile/tests/APK and signing before installation.

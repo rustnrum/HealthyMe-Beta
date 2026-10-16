@@ -137,7 +137,7 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
           // content determines the actual height so large fonts cannot clip.
           ConstrainedBox(
             key: const Key('salus-home-hero-90'),
-            constraints: const BoxConstraints(minHeight: 264),
+            constraints: const BoxConstraints(minHeight: 206),
             child: Stack(children: [
               Positioned.fill(child: Image.asset(
                 'assets/premium/salus_mountain_85.webp',
@@ -150,13 +150,13 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
                 ),
               ))),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 7),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
                     Image.asset('assets/premium/salus_wordmark_90.png',
-                      height: 42, width: 146, fit: BoxFit.contain,
+                      height: 34, width: 145, fit: BoxFit.contain,
                       semanticLabel: 'SALUS'),
                     const Spacer(),
                     IconButton(tooltip: 'Health updates',
@@ -172,17 +172,17 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
                   ]),
                   // Fixed *spacing*, never a fixed hero height or flex spacer.
                   // On accessibility scaling, the entire header grows.
-                  const SizedBox(height: 52),
+                  const SizedBox(height: 11),
                   Text('${_date(now)}',
                     style: const TextStyle(color: S87.ink, fontSize: 15)),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 5),
                   Text('$greeting,\n$name',
                     style: const TextStyle(color: S87.ink,
-                      fontSize: 31, fontWeight: FontWeight.w800, height: 1.1)),
-                  const SizedBox(height: 11),
+                      fontSize: 27, fontWeight: FontWeight.w700, height: 1.08)),
+                  const SizedBox(height: 7),
                   const Text('Your daily health, activity and plans in one place.',
-                    style: TextStyle(color: S87.ink, fontSize: 15, height: 1.4)),
-                  const SizedBox(height: 16),
+                    style: TextStyle(color: S87.ink, fontSize: 15, height: 1.3)),
+                  const SizedBox(height: 6),
                 ]),
               ),
             ]),
@@ -198,26 +198,37 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
                     'Details', S87.green, () => _go('/recovery')),
                   const SizedBox(height: 12),
                   LayoutBuilder(builder: (context, c) {
-                    final wide = c.maxWidth >= 420;
+                    // The approved Home keeps the dial BESIDE the five
+                    // measurements on normal phone widths. Stack only when
+                    // the display is exceptionally narrow or text is enlarged.
+                    final beside = c.maxWidth >= 276 &&
+                        MediaQuery.textScalerOf(context).scale(14) <= 18.5;
+                    final ringSize = beside
+                        ? (c.maxWidth * .36).clamp(102.0, 155.0).toDouble()
+                        : 152.0;
                     final dial = Center(child: S87ArtworkRing(
                       asset: 'assets/preview84/img/ring_recovery.png',
-                      size: wide ? 180 : 172,
+                      size: ringSize,
                       value: rec.score?.toString() ?? '—',
                       caption: rec.score == null ? 'Building' : rec.label,
                       measured: rec.score != null,
                     ));
                     final stats = Column(children: [
-                      _metricLine('Sleep', sleep, Icons.bedtime_rounded, S87.purple),
-                      _metricLine('HRV', hrvValue, Icons.monitor_heart_rounded, S87.teal),
-                      _metricLine('Resting HR', hr, Icons.favorite_rounded, S87.red),
-                      _metricLine('Salus Energy', energy.score == null ? '—' : '${energy.score} est.',
+                      _recoveryMetric('Sleep', sleep, Icons.bedtime_rounded, S87.purple),
+                      _recoveryMetric('HRV', hrvValue, Icons.monitor_heart_rounded, S87.teal),
+                      _recoveryMetric('Resting HR', hr, Icons.favorite_rounded, S87.red),
+                      _recoveryMetric('Salus Energy', energy.score == null ? '—' : '${energy.score} est.',
                         Icons.bolt_rounded, S87.green),
-                      _metricLine('Activity Load', activity, Icons.bar_chart_rounded, S87.blue),
+                      _recoveryMetric('Activity Load', activity, Icons.bar_chart_rounded, S87.blue),
                     ]);
-                    return wide
-                        ? Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-                            dial, const SizedBox(width: 16), Expanded(child: stats),
-                          ])
+                    return beside
+                        ? Row(key: const Key('salus-home-recovery-row'),
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              SizedBox(width: ringSize, child: dial),
+                              const SizedBox(width: 10),
+                              Expanded(child: stats),
+                            ])
                         : Column(children: [dial, const SizedBox(height: 10), stats]);
                   }),
                   const SizedBox(height: 10),
@@ -436,6 +447,23 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
       child: const Text('View', style: TextStyle(color: S87.blue, fontSize: 14)))),
     const Icon(Icons.chevron_right_rounded, size: 19, color: S87.blue),
   ]);
+
+  // Compact Home-only metric row: accessible type without wasting the
+  // horizontal space needed to display the Recovery ring beside the values.
+  Widget _recoveryMetric(String label, String value, IconData icon, Color color) =>
+      Padding(padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 7),
+          Expanded(child: Text(label, maxLines: 2,
+            style: const TextStyle(color: S87.ink, fontSize: 13.5,
+              height: 1.15))),
+          const SizedBox(width: 5),
+          Flexible(child: Text(value, maxLines: 2,
+            textAlign: TextAlign.end,
+            style: const TextStyle(color: S87.ink, fontSize: 14,
+              fontWeight: FontWeight.w800))),
+        ]));
 
   Widget _metricLine(String label, String value, IconData icon, Color color) =>
       Padding(padding: const EdgeInsets.symmetric(vertical: 7),
