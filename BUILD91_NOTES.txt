@@ -1,0 +1,23 @@
+SALUS BUILD 91 — LIMITED HOME / MEAL PHOTO BETA
+Original repo: rustnrum/HealthyMe-Beta / main
+Version: 0.21.53+91
+
+Changes:
+- Keep approved SALUS logo/mountain and all source modules.
+- Daily Measurements directly beneath Recovery; remove misleading Today’s Plan button.
+- Expand actual scheduled workout fields on Home (exercise, sets, reps, weight, rest, notes).
+- Show next uncompleted upcoming planned meal from persisted calendar with its saved photograph.
+- Add imagePath field to AI meal recipe JSON; old recipes load unchanged.
+- Allow user to attach a real meal photograph from gallery in AI recipe discovery; copy picked
+  photo to app documents and preserve path with saved/planned recipe; show in My Meals and Calendar.
+- Clearly distinguish local Daily Insight from actual AI Insight; explicit opt-in required
+  before sharing summarized health facts with a connected AI provider.
+- Fix OpenAI model list parsing data/id fields; no invented AI answer if disconnected.
+- Preserve all existing workout/nutrition/labs/Health Connect data storage keys and sign ID.
+- Preserve all existing Flutter tests; add a recipe-photo and layout contract.
+
+IMPORTANT:
+No direct Flutter SDK is present in this environment, so ZIP/source tests only locally.
+GitHub must run flutter analyze, flutter test, flutter build apk, verify signing.
+This beta uses user-selected recipe photographs; automatic online image sourcing is NOT included.
+No AI prompt is sent without affirmative user permission, and the result is cached per day.

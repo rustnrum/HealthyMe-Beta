@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../services/ai_meal_planner_service.dart';
+import '../../services/salus_recipe_photo_service.dart';
 import '../../state/diet_log_state.dart';
 import '../../state/today_plan_state.dart';
 import '../../widgets/salus_widgets.dart';
@@ -76,6 +77,8 @@ class DietMenuScreen extends ConsumerWidget {
       builder: (sheet) => SafeArea(child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(18, 14, 18, 30),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SalusRecipePhoto(imagePath: recipe.imagePath, width: 180, height: 140),
+          const SizedBox(height: 10),
           Text(recipe.name, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6), Text('${recipe.cuisine} • ${recipe.minutes} min • ${recipe.servings} servings'),
           const SizedBox(height: 5),
@@ -118,6 +121,8 @@ class DietMenuScreen extends ConsumerWidget {
                     child: Text(category, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900))),
                   for (final saved in favorites.where((entry) => entry.category == category)) ...[
                     SalusPaper(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      SalusRecipePhoto(imagePath: saved.recipe.imagePath, width: 96, height: 80),
+                      const SizedBox(height: 8),
                       Text(saved.recipe.name, style: const TextStyle(
                         color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 17)),
                       Text('${saved.recipe.cuisine} • ${saved.recipe.minutes} min',

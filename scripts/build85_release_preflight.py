@@ -1,17 +1,12 @@
-"""Build 90 is a view-only release on top of already-migrated Build 89.
-
-Do NOT replay the destructive Build 89 hardware-removal migration. It was
-committed to the repository by successful Build 89 and is not repeatable.
-This preflight only asserts project identity and updates obsolete version-only
-assertions in the existing tests; it changes no application data or modules.
-"""
+"""Build91: fail-closed view/recipe integration; never replay Build89 removals."""
 from pathlib import Path
+from runpy import run_path
 
-assert 'version: 0.21.52+90' in Path('pubspec.yaml').read_text()
+assert 'version: 0.21.53+91' in Path('pubspec.yaml').read_text()
 assert 'com.rustnrum.healthyme.beta03' in Path('scripts/prepare_android.sh').read_text()
 assert 'BLUETOOTH' not in Path('native/android/AndroidManifest.xml').read_text()
-assert Path('lib/screens/premium/salus_home_87.dart').exists()
-assert Path('assets/premium/salus_wordmark_90.png').exists()
+assert 'assets/protocols/' not in Path('pubspec.yaml').read_text()
+run_path('scripts/build91_integrate.py', run_name='__main__')
 
 for filename in [
     'test/build86_preservation_contract_test.dart',
@@ -21,20 +16,16 @@ for filename in [
 ]:
     path = Path(filename)
     old = path.read_text()
-    if 'version: 0.21.51+89' in old:
-        path.write_text(old.replace('version: 0.21.51+89',
-                                    'version: 0.21.52+90'))
-    elif 'version: 0.21.52+90' not in old:
-        raise RuntimeError(f'Unexpected version assertion in {filename}')
+    if 'version: 0.21.52+90' in old:
+        path.write_text(old.replace('version: 0.21.52+90', 'version: 0.21.53+91'))
+    elif 'version: 0.21.53+91' not in old:
+        raise RuntimeError(f'Unexpected version contract: {filename}')
 
-path = Path('test/build75_dark_premium_contract_test.dart')
-s = path.read_text()
-a = '50|51)\\+(75|76|77|78|79|80|81|82|83|84|85|86|87|88|89)'
-b = '50|51|52)\\+(75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90)'
-if a in s:
-    path.write_text(s.replace(a, b))
-elif b not in s:
-    raise RuntimeError('Build 75 version checker changed unexpectedly')
-
-# Build 89 removed protocol assets; Flutter fails analysis if restored here.
-assert 'assets/protocols/' not in Path('pubspec.yaml').read_text()
+p = Path('test/build75_dark_premium_contract_test.dart')
+s = p.read_text()
+old = '50|51|52)\\+(75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90)'
+new = '50|51|52|53)\\+(75|76|77|78|79|80|81|82|83|84|85|86|87|88|89|90|91)'
+if old in s:
+    p.write_text(s.replace(old, new))
+elif new not in s:
+    raise RuntimeError('Obsolete version test changed unexpectedly')

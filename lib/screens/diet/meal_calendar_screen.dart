@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../services/ai_meal_planner_service.dart';
+import '../../services/salus_recipe_photo_service.dart';
 import '../../state/today_plan_state.dart';
 import '../../widgets/salus_widgets.dart';
 
@@ -75,6 +76,8 @@ class _MealCalendarScreenState extends ConsumerState<MealCalendarScreen> {
         padding: const EdgeInsets.all(20), child: Column(
           mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            SalusRecipePhoto(imagePath: meal.imagePath, width: 180, height: 140),
+            const SizedBox(height: 10),
             Text(meal.name, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
             Text('${meal.cuisine} • ${meal.minutes} minutes • ${meal.servings} servings'),
@@ -170,6 +173,10 @@ class _MealCalendarScreenState extends ConsumerState<MealCalendarScreen> {
           final name = (meals[slot] ?? '').trim();
           final recipe = _recipes['${salusDayKey(_selected)}|$slot'];
           return SalusPaper(child: Row(children: [
+            if (recipe != null && recipe.name == name && recipe.imagePath.isNotEmpty) ...[
+              SalusRecipePhoto(imagePath: recipe.imagePath, width: 46, height: 46),
+              const SizedBox(width: 7),
+            ] else
             Icon(name.isEmpty ? Icons.radio_button_unchecked : Icons.check_circle_outline,
               color: name.isEmpty ? AppTheme.textMuted : AppTheme.mint),
             const SizedBox(width: 10),

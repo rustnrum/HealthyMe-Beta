@@ -28,7 +28,7 @@ void main() {
     expect(history, isNot(contains('DirectMetricService().loadSamples')));
     expect(sources, contains('Health Connect'));
     expect(sources, isNot(contains('Bluetooth')));
-    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.52+90'));
+    expect(File('pubspec.yaml').readAsStringSync(), contains('version: 0.21.53+91'));
   });
 
   test('Existing app identity, data services and premium screens remain', () {

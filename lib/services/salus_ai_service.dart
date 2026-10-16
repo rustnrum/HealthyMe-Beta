@@ -21,15 +21,15 @@ class SalusAiService {
       }
       final value = jsonDecode(data);
       if (value is! Map) throw StateError('Invalid ChatGPT model catalog.');
-      final list = value['models'];
+      final list = value['data'];
       if (list is! List || list.isEmpty) throw StateError('No models available with this account.');
       final visible = list.whereType<Map>().where((m) =>
           m['visibility'] == null || m['visibility'] == 'list').toList();
       final options = visible.isNotEmpty ? visible : list.whereType<Map>().toList();
       if (options.isEmpty) throw StateError('No accessible ChatGPT model.');
-      final selected = options.where((m) => (m['slug'] ?? '').toString().startsWith('gpt-'));
+      final selected = options.where((m) => (m['id'] ?? '').toString().startsWith('gpt-'));
       final record = selected.isEmpty ? options.first : selected.first;
-      final slug = (record['slug'] ?? '').toString();
+      final slug = (record['id'] ?? '').toString();
       if (slug.isEmpty) throw StateError('Model catalog did not return a usable slug.');
       return slug;
     } finally { client.close(force: true); }

@@ -39,6 +39,7 @@ class SalusMealIdea {
   final String cuisine;
   final String description;
   final String recipe;
+  final String imagePath;
   final List<String> ingredients;
   final int servings;
   final int minutes;
@@ -51,9 +52,15 @@ class SalusMealIdea {
   final String? slot;
 
   const SalusMealIdea({required this.name, required this.cuisine,
-    required this.description, required this.recipe,
+    required this.description, required this.recipe, this.imagePath = '',
     required this.ingredients, required this.servings,
     required this.minutes, this.calories, this.protein, this.carbs, this.fat, this.fiber, this.date, this.slot});
+
+  SalusMealIdea withPhoto(String path) => SalusMealIdea(
+    name: name, cuisine: cuisine, description: description, recipe: recipe,
+    imagePath: path, ingredients: ingredients, servings: servings,
+    minutes: minutes, calories: calories, protein: protein, carbs: carbs,
+    fat: fat, fiber: fiber, date: date, slot: slot);
 
   static double? _number(dynamic v) {
     if (v is num) return v.toDouble();
@@ -71,6 +78,7 @@ class SalusMealIdea {
       cuisine: j['cuisine']?.toString() ?? '',
       description: j['description']?.toString() ?? '',
       recipe: j['instructions']?.toString() ?? '',
+      imagePath: j['imagePath']?.toString() ?? '',
       ingredients: ingredients is List
           ? ingredients.map((v) => v.toString()).where((v) => v.trim().isNotEmpty).toList()
           : const [],
@@ -92,7 +100,7 @@ class SalusMealIdea {
 
   Map<String, dynamic> toJson() => {
     'name': name, 'cuisine': cuisine, 'description': description,
-    'instructions': recipe, 'ingredients': ingredients,
+    'instructions': recipe, 'imagePath': imagePath, 'ingredients': ingredients,
     'servings': servings, 'minutes': minutes,
     'estimated_calories_per_serving': calories,
     'estimated_protein_g_per_serving': protein,

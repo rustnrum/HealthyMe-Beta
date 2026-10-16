@@ -15,11 +15,16 @@ void main() {
     final nav = File('lib/screens/home_shell.dart').readAsStringSync();
     expect(home, contains('PageStorageKey<String>(\'salus-scrollable-home-90\')'));
     for (final title in [
-      'Recovery Score', 'AI Insight', "Today's Nutrition", "Today's Workout",
-      'Daily Measurements', 'Recent Trends', 'Key Health Metrics', 'Upcoming Care',
+      'Recovery Score', 'Daily Measurements', 'SalusHomeAiCard',
+      "Today's Nutrition", "Today's Workout", 'Recent Trends', 'Key Health Metrics', 'Upcoming Care',
     ]) {
       expect(home, contains(title), reason: title);
     }
+    // The user-approved order puts accessible daily readings directly below Recovery.
+    expect(home.indexOf("'Recovery Score'"), lessThan(home.indexOf("'Daily Measurements'")));
+    expect(home.indexOf("'Daily Measurements'"), lessThan(home.indexOf('SalusHomeAiCard(')));
+    expect(home.indexOf('SalusHomeAiCard('), lessThan(home.indexOf('NEXT PLANNED MEAL')));
+    expect(home, isNot(contains('View Today\'s Plan')));
     expect(home, contains('assets/premium/salus_wordmark_90.png'));
     expect(home, isNot(contains('SizedBox(height: 52)')));
     expect(home, contains("Key('salus-home-recovery-row')"));

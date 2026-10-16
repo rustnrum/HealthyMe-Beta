@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../services/ai_meal_planner_service.dart';
+import '../../services/salus_recipe_photo_service.dart';
 import '../../state/diet_log_state.dart';
 import '../../state/today_plan_state.dart';
 import '../../widgets/salus_widgets.dart';
@@ -169,6 +170,23 @@ class _AiMealDiscoveryScreenState extends ConsumerState<AiMealDiscoveryScreen> {
     } catch (error) { _toast('Could not save recipe: $error'); }
   }
 
+  Future<void> _addRecipePhoto(SalusMealIdea idea) async {
+    try {
+      final path = await const SalusRecipePhotoService().chooseAndKeep();
+      if (path == null || !mounted) return;
+      final results = _results;
+      if (results == null) return;
+      final meals = [for (final item in results.meals)
+        if (identical(item, idea)) item.withPhoto(path) else item];
+      final updated = SalusMealSuggestions(meals, results.note);
+      setState(() => _results = updated);
+      await _service.saveLastDiscovery(updated);
+      _toast('Photo saved with the recipe. Save or plan the updated recipe.');
+    } catch (error) {
+      _toast('Could not attach photo: $error');
+    }
+  }
+
   Widget _saveRecipeMenu(SalusMealIdea idea) => PopupMenuButton<String>(
     tooltip: 'Save this recipe to My Meals',
     onSelected: (category) => _saveFavorite(idea, category),
@@ -211,6 +229,8 @@ class _AiMealDiscoveryScreenState extends ConsumerState<AiMealDiscoveryScreen> {
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min, children: [
+            SalusRecipePhoto(imagePath: idea.imagePath, width: 180, height: 140),
+            const SizedBox(height: 12),
             Text(idea.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
             Text('${idea.cuisine} • ${idea.minutes} min • ${idea.servings} serving(s)'),
             const SizedBox(height: 8),
@@ -232,6 +252,8 @@ class _AiMealDiscoveryScreenState extends ConsumerState<AiMealDiscoveryScreen> {
               FilledButton.icon(onPressed: () { Navigator.pop(sheet); _planRecipe(idea); },
                 icon: const Icon(Icons.calendar_month_outlined), label: const Text('Plan meal')),
               _saveRecipeMenu(idea),
+              OutlinedButton.icon(onPressed: () { Navigator.pop(sheet); _addRecipePhoto(idea); },
+                icon: const Icon(Icons.add_a_photo_outlined), label: const Text('Attach photo')),
               OutlinedButton.icon(onPressed: () { Navigator.pop(sheet); _addGroceries(idea); },
                 icon: const Icon(Icons.shopping_cart_outlined), label: const Text('Add groceries')),
             ]),
@@ -291,6 +313,8 @@ class _AiMealDiscoveryScreenState extends ConsumerState<AiMealDiscoveryScreen> {
         const SizedBox(height: 8),
         for (final idea in ideas) ...[
           SalusPaper(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SalusRecipePhoto(imagePath: idea.imagePath, width: 110, height: 88),
+            const SizedBox(height: 7),
             Text(idea.name, style: const TextStyle(color: AppTheme.textPrimary,
               fontSize: 17, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
@@ -307,6 +331,8 @@ class _AiMealDiscoveryScreenState extends ConsumerState<AiMealDiscoveryScreen> {
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 6, children: [
               OutlinedButton(onPressed: () => _showRecipe(idea), child: const Text('View recipe')),
+              OutlinedButton.icon(onPressed: () => _addRecipePhoto(idea),
+                icon: const Icon(Icons.add_a_photo_outlined), label: const Text('Photo')),
               _saveRecipeMenu(idea),
               FilledButton.tonal(onPressed: _applying ? null : () => _planRecipe(idea), child: const Text('Plan meal')),
             ]),

@@ -7,15 +7,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/models.dart';
 import '../../services/home_insight_service.dart';
+import '../../services/ai_meal_planner_service.dart';
+import '../../services/salus_recipe_photo_service.dart';
 import '../../services/hrv_source_service.dart';
 import '../../services/recovery_service.dart';
 import '../../services/salus_energy_service.dart';
 import '../../state/app_state.dart';
 import '../../state/diet_log_state.dart';
+import '../../state/today_plan_state.dart';
 import '../../state/workout_state.dart';
 import '../../widgets/salus77_design.dart';
 import '../../widgets/salus_premium_ui.dart';
 import 'salus87_ui.dart';
+import 'salus_home_ai_card.dart';
 
 class SalusHome87 extends ConsumerStatefulWidget {
   const SalusHome87({super.key});
@@ -25,6 +29,7 @@ class SalusHome87 extends ConsumerStatefulWidget {
 
 class _SalusHome87State extends ConsumerState<SalusHome87> {
   Map<String, double> _goals = const {};
+  Map<String, SalusMealIdea> _plannedRecipes = const {};
   static const _months = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
@@ -39,12 +44,13 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
   Future<void> _loadNutritionGoals() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final recipes = await const SalusMealPlannerService().loadRecipeAssignments();
       final values = <String, double>{};
       for (final metric in ['Calories', 'Protein', 'Carbs', 'Fat', 'Fiber']) {
         final v = prefs.getDouble('salus_nutrition_target_$metric');
         if (v != null && v > 0 && v.isFinite) values[metric] = v;
       }
-      if (mounted) setState(() => _goals = values);
+      if (mounted) setState(() { _goals = values; _plannedRecipes = recipes; });
     } catch (_) {
       // Never silently replace unknown targets with invented defaults.
     }
@@ -65,6 +71,29 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
     });
   }
 
+
+  // Determine the next planned item from the existing daily meal calendar.
+  // A meal already logged in that slot is no longer an upcoming meal today.
+  (DateTime, String, String)? _nextPlannedMeal(TodayPlanState plan,
+      List<FoodLogEntry> todayFoods, DateTime now) {
+    const slots = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
+    for (var offset = 0; offset < 7; offset++) {
+      final date = DateTime(now.year, now.month, now.day).add(Duration(days: offset));
+      final entries = plan.mealsFor(date);
+      for (final slot in slots) {
+        final name = entries[slot]?.trim() ?? '';
+        if (name.isEmpty) continue;
+        if (offset == 0 && ((slot == 'Breakfast' && now.hour >= 11) ||
+            (slot == 'Lunch' && now.hour >= 16) ||
+            (slot == 'Dinner' && now.hour >= 22))) continue;
+        if (offset == 0 && todayFoods.any((item) =>
+            item.slot == slot && item.name.trim().toLowerCase() == name.toLowerCase())) continue;
+        return (date, slot, name);
+      }
+    }
+    return null;
+  }
+
   LabResult? _lab(List<LabResult> records, List<String> terms) {
     final matches = records.where((r) {
       final n = r.name.trim().toLowerCase();
@@ -81,6 +110,7 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
     final h = app.health;
     final work = ref.watch(workoutStateProvider);
     final diet = ref.watch(dietLogStateProvider);
+    final plan = ref.watch(todayPlanStateProvider);
     final now = DateTime.now();
     final rec = RecoveryService.build(app, completedWorkouts: work.history);
     final energy = SalusEnergyService.estimate(h, app.profile);
@@ -105,6 +135,25 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
     final carbs = diet.knownTotal(now, (e) => e.carbs);
     final fat = diet.knownTotal(now, (e) => e.fat);
     final fiber = diet.knownTotal(now, (e) => e.fiber);
+    final nextMeal = _nextPlannedMeal(plan, dayFoods, now);
+    final recipeKey = nextMeal == null ? '' :
+        '${salusDayKey(nextMeal.$1)}|${nextMeal.$2}';
+    final plannedRecipe = _plannedRecipes[recipeKey];
+    final nextMealPhoto = plannedRecipe?.name == nextMeal?.$3
+        ? (plannedRecipe?.imagePath ?? '') : '';
+    final todayAiEvidence = [
+      'Sleep: $sleep; timestamp ${h.freshness['Sleep']?.toIso8601String() ?? 'unknown'}',
+      'Resting heart rate: $hr; timestamp ${h.freshness['Resting heart rate']?.toIso8601String() ?? 'unknown'}',
+      'Heart rate: ${h.latestHeartRate?.toStringAsFixed(0) ?? 'unavailable'} bpm',
+      'HRV RMSSD: ${h.hrvMs?.toStringAsFixed(0) ?? 'unavailable'} ms',
+      'SpO2: ${h.bloodOxygenPercent?.toStringAsFixed(0) ?? 'unavailable'}%',
+      'Respiratory rate: ${h.respiratoryRate?.toStringAsFixed(1) ?? 'unavailable'} /min',
+      'Steps: ${h.resolvedSources.containsKey('Steps') ? h.stepsToday : 'unavailable'}',
+      'Nutrition: ${kcal == null ? 'not logged' : '${kcal.round()} kcal recorded'}',
+      'Scheduled workouts today: ${work.scheduled.where((w) => _sameDay(w.scheduledFor, now)).map((w) => w.name).join(', ')}',
+      'Recent lab results: ${app.labs.isEmpty ? 'unavailable' : app.labs.take(6).map((e) => '${e.name} ${e.value} ${e.unit} on ${e.date?.toIso8601String() ?? 'unknown date'}').join('; ')}',
+      'Other metrics missing are unmeasured, not zero.',
+    ].join('\n');
     final scheduledToday = work.scheduled.where((w) => _sameDay(w.scheduledFor, now)).toList();
     final completedToday = work.history.where((w) => _sameDay(w.completedAt, now)).toList();
     final workout = scheduledToday.isNotEmpty ? scheduledToday.first : null;
@@ -237,31 +286,32 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
                 ]),
               ),
               const SizedBox(height: 12),
-              S87Panel(accent: S87.purple,
-                onTap: () => _go('/health-intelligence'),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  _sectionHeading('AI Insight', Icons.auto_awesome_rounded,
-                    'Details', S87.purple, () => _go('/health-intelligence')),
-                  const SizedBox(height: 10),
-                  Text(insight.message,
-                    style: const TextStyle(color: S87.ink, fontSize: 16, height: 1.46)),
-                ])),
+              S87Panel(accent: S87.red, child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                _sectionHeading('Daily Measurements', Icons.monitor_heart_rounded,
+                  'Sources', S87.red, () => _go('/sources')),
+                const SizedBox(height: 8),
+                _metricLine('Steps', stepsKnown ? '${h.stepsToday}' : '—',
+                  Icons.directions_walk_rounded, S87.green),
+                _metricLine('Heart rate', h.latestHeartRate == null
+                    ? '—' : '${h.latestHeartRate!.round()} bpm',
+                  Icons.favorite_rounded, S87.red),
+                _metricLine('Active calories',
+                    h.resolvedSources.containsKey('Active calories')
+                      ? '${h.activeCaloriesToday.round()} kcal' : '—',
+                  Icons.local_fire_department_outlined, S87.orange),
+                _metricLine('SpO₂', h.bloodOxygenPercent == null
+                    ? '—' : '${h.bloodOxygenPercent!.round()}%',
+                  Icons.water_drop_outlined, S87.blue),
+                _metricLine('Respiratory rate', h.respiratoryRate == null
+                    ? '—' : '${h.respiratoryRate!.toStringAsFixed(1)}/min',
+                  Icons.air_rounded, S87.purple),
+              ])),
               const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () => _go('/workout'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF075A73),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 17),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: const BorderSide(color: S87.blue)),
-                ),
-                icon: const Icon(Icons.arrow_forward_rounded),
-                label: const Text("View Today's Plan",
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-              ),
-              const SizedBox(height: 14),
+              SalusHomeAiCard(
+                dayKey: salusDayKey(now), evidence: todayAiEvidence,
+                localSummary: insight.message),
+              const SizedBox(height: 12),
               S87Panel(accent: S87.green, child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 _sectionHeading("Today's Nutrition", Icons.restaurant_menu_rounded,
@@ -297,6 +347,33 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
                     maxLines: 2, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: S87.ink, fontSize: 14)),
                 ),
+                const SizedBox(height: 16),
+                const Text('NEXT PLANNED MEAL', style: TextStyle(color: S87.muted,
+                  fontSize: 13, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                InkWell(onTap: _openNutrition, child: LayoutBuilder(builder: (context, c) {
+                  final photoSize = c.maxWidth >= 540 ? 116.0 : 92.0;
+                  return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                    SalusRecipePhoto(imagePath: nextMealPhoto,
+                      width: photoSize, height: photoSize),
+                    const SizedBox(width: 13),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                      Text(nextMeal == null ? 'No meal planned' : nextMeal.$3,
+                        style: const TextStyle(color: S87.ink, fontSize: 17,
+                          fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 6),
+                      Text(nextMeal == null ? 'Open Nutrition to plan your meals.' :
+                        '${nextMeal.$2} • ${_date(nextMeal.$1)}',
+                        style: const TextStyle(color: S87.muted, fontSize: 14)),
+                      if (nextMeal != null && nextMealPhoto.isEmpty)
+                        const Padding(padding: EdgeInsets.only(top: 4),
+                          child: Text('No meal photo attached',
+                            style: TextStyle(color: S87.muted, fontSize: 12))),
+                    ])),
+                    const Icon(Icons.chevron_right_rounded, color: S87.blue),
+                  ]);
+                })),
               ])),
               const SizedBox(height: 12),
               S87Panel(accent: S87.blue, child: Column(
@@ -324,6 +401,26 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
                         fontSize: 15, height: 1.35)),
                   ])),
                 ]),
+                if (workout != null && workout.exercises.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  for (final exercise in workout.exercises.take(5))
+                    Padding(padding: const EdgeInsets.symmetric(vertical: 5),
+                      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Icon(Icons.check_circle_outline_rounded, color: S87.blue, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(
+                          '${exercise.name} · ${exercise.sets} sets × ${exercise.reps} reps'
+                          '${exercise.weight == null ? '' : ' · ${exercise.weight} lb'}'
+                          ' · ${exercise.restSeconds}s rest',
+                          style: const TextStyle(color: S87.ink, fontSize: 14,
+                            height: 1.4))),
+                      ])),
+                  if (workout.exercises.length > 5)
+                    Text('+ ${workout.exercises.length - 5} more exercises',
+                      style: const TextStyle(color: S87.muted, fontSize: 13)),
+                  if (workout.notes.trim().isNotEmpty)
+                    Text(workout.notes, style: const TextStyle(color: S87.muted, fontSize: 13)),
+                ],
                 const SizedBox(height: 12),
                 Align(alignment: Alignment.centerLeft, child: OutlinedButton.icon(
                   onPressed: () => _go('/workout'),
@@ -331,28 +428,6 @@ class _SalusHome87State extends ConsumerState<SalusHome87> {
                   label: Text(workout == null ? 'Open Training' : 'View Workout',
                     style: const TextStyle(fontSize: 16)),
                 )),
-              ])),
-              const SizedBox(height: 12),
-              S87Panel(accent: S87.red, child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                _sectionHeading('Daily Measurements', Icons.monitor_heart_rounded,
-                  'Sources', S87.red, () => _go('/sources')),
-                const SizedBox(height: 8),
-                _metricLine('Steps', stepsKnown ? '${h.stepsToday}' : '—',
-                  Icons.directions_walk_rounded, S87.green),
-                _metricLine('Heart rate', h.latestHeartRate == null
-                    ? '—' : '${h.latestHeartRate!.round()} bpm',
-                  Icons.favorite_rounded, S87.red),
-                _metricLine('Active calories',
-                    h.resolvedSources.containsKey('Active calories')
-                      ? '${h.activeCaloriesToday.round()} kcal' : '—',
-                  Icons.local_fire_department_outlined, S87.orange),
-                _metricLine('SpO₂', h.bloodOxygenPercent == null
-                    ? '—' : '${h.bloodOxygenPercent!.round()}%',
-                  Icons.water_drop_outlined, S87.blue),
-                _metricLine('Respiratory rate', h.respiratoryRate == null
-                    ? '—' : '${h.respiratoryRate!.toStringAsFixed(1)}/min',
-                  Icons.air_rounded, S87.purple),
               ])),
               const SizedBox(height: 12),
               S87Panel(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
