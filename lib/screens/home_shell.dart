@@ -22,7 +22,8 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
+class _HomeShellState extends ConsumerState<HomeShell>
+    with WidgetsBindingObserver {
   bool _autoSyncStarted = false;
   Timer? _foregroundSyncTimer;
 
@@ -50,9 +51,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed || !mounted) return;
     final sync = ref.read(healthSyncProvider);
-    if (!sync.isLoading) {
-      ref.read(healthSyncProvider.notifier).sync();
-    }
+    if (!sync.isLoading) ref.read(healthSyncProvider.notifier).sync();
   }
 
   @override
@@ -70,13 +69,10 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     final index = ref.watch(navigationProvider);
-    // Keep the original data-connected Home and every existing module.
+    // Preserve all existing Activity, Sleep, Body and More screens. The
+    // approved four-item navigation links Training/Health to existing modules.
     const screens = [
-      SalusHome87(),
-      ActivityScreen(),
-      SleepScreen(),
-      BodyScreen(),
-      MoreScreen(),
+      SalusHome87(), ActivityScreen(), SleepScreen(), BodyScreen(), MoreScreen(),
     ];
     const titles = ['Salus', 'Activity', 'Sleep', 'Body', 'More'];
 
@@ -97,11 +93,30 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       }
     }
 
+    void selectHomeTab(int tab) {
+      switch (tab) {
+        case 0:
+          ref.read(navigationProvider.notifier).go(0);
+          break;
+        case 1:
+          Navigator.of(context).pushNamed('/workout');
+          break;
+        case 2:
+          Navigator.of(context).pushNamed('/health');
+          break;
+        case 3:
+          ref.read(navigationProvider.notifier).go(4);
+          break;
+      }
+    }
+
     return Scaffold(
-      floatingActionButton: index == 0 ? null : SalusVoiceLauncher(
-          onPressed: () => Navigator.of(context).pushNamed('/voice')),
+      floatingActionButton: index == 0
+          ? null
+          : SalusVoiceLauncher(
+              onPressed: () => Navigator.of(context).pushNamed('/voice')),
       appBar: index == 0
-          ? null // Home owns the SALUS hero/header.
+          ? null
           : AppBar(
               leading: IconButton(
                 tooltip: 'Back to Home',
@@ -123,8 +138,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         child: IndexedStack(index: index, children: screens),
       ),
       bottomNavigationBar: _SalusBottomNav(
-        index: index,
-        onChanged: ref.read(navigationProvider.notifier).go,
+        index: index == 4 ? 3 : 0,
+        onChanged: selectHomeTab,
       ),
     );
   }
@@ -138,71 +153,49 @@ class _SalusBottomNav extends StatelessWidget {
 
   static const _items = [
     (Icons.home_rounded, 'Home'),
-    (Icons.insights_rounded, 'Activity'),
-    (Icons.bedtime_rounded, 'Sleep'),
-    (Icons.monitor_weight_rounded, 'Body'),
-    (Icons.more_horiz_rounded, 'More'),
+    (Icons.fitness_center_rounded, 'Training'),
+    (Icons.favorite_border_rounded, 'Health'),
+    (Icons.explore_outlined, 'Discover'),
   ];
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      minimum: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(6, 8, 6, 7),
+        padding: const EdgeInsets.fromLTRB(5, 8, 5, 6),
         decoration: BoxDecoration(
           color: const Color(0xF20A1117),
-          borderRadius: BorderRadius.circular(34),
-          border: Border.all(color: AppTheme.border.withValues(alpha: 0.9)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.38),
-              blurRadius: 28,
-              offset: const Offset(0, 14),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: AppTheme.border.withValues(alpha: .9)),
+          boxShadow: [BoxShadow(
+            color: Colors.black.withValues(alpha: .38),
+            blurRadius: 28, offset: const Offset(0, 14),
+          )],
         ),
-        child: Row(
-          children: [
-            for (var i = 0; i < _items.length; i++)
-              Expanded(
-                child: InkWell(
-                  onTap: () => onChanged(i),
-                  borderRadius: BorderRadius.circular(24),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _items[i].$1,
-                          color: i == index ? AppTheme.textPrimary : AppTheme.textMuted,
-                          size: 22,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _items[i].$2,
-                          style: TextStyle(
-                            color: i == index ? AppTheme.textPrimary : AppTheme.textMuted,
-                            fontSize: 12,
-                            fontWeight: i == index ? FontWeight.w700 : FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 160),
-                          width: i == index ? 7 : 0,
-                          height: i == index ? 7 : 0,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle, color: AppTheme.cyan),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+        child: Row(children: [
+          for (var i = 0; i < _items.length; i++)
+            Expanded(child: InkWell(
+              onTap: () => onChanged(i),
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(_items[i].$1,
+                    color: i == index ? AppTheme.cyan : AppTheme.textMuted,
+                    size: 25),
+                  const SizedBox(height: 4),
+                  Text(_items[i].$2, maxLines: 1,
+                    overflow: TextOverflow.ellipsis, textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: i == index ? AppTheme.textPrimary : AppTheme.textMuted,
+                      fontSize: 13,
+                      fontWeight: i == index ? FontWeight.w700 : FontWeight.w500,
+                    )),
+                ]),
               ),
-          ],
-        ),
+            )),
+        ]),
       ),
     );
   }

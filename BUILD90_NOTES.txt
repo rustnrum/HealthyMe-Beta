@@ -1,0 +1,44 @@
+SALUS Build 90 — Scrollable Home, image-approved layout
+Repository: rustnrum/HealthyMe-Beta (main), NOT the separate Salus repo.
+Package ID and existing signing key: com.rustnrum.healthyme.beta03 — unchanged.
+Version: 0.21.52+90.
+
+This is a source-overlay zip for the existing GitHub Actions importer.
+Upload intact, with filename HealthyMe-v0.9-SOURCE-DISCOVERY.zip.
+Only the following production source is changed:
+- lib/screens/premium/salus_home_87.dart (new scrollable Home, real data only)
+- lib/screens/home_shell.dart (approved four-item nav; all original screens preserved)
+- assets/premium/salus_wordmark_90.png (approved SALUS letter artwork)
+- pubspec.yaml (version bump)
+- scripts/build85_release_preflight.py (stops replaying destructive Build89 migration)
+Regression: test/build88_metrics_contract_test.dart and test/build90_scrollable_home_test.dart;
+other older tests get version assertions updated by Build90 preflight.
+
+Scroll sections: hero+wordmark, Recovery, AI Insight, plan CTA, Nutrition,
+Workout, Daily Measurements, Recent Trends, Key Health Metrics, Upcoming Care.
+All readings use existing Health Connect, nutrition, workout, and lab data.
+No example numeric medical results are injected, and no stored data is reset.
+Age-based preventive items appear as discussion prompts, NOT dated appointments.
+Universal follow-up interval editor / clinician due dates are not implemented
+by this Home-only visual update. Until that module is built, next dates remain
+'not set' instead of being fabricated. Existing linked modules are unchanged.
+
+Verified before upload: ZIP paths/CRC, image alpha, Python syntax,
+Dart delimiter balance, source/test contracts and existing route identifiers.
+No local Flutter SDK is available. Real Flutter analysis, widget tests, Android
+compilation, and signed APK must pass in GitHub Actions before installation.
+
+Build 90 test initialization correction (run #155): five newly added widget tests
+failed because their ProviderScope omitted the initialAppStateProvider override.
+The test now mirrors lib/main.dart and uses a blank HealthyMeState.
+No production Dart, layout, data storage, assets, or app navigation was modified.
+
+Build 90 header correction (run #156): Flutter analyzer passed, but 4 widget tests
+identified a real fixed-height mountain header overflow (35 logical pixels
+at common narrow widths and 168 pixels with 1.35x accessibility text).
+Corrected only the Home hero layout: intrinsic-height Stack with positioned
+background/gradient, non-flexible foreground, and a 264px minimum rather than
+a fixed height. The whole page remains scrollable and the approved assets,
+routes, personal data, screens, and providers are untouched. An extra test
+assertion checks that large text actually grows the hero.
+Reference: Flutter RenderStack layout sizes itself from non-positioned children.

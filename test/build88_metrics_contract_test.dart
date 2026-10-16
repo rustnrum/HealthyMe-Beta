@@ -6,12 +6,14 @@ import 'package:healthy_me/widgets/salus77_design.dart';
 import 'package:healthy_me/widgets/salus_premium_ui.dart';
 
 void main() {
-  test('Existing Home charts remain, without proprietary hardware readings', () {
+  test('Home retains recorded trends and vitals without proprietary HRV', () {
     final home=File('lib/screens/premium/salus_home_87.dart').readAsStringSync();
-    for(final token in ['S77RestingHeartChart(', 'PremiumLineChart(',
-      'health.restingHeartRate30','hrv.rmssdHistory','health.latestHeartRate',
-      'health.bloodOxygenPercent','health.respiratoryRate',
-      'health.activeCaloriesToday',"'/metric-resting-heart-rate'", "'/metric-hrv'"]) {
+    for(final token in [
+      'S77RestingHeartChart(', 'PremiumLineChart(',
+      'h.restingHeartRate30', 'hrv.rmssdHistory', 'h.latestHeartRate',
+      'h.bloodOxygenPercent', 'h.respiratoryRate', 'h.activeCaloriesToday',
+      "'/metric-resting-heart-rate'", "'/metric-hrv'",
+    ]) {
       expect(home, contains(token), reason:token);
     }
     expect(home, isNot(contains('bodyBatteryRecords')));
